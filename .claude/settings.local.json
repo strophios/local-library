@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(done)",
+      "WebFetch(domain:arxiv.org)",
+      "WebFetch(domain:direct.mit.edu)"
+    ]
+  },
+  "outputStyle": "Explanatory"
+}
