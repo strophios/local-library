@@ -4,15 +4,14 @@
 
 import json
 import sqlite3
+from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterator
 from uuid import UUID
 
 from local_library.core.errors import ErrorCode, LookupError, StorageError
 from local_library.core.models import Document, DocumentStatus
-
 
 # Schema version for migrations
 SCHEMA_VERSION = 1

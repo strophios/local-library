@@ -1,13 +1,12 @@
 """Unit tests for storage module."""
 
 import sqlite3
-import tempfile
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
 
-from local_library.core.errors import ErrorCode, LookupError, StorageError
+from local_library.core.errors import ErrorCode, LookupError
 from local_library.core.models import DocumentStatus
 from local_library.core.storage import (
     create_document,
@@ -247,7 +246,9 @@ class TestListDocuments:
         """list_documents should filter by status when provided."""
         doc1 = create_document(db_conn, "/a.pdf", "hash_a", "/storage/a.pdf")
         doc2 = create_document(db_conn, "/b.pdf", "hash_b", "/storage/b.pdf")
-        update_document_status(db_conn, doc2.id, DocumentStatus.READY, extracted_path="/extracted/b.md")
+        update_document_status(
+            db_conn, doc2.id, DocumentStatus.READY, extracted_path="/extracted/b.md"
+        )
 
         pending = list_documents(db_conn, status=DocumentStatus.PENDING)
         ready = list_documents(db_conn, status=DocumentStatus.READY)
