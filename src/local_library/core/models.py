@@ -3,7 +3,7 @@
 # pattern: Functional Core
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -51,7 +51,7 @@ class Document:
         storage_path: str,
     ) -> "Document":
         """Create a new pending document record."""
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         return cls(
             id=uuid4(),
             original_path=original_path,

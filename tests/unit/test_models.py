@@ -1,6 +1,6 @@
 """Unit tests for models module."""
 
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -42,18 +42,16 @@ class TestDocument:
 
     def test_create_pending_sets_timestamps(self) -> None:
         """create_pending should set created_at and updated_at."""
-        before = datetime.utcnow()
+        before = datetime.now(UTC)
         doc = Document.create_pending("/path/to/file.pdf", "abc123", "/storage/ab/c1/abc123.pdf")
-        after = datetime.utcnow()
+        after = datetime.now(UTC)
 
         assert before <= doc.created_at <= after
         assert doc.created_at == doc.updated_at
 
     def test_create_pending_stores_paths(self) -> None:
         """create_pending should store original and storage paths."""
-        doc = Document.create_pending(
-            "/original/path.pdf", "hash123", "/storage/ha/sh/hash123.pdf"
-        )
+        doc = Document.create_pending("/original/path.pdf", "hash123", "/storage/ha/sh/hash123.pdf")
 
         assert doc.original_path == "/original/path.pdf"
         assert doc.storage_path == "/storage/ha/sh/hash123.pdf"
