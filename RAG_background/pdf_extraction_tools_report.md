@@ -392,10 +392,29 @@ This is effectively NVIDIA-only for local deployment.
 
 olmOCR 2 outperforms Marker (76.1) and MinerU (75.8) on olmOCR-Bench, making it the current accuracy leader. Particularly strong on:
 - Complex layouts
-- Scanned historical documents
+- Scanned historical documents (82.3% accuracy on historical math scans)
 - Mixed text/diagram pages
+- Complex tables (84.9% accuracy)
 
 However, the hardware requirements make it unsuitable for the target M1 Mac use case unless using cloud inference.
+
+#### Benchmark Disputes
+
+**Important caveat**: The benchmarking claims between olmOCR and Marker are contested:
+
+- **olmOCR's claim**: Human ELO rankings place olmOCR at 1,800+ Elo vs Marker at 1,600, with olmOCR winning 61.3% of direct comparisons
+- **Marker's counter-claim**: When Marker's team tested with 1,107 documents using LLM-as-judge, Marker won 56% of comparisons. They note olmOCR's benchmarks used only 75 samples from ~2,000, filtered on opaque criteria
+
+**Interpretation**: The quality advantage of olmOCR is likely real but narrower than marketing suggests, and concentrated on specific document types (scanned historical documents, complex layouts, handwritten content). For digital-born PDFs with clear text, the difference may be minimal.
+
+#### Speed Comparison
+
+olmOCR is significantly slower than Marker:
+- **Marker**: 20-120 pages/second on comparable hardware
+- **olmOCR**: 0.4-4 pages/second (with sglang optimization)
+- **Ratio**: Marker is 20-100x faster
+
+This speed difference makes olmOCR impractical for processing entire libraries but potentially worthwhile for selective use on problematic documents.
 
 ---
 
@@ -528,6 +547,52 @@ Given the constraints (1400 academic PDFs, M1 Mac, quality paramount), Docling o
 **Estimated timeline**: ~8-10 hours for primary processing, plus review and fallback passes.
 
 **Risk mitigation**: The dependency conflict issue (mlx-vlm vs docling-ibm-models) should be verified before commitment. Check [github.com/docling-project/docling-ibm-models/issues/102](https://github.com/docling-project/docling-ibm-models/issues/102) for resolution status.
+
+### 4. Hybrid Approach for OCR-Heavy Libraries (With Remote GPU Access)
+
+**For users with**: Access to remote NVIDIA GPUs (cloud instances, HPC cluster) AND a significant proportion of scanned/OCR-heavy documents.
+
+**Rationale**: olmOCR's quality advantage is most pronounced on scanned historical documents, complex layouts, and handwritten content. For digital-born PDFs, Marker performs comparably at 20-100x the speed. A hybrid approach captures the best of both.
+
+**Implementation strategy**:
+
+1. **First pass with Marker** (`--use_llm --force_ocr`):
+   - Process all PDFs locally on M1 Mac
+   - This handles the majority of documents well
+   - Produces extraction quality scores/metrics where available
+
+2. **Quality triage**:
+   - Review extraction results for quality issues
+   - Identify problematic documents: poor OCR, mangled tables, missing equations
+   - This subset is likely 10-30% of a typical academic library
+
+3. **Selective olmOCR**:
+   - Process only the problematic subset on remote NVIDIA GPU
+   - Requires 20GB+ VRAM (RTX 4090, A100, etc.)
+   - Higher quality extraction for difficult documents
+
+4. **Ongoing processing**:
+   - Use Marker locally for new documents
+   - Route to remote olmOCR only when Marker fails
+
+**When to use olmOCR vs Marker**:
+
+| Document Type | Recommendation |
+|---------------|----------------|
+| Digital-born PDF (LaTeX-generated) | Marker |
+| High-quality scan | Marker |
+| Scanned historical document | olmOCR |
+| Complex multi-column (pre-1990s) | olmOCR |
+| Handwritten/typewritten content | olmOCR |
+| Heavy mathematical notation (scanned) | olmOCR |
+| Complex tables spanning pages | Consider olmOCR |
+
+**Cost/benefit**: The 20-100x speed difference means processing 1,400 PDFs with olmOCR takes hours vs. minutes with Marker. Given the contested quality claims, the extra time is only justified for documents where Marker demonstrably fails.
+
+**Estimated effort**:
+- First pass (Marker): ~24 hours on M1 Mac
+- Triage: 2-4 hours manual review
+- Selective olmOCR: Depends on subset size; ~1-2 hours for 10% of library on A100
 
 ---
 

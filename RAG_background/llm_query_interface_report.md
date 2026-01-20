@@ -4,6 +4,48 @@ A comprehensive analysis of frameworks, patterns, and architectural decisions fo
 
 ---
 
+## Executive Summary: Quick Start Recommendation
+
+**For this project, the recommended architecture is Path 3 (Optimal ROI):**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     RAG ARCHITECTURE                          │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │                Custom RAGInterface class                 ││
+│  │  • Context assembly (~200 lines)                        ││
+│  │  • Token budget management (~100 lines)                 ││
+│  │  • Citation formatting (~50 lines)                      ││
+│  └─────────────────────────────────────────────────────────┘│
+│                              │                               │
+│           ┌──────────────────┼──────────────────┐           │
+│           ▼                  ▼                  ▼           │
+│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐      │
+│  │ Retrieval   │    │ LLM Provider│    │ Storage     │      │
+│  │ (Custom or  │    │ (LiteLLM    │    │ (sqlite-vec │      │
+│  │  LlamaIndex)│    │  wrapper)   │    │  + FTS5)    │      │
+│  └─────────────┘    └─────────────┘    └─────────────┘      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key decisions:**
+- **LLM Provider abstraction**: LiteLLM with thin custom wrapper (~100 lines)
+- **Retrieval**: Custom against sqlite-vec, or LlamaIndex if you want heavier features
+- **Context assembly**: Build this yourself—it's core to your system
+- **DSPy**: Skip initially; add later for prompt optimization if needed
+
+**What this report covers beyond provider abstraction:**
+The summary report mentioned only the provider abstraction (~200 lines). This report also covers:
+- Retrieval orchestration (Section 3: RAG Query Patterns)
+- Context assembly and token budgeting (Section 4)
+- Citation generation patterns (Section 3.3)
+- Full architectural options (Section 7: Recommendations)
+
+**Effort**: 3-5 days to working prototype; 2-3 weeks to production-ready
+
+---
+
 ## Table of Contents
 
 1. [Framework Landscape and Philosophy](#framework-landscape-and-philosophy)

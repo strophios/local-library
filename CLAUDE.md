@@ -24,7 +24,7 @@ Each document record contains:
 - **Identity**: UUID, citekey (BetterBibTeX-style), optional Zotero item key, DOI/URL/ISBN
 - **Bibliographic metadata**: CSL-JSON blob (Zotero-compatible, citation-processor-ready) plus indexed fields
 - **Content**: Path to original file, extracted plain text, content hash
-- **Embeddings**: Vector embeddings for full doc or chunks (sqlite-vss or similar)
+- **Embeddings**: Vector embeddings for full doc or chunks (sqlite-vec, successor to deprecated sqlite-vss)
 - **Tags**: Manual and auto-generated with source flag; confidence scores for auto-tags
 - **Notes**: Path to markdown file with YAML frontmatter linking back to record
 
@@ -62,10 +62,51 @@ Layers 1-4 yield a functional knowledge base. Layers 5-7 add ML features. Layer 
 ## Key Libraries and Tools
 
 - **Web extraction**: trafilatura, readability-lxml
-- **PDF extraction**: marker, PyMuPDF
+- **PDF extraction**: Marker (primary), olmOCR (for scanned historical documents on remote GPU)
+- **Embeddings**: nomic-embed-text-v1.5 (local, 768 dims, 8192 context)
 - **Metadata**: CrossRef API, GROBID (for academic PDFs), Open Graph tags (for web)
-- **Vector storage**: sqlite-vss, or pgvector if moving to Postgres
+- **Vector storage**: sqlite-vec (v0.1.6+), SQLite FTS5 for hybrid search
+- **LLM interface**: Custom RAGInterface + LiteLLM for provider abstraction
 - **Citations**: citeproc-py against CSL-JSON
+
+## RAG System Design Decisions
+
+Comprehensive research on the RAG pipeline is documented in `RAG_background/`. The final summary (`00_final_summary_report.md`) is the authoritative reference. Key decisions:
+
+### Embedding Model: nomic-embed-text-v1.5
+- **MTEB score**: 62.28% (matches OpenAI text-embedding-3-small)
+- **Critical**: Requires task-specific prefixes:
+  - `search_query:` for user queries
+  - `search_document:` for document chunks (RAG)
+  - `clustering:` for auto-tagging embeddings (if using dual embeddings)
+- For dual-use (RAG + auto-tagging), maintain two embedding sets per document
+
+### Vector Storage: sqlite-vec + FTS5
+- Single-file portability prioritized over native hybrid search (LanceDB)
+- Brute-force search is adequate for ~100K vectors; scale ceiling ~250K
+- Hybrid search via manual RRF (~30 lines Python) combining sqlite-vec + FTS5
+
+### PDF Extraction: Marker + Selective olmOCR
+- Marker for primary processing (proven M1 support, ~4s/page)
+- olmOCR on remote NVIDIA GPU for scanned historical documents only
+- Benchmark claims between tools are contested; Marker is the conservative choice
+
+### Citation Tooling: Triage over Automated Verification
+- NLI models achieve only ~77-78% accuracy on academic text (vs ~90%+ general)
+- Reframe verification as "triage for human review" rather than "automated decision"
+- Same infrastructure, lower accuracy bar, immediate utility
+
+### Pending: Evaluation Framework
+A detailed evaluation framework with quality targets, test set design, and evaluation code needs to be researched and created. The v1 research contained useful starter content (see `RAG_background/v1_backport_content.md`), but a proper framework specific to our architecture and use case should be developed before implementation begins. Key elements needed:
+- Stratified test query set (50-100 queries across factual, conceptual, comparative, methodology, and adversarial categories)
+- Quality targets (Precision@5, Recall@10, MRR, "I don't know" accuracy)
+- Latency targets per operation
+- Evaluation code for automated measurement
+
+### What Would Change These Decisions
+- Scale beyond 250K vectors → migrate to LanceDB
+- Need native hybrid search → migrate to LanceDB
+- Need automated verification workflows → invest in NLI validation (see citation report Section 8.2)
 
 ## Design Principles
 
@@ -78,6 +119,17 @@ Layers 1-4 yield a functional knowledge base. Layers 5-7 add ML features. Layer 
 
 ## Background Documentation
 
+### RAG System Research (authoritative for implementation)
+- `RAG_background/00_final_summary_report.md`: **Start here** — consolidated recommendations with reasoning
+- `RAG_background/pdf_extraction_tools_report.md`: Marker, Docling, olmOCR analysis
+- `RAG_background/embedding_approaches_report.md`: nomic-embed-text, chunking strategies, dual embeddings
+- `RAG_background/vector_storage_report.md`: sqlite-vec vs LanceDB, hybrid search patterns
+- `RAG_background/llm_query_interface_report.md`: Custom wrapper architecture, context assembly
+- `RAG_background/citation_tooling_report.md`: Suggestion, triage-based verification, Neovim integration
+- `RAG_report_guidance.md`: Original requirements and evaluation criteria
+- `summary_logs/rag_research_process_2.md`: Meta-documentation of research process
+
+### Project Planning
 - `background/chat_transcript.md`: Full verbatim transcript of initial planning conversation
 - `background/chat_summary.md`: Concise summary of architectural decisions and data model
 - `README.md`: Project goals and development philosophy

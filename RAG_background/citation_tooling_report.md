@@ -964,6 +964,108 @@ class ContradictionDetector:
    - Never auto-reject based on these signals
    - Build a validation set (50+ claim-citation pairs with human labels) before trusting
 
+### 4.6 Alternative: Triage-Based Approach (Recommended)
+
+The accuracy concerns above assume automated verification ("is this supported?"). An alternative framing makes this infrastructure immediately useful: **triage for human review**.
+
+#### The Reframing
+
+| Original Framing | Triage Framing |
+|------------------|----------------|
+| "Does this paper support this claim?" | "Is it plausible this paper supports this claim?" |
+| "What contradicts this?" | "What's related but doesn't strongly support this?" |
+| Requirement: High precision (>90%) | Requirement: Better than random (>50%) |
+| Failure: System says "supported" wrongly → false confidence | Failure: Human reviews a few irrelevant candidates → minor time cost |
+
+**Why this works**: 77-78% accuracy is insufficient for automated decisions but excellent for ranking candidates. The tool becomes a search space reducer rather than an oracle.
+
+#### Triage vs Verification Output
+
+**Verification output** (problematic):
+```
+✓ SUPPORTED (high confidence)
+✗ NOT SUPPORTED (high confidence)
+```
+
+**Triage output** (useful):
+```
+Papers related to your claim, ranked by likelihood of support:
+1. smith2020 - 0.82 similarity, ENTAILMENT (0.71)  ← probably relevant
+2. jones2019 - 0.76 similarity, NEUTRAL (0.65)     ← worth checking
+3. chen2021 - 0.71 similarity, ENTAILMENT (0.58)   ← maybe relevant
+```
+
+The user reviews the ranked list rather than trusting a binary judgment.
+
+#### Implementation Adjustment
+
+Lower thresholds, emphasize ranking:
+
+```python
+def find_related_non_supporting(claim: str, limit: int = 10) -> list[dict]:
+    """
+    Find library content related to claim that doesn't strongly support it.
+    For human review, not automated verification.
+    """
+    # Broad similarity search (lower threshold than verification)
+    candidates = vector_search(claim, k=50, threshold=0.30)
+
+    results = []
+    for chunk in candidates:
+        label, confidence = nli_classify(chunk.text, claim)
+
+        # Include everything that's NOT high-confidence entailment
+        if not (label == "ENTAILMENT" and confidence > 0.75):
+            results.append({
+                "citekey": chunk.citekey,
+                "text": chunk.text,
+                "similarity": chunk.score,
+                "nli_label": label,
+                "nli_confidence": confidence,
+                # Composite score emphasizing relevance + non-support
+                "triage_score": chunk.score * (1 - confidence if label == "ENTAILMENT" else 1)
+            })
+
+    return sorted(results, key=lambda x: x["triage_score"], reverse=True)[:limit]
+```
+
+#### MVP Without NLI
+
+The triage approach works even without NLI—pure similarity ranking is useful:
+
+```python
+def find_related_passages(claim: str, limit: int = 10) -> list[dict]:
+    """
+    Simple triage: find passages related to a claim.
+    Human determines support/contradiction.
+    """
+    candidates = vector_search(claim, k=limit * 2, threshold=0.35)
+
+    # Deduplicate by document
+    seen_docs = {}
+    for chunk in candidates:
+        doc_id = chunk.metadata["document_id"]
+        if doc_id not in seen_docs or chunk.score > seen_docs[doc_id].score:
+            seen_docs[doc_id] = chunk
+
+    return sorted(seen_docs.values(), key=lambda x: x.score, reverse=True)[:limit]
+```
+
+This is ~20 lines of code and immediately useful.
+
+#### What You Gain with Triage
+
+1. **Immediate value**: Same infrastructure, lower accuracy bar
+2. **Lower validation burden**: Don't need to prove 90% accuracy
+3. **Graceful degradation**: False positives cost 5 seconds of reading, not false confidence
+4. **User trust**: "Here are candidates to review" sets appropriate expectations
+
+#### What You Lose (vs "Real" Verification)
+
+1. **No automation**: Can't build workflows like "reject commits with unsupported citations"
+2. **Human time**: Every result requires human judgment
+3. **Less impressive demo**: "Here are candidates" is less compelling than "Your citation is wrong"
+
 ---
 
 ## 5. CSL-JSON and Citekey Integration
@@ -1413,11 +1515,13 @@ async def lookup_paper(citekey: str) -> dict | None:
 
 ## 7. Implementation Feasibility Assessment
 
-### 7.1 Straightforward to Build (Weeks)
+### 7.1 Straightforward to Build (Days to Weeks)
 
 | Feature | Effort | Dependencies |
 |---------|--------|--------------|
 | **Citation Suggestion** | 2-3 days | Existing RAG infrastructure |
+| **Triage-based "verification"** | 1 day | Citation suggestion + ~20 lines |
+| **Triage-based "contradiction finding"** | 1 day | Citation suggestion + ~30 lines |
 | **CLI** | 1 day | typer, rich |
 | **HTTP API** | 1 day | FastAPI |
 | **MCP Server** | 1 day | mcp library |
@@ -1425,7 +1529,9 @@ async def lookup_paper(citekey: str) -> dict | None:
 | **nvim-cmp source** | 1-2 days | Lua, nvim-cmp API |
 | **Citekey generation** | Few hours | Pure Python |
 
-**Total for MVP (suggestion + CLI + Neovim)**: ~1-2 weeks
+**Total for MVP (suggestion + triage + CLI + Neovim)**: ~1-2 weeks
+
+**Key insight**: Triage-based verification/contradiction is straightforward because it uses the same infrastructure as citation suggestion with different ranking. See Section 4.6 for the implementation.
 
 ### 7.2 Requires Significant Validation (Weeks to Months)
 
@@ -1454,13 +1560,14 @@ async def lookup_paper(citekey: str) -> dict | None:
 
 ## 8. Recommendations
 
-### 8.1 Easiest Path (MVP Citation Features) — 1-2 Weeks
+### 8.1 Easiest Path (MVP with Triage) — 1-2 Weeks
 
-Build citation suggestion with CLI and Neovim integration. Skip verification.
+Build citation suggestion with CLI and Neovim integration, plus triage-based verification/contradiction as a bonus.
 
 **What you get**:
 - Type `[@` in Neovim, get relevant papers from your library
 - CLI for batch citation suggestions
+- **Triage for human review**: "What papers are related to this claim?" and "What in my library might contradict this?"
 - Low risk, immediate value
 
 **Stack**:
@@ -1468,6 +1575,7 @@ Build citation suggestion with CLI and Neovim integration. Skip verification.
 Citation Suggester (Python)
 ├── Uses existing embeddings + vector store
 ├── Threshold-based filtering (0.45 default)
+├── Triage mode: lower threshold, rank by similarity × (1 - entailment)
 └── Output: citekeys, scores, excerpts
 
 Daemon (Unix socket)
@@ -1481,7 +1589,16 @@ nvim-cmp source (Lua)
 └── Formats for completion menu
 ```
 
-**Skip**: Verification, contradiction detection (validate later)
+**Triage commands** (same infrastructure, different presentation):
+```bash
+# "What in my library is related to this claim?"
+cite-triage related "attention mechanisms improve sequence modeling"
+
+# "What might not support this claim?"
+cite-triage contradictions "transformers are always better than RNNs"
+```
+
+**Skip**: Automated verification, high-confidence contradiction detection (validate later if needed)
 
 ### 8.2 Best Quality (Full Academic Workflow) — 6-10 Weeks
 
@@ -1512,19 +1629,22 @@ If you need verification and contradiction detection, invest in validation first
 
 ### 8.3 Optimal ROI
 
-**Recommendation**: Start with MVP, add verification only if needed.
+**Recommendation**: Start with MVP + Triage. This gives you verification-like functionality without the validation burden.
 
-Citation suggestion alone solves the most common use case: "I need a citation here, what do I have?" This is 80% of the value for 20% of the effort.
+Citation suggestion solves the most common use case: "I need a citation here, what do I have?" Triage extends this to: "Does anything in my library contradict this?" and "What papers are related to this claim?" — all with the same infrastructure.
 
-Verification and contradiction detection sound valuable but:
-- Require significant validation work
-- May not work well on your documents
-- False positives erode trust
+**Why triage over verification**:
+- Same effort to build (~1 day on top of citation suggestion)
+- No accuracy threshold to meet — useful as long as it's better than random
+- Appropriate expectations — user reviews candidates, system doesn't claim certainty
+- Graceful degradation — false positives cost 5 seconds of reading, not false confidence
 
-**If you do proceed with verification**:
-1. Build the validation test set first (1-2 days)
-2. Evaluate baseline accuracy
-3. Make an informed decision based on actual numbers
+**When to invest in full verification** (Section 8.2):
+- You need automated workflows ("reject if no supporting citation")
+- You're willing to build a validation test set
+- You've measured accuracy on your documents and it's >75%
+
+Most users should stop at MVP + Triage. The marginal value of automated verification rarely justifies the validation effort and trust issues.
 
 ---
 

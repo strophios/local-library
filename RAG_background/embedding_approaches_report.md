@@ -103,10 +103,12 @@ Academic papers have distinct structural properties that inform chunking:
 
 | Model | Dimensions | Context | M1 Performance | MTEB Score |
 |-------|------------|---------|----------------|------------|
-| all-MiniLM-L6-v2 | 384 | 256 | ~15ms/1K tokens | ~63% |
-| E5-base-v2 | 768 | 512 | ~30ms/1K tokens | ~83% |
-| BGE-M3 | 1024 | 8192 | ~50ms/1K tokens | ~85% |
-| nomic-embed-text | 768 | 8192 | ~60ms/1K tokens | ~86% |
+| all-MiniLM-L6-v2 | 384 | 256 | ~15ms/1K tokens | ~56% |
+| E5-base-v2 | 768 | 512 | ~30ms/1K tokens | ~61% |
+| BGE-M3 | 1024 | 8192 | ~50ms/1K tokens | ~68% |
+| nomic-embed-text-v1.5 | 768 | 8192 | ~60ms/1K tokens | **62.28%** |
+
+**MTEB Score Clarification**: The MTEB (Massive Text Embedding Benchmark) score is an average across 8 task categories (classification, clustering, retrieval, reranking, STS, pair classification, bitext mining, summarization). Individual task scores can be much higher—for example, nomic-embed-text scores 85.53% on the LoCo (long context) benchmark. Earlier versions of this report incorrectly cited ~86% for nomic-embed-text; this was likely the LoCo score or a task-specific metric, not the overall MTEB average.
 
 **M1 Mac Performance Reality**:
 Based on [MLX benchmarking research](https://arxiv.org/abs/2510.18921), M1 Macs show:
@@ -163,10 +165,13 @@ model.load_adapter("allenai/specter2_proximity", source="hf")
 | Use Case | Best Choice | Rationale |
 |----------|-------------|-----------|
 | Maximum academic accuracy | SPECTER2 + proximity adapter | Domain-specific training, citation-aware |
-| Best cost/quality balance | OpenAI text-embedding-3-small | Cheap, good quality, simple API |
-| Zero ongoing cost | nomic-embed-text | Long context, strong accuracy, runs locally |
+| Best cost/quality balance | OpenAI text-embedding-3-small | $0.02/1M tokens, 62.3% MTEB, simple API |
+| Zero ongoing cost | nomic-embed-text-v1.5 | 62.28% MTEB (matches OpenAI small), 8K context, local |
 | Multilingual academic | BGE-M3 | Multi-vector retrieval, 100+ languages |
-| Fastest local inference | all-MiniLM-L6-v2 | 5-8% accuracy tradeoff for 4x speed |
+| RAG + clustering dual-use | nomic-embed-text-v1.5 | Task-specific prefixes for both use cases |
+| Fastest local inference | all-MiniLM-L6-v2 | Lower accuracy but 4x speed |
+
+**Key Comparison**: nomic-embed-text-v1.5 (62.28%) essentially ties OpenAI text-embedding-3-small (62.3%) on MTEB, making it the clear choice for cost-sensitive local deployments. OpenAI text-embedding-3-large (64.6%) offers ~2.3 percentage points improvement at $0.13/1M tokens.
 
 ---
 
@@ -197,7 +202,51 @@ For asymmetric retrieval (short query → long document chunks):
 
 3. **Late chunking**: Naturally handles asymmetry since chunk embeddings contain document context
 
-### 3.3 Hybrid Retrieval
+### 3.3 Task-Specific Prefixes (nomic-embed-text)
+
+nomic-embed-text was trained with multiple task-specific prefixes that significantly affect embedding quality for different use cases:
+
+| Prefix | Use Case | Optimization |
+|--------|----------|--------------|
+| `search_document:` | Document chunks for RAG | Query-document matching |
+| `search_query:` | User queries | Asymmetric retrieval |
+| `clustering:` | Document grouping, topic modeling | High linear separability |
+| `classification:` | Labeled classification tasks | Class boundary separation |
+
+**Critical**: Using the wrong prefix degrades performance. The model was evaluated on MTEB using different prefixes for different task categories.
+
+**Example usage**:
+```python
+# For RAG retrieval
+doc_embedding = model.encode("search_document: " + chunk_text)
+query_embedding = model.encode("search_query: " + user_query)
+
+# For clustering/auto-tagging
+cluster_embedding = model.encode("clustering: " + document_text)
+```
+
+### 3.4 Dual Embedding Strategy for RAG + Clustering
+
+If your system needs both RAG retrieval AND semantic clustering (e.g., for automated document tagging), consider maintaining two embedding sets:
+
+1. **RAG embeddings** (`search_document:` prefix): Optimized for query-document matching
+2. **Clustering embeddings** (`clustering:` prefix): Optimized for document-document similarity with high linear separability
+
+**Storage overhead is minimal**:
+- 768 floats × 4 bytes × 2 embeddings = ~6KB per document
+- For 1,400 documents with ~22 chunks: ~185MB total (vs ~92MB for single embeddings)
+
+**When to use dual embeddings**:
+- You need both RAG and auto-tagging/clustering
+- Quality matters more than storage efficiency
+- You're using nomic-embed-text (which explicitly supports task prefixes)
+
+**When single embeddings suffice**:
+- RAG-only system (use `search_document:`)
+- Clustering-only system (use `clustering:`)
+- Storage-constrained environments
+
+### 3.5 Hybrid Retrieval
 
 Combining dense (embedding) and sparse (BM25/keyword) retrieval often outperforms either alone:
 
@@ -348,12 +397,14 @@ When adding new documents:
 - nomic-embed-text-v1.5 (768 dims, 8192 context)
 - sqlite-vec storage
 - Optional: BM25 sparse index for hybrid retrieval
+- **For dual-use (RAG + clustering)**: Generate two embedding sets with different prefixes
 
 **Rationale**:
 - **Zero ongoing cost**: One-time compute investment (~3 hours)
-- **High quality**: 86%+ on MTEB, long context window
+- **Competitive quality**: 62.28% on MTEB—matches OpenAI text-embedding-3-small
 - **Academic-friendly**: 8192 context handles most paper sections in full
 - **Offline capable**: No API dependency
+- **Task-specific prefixes**: `search_document:` for RAG, `clustering:` for auto-tagging
 - **Future-proof**: Can implement late chunking with same model
 
 **Tradeoffs**:
@@ -369,6 +420,20 @@ When adding new documents:
 3. M1 Pro can handle nomic-embed-text with acceptable latency
 4. Academic focus benefits from long-context model (full sections as context)
 5. Section-aware chunking respects paper structure without complex parsing
+6. Task-specific prefixes enable both RAG and clustering without maintaining separate models
+
+**Dual-Use Implementation** (if you need both RAG and auto-tagging):
+```python
+# Generate both embedding types per document/chunk
+rag_embedding = model.encode("search_document: " + chunk_text)
+cluster_embedding = model.encode("clustering: " + chunk_text)
+
+# Store both in sqlite-vec (separate tables or columns)
+# Use rag_embedding for query retrieval
+# Use cluster_embedding for tag suggestion via k-NN
+```
+
+Storage overhead for dual embeddings: ~6KB per document (~185MB total for 1,400 docs with chunks).
 
 ---
 

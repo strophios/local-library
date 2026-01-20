@@ -63,7 +63,18 @@ Partition keys enable fast pre-filtering before vector comparison. Metadata colu
 - [Performance degrades around 250K vectors](https://github.com/asg017/sqlite-vec/issues/186) on M1 Max per user reports
 - Practical ceiling: "thousands to hundreds of thousands" per author
 
-**Production Readiness**: v0.1.0 marked "stable" in late 2024. Transactional safety is solid. The main risk is hitting scale limits before ANN indexes ship.
+**Production Readiness**:
+- **Current version**: v0.1.6 (November 2024)
+- v0.1.0 marked "stable" in August 2024, with the maintainer targeting v1.0 "in the next year or so" (2025)
+- Transactional safety is solid
+- **Backing**: Mozilla Builders sponsorship, with additional support from Fly.io, Turso, and SQLite Cloud
+- **No sqlite-vec-specific data loss bugs reported**; standard SQLite durability practices apply (`synchronous=FULL`, WAL mode)
+- The main risk is hitting scale limits before ANN indexes ship
+
+**Performance at ~100K vectors** (per benchmarks):
+- <4ms queries with quantization
+- 37MB memory footprint (quantized)
+- Well within the "thousands to hundreds of thousands" intended range
 
 **Best For**: Maximum portability, existing SQLite infrastructure, datasets under ~100K vectors with good partitioning strategy.
 
@@ -447,6 +458,30 @@ results = table.search("attention mechanisms", query_type="hybrid").limit(10)
 The single-file requirement is the only dimension where sqlite-vec wins. If directory-based storage is acceptable (and for local backup/sync, `rsync` handles directories fine), LanceDB is the stronger choice.
 
 **Migration Path**: If starting with sqlite-vec for simplicity, maintain Parquet exports. Migration to LanceDB later is straightforward since both support Python and Arrow formats.
+
+### Complexity Assessment: sqlite-vec vs LanceDB
+
+The "complexity" difference between sqlite-vec and LanceDB is often overstated:
+
+| Dimension | sqlite-vec | LanceDB |
+|-----------|-----------|---------|
+| **Storage** | Single `.sqlite` file | Directory with `.lance` files |
+| **Backup** | `cp db.sqlite backup.sqlite` | `rsync -av ./lance_dir/ backup/` |
+| **Dependencies** | Pure C extension | Rust core, Python bindings |
+| **API style** | SQL (familiar if you know SQLite) | Python-native (Pydantic models) |
+| **Hybrid search** | Manual (sqlite-vec + FTS5 + RRF code) | Native (`query_type="hybrid"`) |
+| **Learning curve** | Low (SQL) | Low-Medium (Python API) |
+
+**Key insight**: LanceDB's API is arguably cleaner than SQL for vector operations. The main friction points are:
+1. Directory vs. single-file (minor—`rsync` handles directories fine)
+2. Learning a new API (minor—Python-native, good docs)
+3. Additional dependency (Rust core, but pip-installable)
+
+**If hybrid search matters**: LanceDB's native BM25 + vector search is genuinely easier than implementing RRF manually with sqlite-vec + FTS5. That alone may justify the switch.
+
+**If single-file portability is paramount**: sqlite-vec. The hybrid search implementation is ~30 lines of Python.
+
+**Practical recommendation**: Start with sqlite-vec for simplicity. If you find yourself fighting with hybrid search implementation or hitting performance walls above 100K vectors, LanceDB is a clean migration path (both support Arrow formats).
 
 ---
 

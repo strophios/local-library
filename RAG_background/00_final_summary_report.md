@@ -56,14 +56,66 @@ This report consolidates research across five RAG pipeline components for the lo
 
 | Component | Recommendation | Rationale |
 |-----------|---------------|-----------|
-| **PDF Extraction** | Marker (primary) | Best M1 support, proven quality, ~24hrs for full corpus |
+| **PDF Extraction** | Marker (primary) + olmOCR for OCR-heavy docs† | Best M1 support; selective olmOCR for scanned docs |
 | **Chunking** | Section-aware, 512 tokens, 15% overlap | Respects academic structure, balances precision/context |
-| **Embeddings** | nomic-embed-text (local)† | Zero cost, 8K context, high quality, M1-compatible |
-| **Vector Storage** | sqlite-vec + FTS5 | Single-file portability, adequate for 100K vectors |
-| **LLM Interface** | Custom wrapper (~200 lines) | Minimal dependencies, full control, 3 providers only |
-| **Citation Tools** | Suggestion + Autocomplete MVP | Immediate value, verification deferred pending NLI validation |
+| **Embeddings** | nomic-embed-text (local)†† | Zero cost, 8K context, matches OpenAI small quality, M1-compatible |
+| **Vector Storage** | sqlite-vec (v0.1.6) + FTS5 | Single-file portability, adequate for 100K vectors |
+| **LLM Interface** | Custom wrapper + LiteLLM (~350 lines) | Full control over context assembly; LiteLLM for provider abstraction |
+| **Citation Tools** | Suggestion + Triage MVP | Immediate value; triage-based verification sidesteps NLI accuracy concerns |
 
-†**Critical**: nomic-embed-text requires prefixes: `search_query:` for queries, `search_document:` for documents.
+†See Section 1 for hybrid approach: Marker first, then selective olmOCR on remote GPU for scanned historical documents.
+
+††**Critical**: nomic-embed-text requires prefixes: `search_query:` for queries, `search_document:` for documents. For dual-use (RAG + clustering), also use `clustering:` prefix for auto-tagging embeddings.
+
+---
+
+## Design Philosophy and Key Decisions
+
+This section captures the reasoning behind the major architectural choices. These decisions reflect our priorities: **correctness over convenience**, **quality over speed**, and **simplicity where possible without sacrificing capability**.
+
+### Why "Easiest" Often Won Over "Optimal ROI"
+
+The individual component reports each identified three paths: Easiest, Best Quality, and Optimal ROI. In several cases, this summary recommends the "Easiest" option rather than "Optimal ROI":
+
+| Component | Optimal ROI (per detailed report) | This Summary Recommends | Why |
+|-----------|----------------------------------|------------------------|-----|
+| PDF Extraction | Docling with Marker fallback | Marker (with selective olmOCR) | Docling has unresolved M1 dependency conflicts; Marker is proven |
+| Vector Storage | LanceDB | sqlite-vec | Single-file portability matters more than native hybrid search at this scale |
+| LLM Interface | LlamaIndex + LiteLLM | Custom + LiteLLM | LlamaIndex is heavyweight for a single-user system; custom gives full control |
+
+**The reasoning**: "Optimal ROI" assumes a certain level of implementation effort is acceptable. For a personal knowledge management system, minimizing ongoing maintenance and maximizing portability often outweighs marginal quality gains. We can always migrate later if we hit limits.
+
+### Key Tradeoffs We Accepted
+
+1. **Brute-force vector search over ANN indexes**: sqlite-vec uses brute-force search, which is O(n) rather than O(log n). At ~100K vectors, this is still <100ms on M1 Pro with SIMD acceleration. We accept this ceiling (~250K vectors before degradation) in exchange for single-file simplicity.
+
+2. **Manual hybrid search over native**: LanceDB offers native BM25 + vector search. We chose sqlite-vec + FTS5 with manual RRF (~30 lines of Python) to preserve single-file portability. If hybrid search becomes central to the workflow, LanceDB is a clean migration path.
+
+3. **Local embeddings over API**: nomic-embed-text (62.28% MTEB) matches OpenAI text-embedding-3-small (62.3%) in quality. We chose local to avoid API dependency and ongoing costs, accepting that OpenAI text-embedding-3-large (64.6%) is ~2.3 percentage points better.
+
+4. **Triage over automated verification**: NLI models achieve ~77-78% accuracy on academic text (vs ~90%+ on general text). Rather than defer verification entirely or invest weeks in validation, we reframed the problem: triage for human review instead of automated decisions. Same infrastructure, lower accuracy bar, immediate utility.
+
+### What Would Change These Decisions
+
+- **Scale beyond 250K vectors**: Migrate to LanceDB or wait for sqlite-vec ANN indexes
+- **Hybrid search becomes critical**: Migrate to LanceDB for native BM25 + vector
+- **Need automated verification workflows**: Invest in NLI validation (see citation tooling report Section 8.2)
+- **Multi-user or server deployment**: Reconsider Qdrant or LanceDB for concurrent access
+- **Heavy OCR workload ongoing**: Consider keeping olmOCR accessible for routine use, not just one-time batch
+
+### Lessons from the Research Process
+
+The research phase (18 agents across 6 phases) surfaced several insights worth preserving:
+
+1. **Benchmark claims are contested**: olmOCR vs Marker benchmarking is disputed by both teams. Take published benchmarks as directional, not definitive.
+
+2. **MTEB scores require context**: The "86% MTEB" figure for nomic-embed-text was actually the LoCo (long context) benchmark, not the overall MTEB average. Always verify what metric is being cited.
+
+3. **Task-specific prefixes matter**: nomic-embed-text's quality depends on using the correct prefix (`search_query:`, `search_document:`, `clustering:`). This is easy to miss and silently degrades retrieval.
+
+4. **NLI on academic text is hard**: The ~77-78% accuracy on SciNLI/MSciNLI (vs 90%+ on general NLI) is a genuine research-grade problem, not a tooling issue. Plan accordingly.
+
+5. **"Deferred" doesn't mean "impossible"**: Citation verification and contradiction detection are deferred to triage-based approaches, not abandoned. The infrastructure supports upgrading to full verification if accuracy improves.
 
 ---
 
@@ -87,6 +139,22 @@ Converting academic PDFs to well-structured markdown suitable for semantic chunk
 
 ### Recommendation: Marker (Primary)
 
+**Why Marker over Docling (the "Optimal ROI" choice)?**
+
+The detailed PDF extraction report recommended Docling as "Optimal ROI" based on its speed (1.3s/page vs 4s/page) and excellent table handling. However, we chose Marker because:
+
+1. **Docling has unresolved M1 dependency conflicts**: As of the research date, there's a version conflict between `mlx-vlm` (needs transformers ≥4.51.3) and `docling-ibm-models` (needs transformers <4.43.0). Until this is resolved, Docling is risky for M1 deployment.
+
+2. **Marker is battle-tested**: More users, more edge cases discovered, more documentation for troubleshooting.
+
+3. **Speed difference is acceptable**: 24 hours vs ~8 hours for initial processing is a one-time cost. For ongoing processing, the ~4s/page latency is fine for occasional new documents.
+
+**Why Marker + olmOCR hybrid over pure Marker?**
+
+olmOCR achieves better quality on scanned historical documents (82.3% on historical math scans), but at 20-100x slower speed and with NVIDIA GPU requirements. The hybrid approach captures the best of both:
+- Marker handles the majority of documents well (digital-born PDFs, high-quality scans)
+- olmOCR is reserved for the problematic subset where quality justifies the hassle
+
 **Why Marker:**
 - Best-documented M1 Pro support with native MPS acceleration
 - Straightforward installation: `pip install marker-pdf`
@@ -94,15 +162,34 @@ Converting academic PDFs to well-structured markdown suitable for semantic chunk
 - Active development, good community support
 - Reasonable quality for most academic content
 
-**Known Limitation:** Equation handling is weaker than Nougat. For math-heavy papers, consider:
-- Nougat as a secondary processor for flagged documents (note: ~40s/page, 10x slower)
-- Or accept imperfect equation rendering if RAG is the primary use case
+**Known Limitations:**
+- Equation handling is weaker than Nougat
+- Scanned historical documents may have lower OCR quality
+- Marker's maintainers claim 56% win rate against olmOCR (olmOCR claims 61% — benchmarks are contested)
 
 **Quality Validation Checklist** (run on 20 random PDFs before full batch):
 - [ ] Markdown structure preserved (headings render correctly)
 - [ ] Multi-column layouts handled (text in reading order)
 - [ ] Tables extracted reasonably
 - [ ] No obvious truncation or corruption
+
+### Hybrid Approach: Marker + Selective olmOCR
+
+For libraries with significant scanned/OCR-heavy content AND access to remote NVIDIA GPUs:
+
+**Strategy:**
+1. **First pass (Marker)**: Process all PDFs locally (~24 hours on M1)
+2. **Quality triage**: Identify problematic documents (poor OCR, mangled tables)
+3. **Selective olmOCR**: Process only the problematic subset on remote GPU (requires 20GB+ VRAM)
+4. **Ongoing**: Use Marker locally for new documents
+
+**When olmOCR is worth the hassle:**
+- Scanned historical documents (pre-1990s academic papers)
+- Handwritten/typewritten content
+- Complex multi-column layouts from older journals
+- Heavy mathematical notation in scanned documents
+
+**Speed difference:** Marker is 20-100x faster than olmOCR. This makes processing entire libraries with olmOCR impractical, but selective use on difficult documents is viable.
 
 **Deferred Option:** Once Docling's M1 dependency issues are verified resolved, it could become primary (faster processing, better tables).
 
@@ -143,21 +230,64 @@ Convert extracted markdown into vector representations. Requirements: <500ms que
 
 ### Recommendation: nomic-embed-text (Local)
 
+**Why nomic-embed-text over OpenAI APIs?**
+
+The core question is: does the ~2.3 percentage point advantage of OpenAI text-embedding-3-large (64.6% vs 62.28%) justify the API dependency and ongoing costs?
+
+Our answer: **No, for this use case.**
+
+1. **The quality difference is marginal**: 62.28% vs 62.3% (OpenAI small) is effectively a tie. Even vs OpenAI large (64.6%), the ~2% difference is unlikely to be perceptible in retrieval quality for a personal library.
+
+2. **API dependency has hidden costs**: Rate limits, outages, privacy concerns, and the inability to work offline. For a personal knowledge system that should work indefinitely, local embedding is more robust.
+
+3. **Re-embedding flexibility**: If a better local model emerges, re-embedding is free. With OpenAI, every re-embedding costs money.
+
+4. **The dual-use case favors nomic**: nomic-embed-text's explicit support for `clustering:` prefix makes it uniquely suited for systems that need both RAG and auto-tagging.
+
+**Why not SPECTER2 (academic-optimized)?**
+
+SPECTER2 is trained specifically on academic papers and outperforms general models on scientific similarity tasks. However:
+- 512-token context window truncates most paper sections
+- Optimized for title+abstract retrieval, not arbitrary chunk retrieval
+- Adding a second embedding model increases complexity without clear benefit
+
+For a personal library where full-section context matters, nomic-embed-text's 8192-token context is more valuable than SPECTER2's domain optimization.
+
 **Why nomic-embed-text:**
 - **Zero ongoing cost**: ~$0 vs ~$0.28-$1.82 for OpenAI on full library
 - **8192 token context**: Handles full paper sections without truncation
-- **High quality**: Competitive with OpenAI on general benchmarks
+- **Equivalent quality**: 62.28% on MTEB — matches OpenAI text-embedding-3-small (62.3%)
 - **Offline capable**: No API dependency, full privacy
 - **M1 compatible**: Runs well via sentence-transformers or Ollama
+- **Task-specific prefixes**: Supports separate prefixes for RAG, clustering, and classification
+
+**MTEB Score Clarification**: Earlier reports cited ~86% for nomic-embed-text. This was incorrect — likely the LoCo (long context) benchmark (85.53%) or task-specific scores. The overall MTEB average is 62.28%, which matches OpenAI small. The recommendation stands because nomic-embed-text is free and local.
 
 **Critical Implementation Detail:**
 ```python
 # nomic-embed-text requires prefixes!
 query_text = "search_query: " + user_query
 doc_text = "search_document: " + chunk_content
+
+# For clustering/auto-tagging (if using dual embeddings):
+cluster_text = "clustering: " + chunk_content
 ```
 
 Missing these prefixes significantly degrades retrieval quality.
+
+### Dual Embedding Strategy (for RAG + Auto-Tagging)
+
+If your system needs both RAG retrieval AND semantic clustering (e.g., for automated document tagging), maintain two embedding sets:
+
+1. **RAG embeddings** (`search_document:` prefix): For query-document matching
+2. **Clustering embeddings** (`clustering:` prefix): For document-document similarity with high linear separability
+
+**Storage overhead**: ~6KB per document (~185MB total for 1,400 docs with chunks). Negligible.
+
+**When to use dual embeddings:**
+- You need both RAG and auto-tagging/clustering
+- Quality matters more than storage efficiency
+- You're using nomic-embed-text (which explicitly supports task prefixes)
 
 ### Chunking Strategy
 
@@ -213,12 +343,27 @@ Store embeddings efficiently, retrieve via similarity search with <500ms latency
 
 ### Recommendation: sqlite-vec + FTS5
 
+**Why sqlite-vec over LanceDB (the "Optimal ROI" choice)?**
+
+The detailed report recommended LanceDB as "Optimal ROI" due to native hybrid search and better scale headroom. We chose sqlite-vec because:
+
+1. **Single-file portability is genuinely valuable**: For a personal knowledge system, `cp library.db backup.db` is simpler than `rsync -av ./lance_dir/ backup/`. It's not a large difference, but simplicity compounds over time.
+
+2. **Native hybrid search isn't essential**: The RRF implementation for combining sqlite-vec + FTS5 is ~30 lines of Python. LanceDB's native hybrid search is cleaner, but not worth changing storage architecture for.
+
+3. **Scale headroom isn't needed yet**: sqlite-vec handles ~100K-250K vectors comfortably. Our projected ~30K chunks (1,400 docs × ~22 chunks) is well within limits. We can migrate if we hit the ceiling.
+
+4. **SQLite is universal**: Every tool understands SQLite. Debugging, inspection, and integration are trivial. LanceDB's Arrow-based format is less universally supported.
+
+**The tradeoff we're making**: We accept brute-force O(n) search and manual hybrid search implementation in exchange for maximum portability and ecosystem familiarity.
+
 **Why sqlite-vec:**
 - **Single-file portability**: `cp library.db backup.db` — done
-- **Adequate performance**: Brute-force search is fast enough for ~100K vectors on M1 Pro (<100ms)
-- **Production stable**: v0.1.0+ marked stable, transactional safety
+- **Adequate performance**: Brute-force search is fast enough for ~100K vectors on M1 Pro (<4ms with quantization)
+- **Production stable**: v0.1.6 (November 2024), backed by Mozilla Builders + Fly.io/Turso/SQLite Cloud
 - **SQLite ecosystem**: Combine with FTS5, JSON functions, existing tooling
 - **SIMD acceleration**: Native NEON support on M1
+- **No data loss issues**: No sqlite-vec-specific bugs reported; standard SQLite durability applies
 
 **Why NOT DuckDB VSS:**
 Despite offering HNSW indexes in a single file, DuckDB VSS is explicitly experimental:
@@ -232,6 +377,8 @@ LanceDB is excellent but overkill here:
 - Directory-based storage (acceptable, but sqlite-vec is simpler)
 - Native hybrid search is nice, but FTS5 + manual RRF is straightforward
 - Better suited for larger scale (500K+ vectors) or multi-user scenarios
+
+**Complexity Assessment**: The difference between sqlite-vec and LanceDB is often overstated. LanceDB's API is clean and the directory-vs-single-file distinction is minor (`rsync` handles directories fine). If you need native hybrid search or expect to exceed 100K vectors, LanceDB is a viable alternative — see detailed report for comparison.
 
 ### Schema Design
 
@@ -324,14 +471,21 @@ Provide retrieved context to LLMs for augmented generation. Must work with Claud
 | LangChain | Heavy | High abstraction | Rapid API churn |
 | LlamaIndex | Medium | RAG-focused | Good for retrieval |
 
-### Recommendation: Custom Wrapper (~200 lines)
+### Recommendation: Custom RAGInterface + LiteLLM (Path 3 from detailed report)
 
-**Why custom wrapper over LiteLLM:**
-- **Minimal dependencies**: anthropic, openai, ollama-python vs 50+ transitive deps
-- **Full control**: Direct access to provider features (Claude's prompt caching, etc.)
-- **No abstraction lag**: Provider SDKs get features first
-- **Debuggable**: Your code only, no third-party internals
-- **Appropriate scope**: LiteLLM is for 10+ providers; you have 3
+**Note**: The detailed LLM query interface report covers three architectural paths. This is **Path 3 (Optimal ROI)** — a custom wrapper for context assembly/citation handling with LiteLLM for provider abstraction.
+
+**Architecture split:**
+- **Custom code (~200-300 lines)**: Context assembly, token budget management, citation formatting
+- **LiteLLM**: Provider abstraction (handles auth, response parsing, error handling for 3 providers)
+
+**Why this split:**
+- **Context assembly is your code**: This is core to RAG quality and should be custom
+- **Provider abstraction is commodity**: LiteLLM handles the tedious parts well for 3 providers
+- **Full control where it matters**: You own retrieval logic and context assembly
+- **Minimal effort where it doesn't**: Provider differences are abstracted away
+
+**Alternative (pure custom)**: If you prefer zero external dependencies, ~350 lines handles all three providers directly. See implementation sketch below.
 
 ### Implementation Sketch
 
@@ -462,39 +616,61 @@ Academic workflow integration: suggest citations for claims, real-time autocompl
 | Feature | Complexity | Feasibility | Recommendation |
 |---------|------------|-------------|----------------|
 | **Citation Suggestion** | Low | Straightforward | **Build (MVP)** |
+| **Triage-based "Verification"** | Low | Straightforward | **Build (MVP)** |
+| **Triage-based "Contradiction"** | Low | Straightforward | **Build (MVP)** |
 | **Neovim Autocomplete** | Medium | Straightforward | **Build (MVP)** |
 | **CLI / HTTP API** | Low | Straightforward | **Build (MVP)** |
 | **MCP Server** | Low-Medium | Straightforward* | **Build (MVP)** |
-| **Citation Verification** | High | Needs Validation | **Defer** |
-| **Contradiction Detection** | Very High | Research-Grade | **Defer** |
+| **Full Automated Verification** | High | Needs Validation | **Defer** |
+| **Full Contradiction Detection** | Very High | Research-Grade | **Defer** |
 
 *MCP SDK is young with API churn; expect some maintenance.
 
-### Recommendation: Focus on Suggestion/Autocomplete MVP
+**Key insight**: Triage-based verification/contradiction uses the same infrastructure as citation suggestion with different ranking. See Section 4.6 of the detailed citation tooling report.
 
-**Why focus on MVP:**
+### Recommendation: Suggestion + Triage MVP
+
+**Why focus on Suggestion + Triage:**
 1. **Citation suggestion solves 80% of the use case** ("I need a citation, what do I have?")
-2. **Immediate value**: Works on day one with standard RAG infrastructure
-3. **Low risk**: No ML model accuracy concerns
-4. **~1-2 weeks to functional system**
+2. **Triage-based verification gets you the other 80%** — without the accuracy burden
+3. **Immediate value**: Works on day one with standard RAG infrastructure
+4. **Low risk**: No ML model accuracy concerns
+5. **~1-2 weeks to functional system**
 
-**Why defer verification/contradiction:**
-1. **NLI accuracy problem**: Standard models achieve ~90% on general text but only ~77-78% on academic text (SciNLI/MSciNLI benchmarks)
-2. **High false positive rate**: Academic hedging, scope qualifications, and implicit assumptions confuse NLI models
-3. **Validation required**: You'd need to build a test set (50-100 labeled pairs) and empirically measure accuracy before knowing if it's usable
-4. **2-4 weeks just to validate**, with significant risk of "not good enough"
+### The Triage Reframing (Key Insight)
 
-### What Would Make Verification/Contradiction Viable?
+The research phase revealed that NLI models achieve only ~77-78% accuracy on academic text (vs ~90%+ on general text), which initially suggested deferring verification/contradiction entirely. But this framing assumes the goal is **automated decision-making**.
 
-If you want these features later:
+The insight: if we reframe these features as **search space reducers for human review** rather than **automated verifiers**, the accuracy bar drops dramatically.
 
-1. **Build validation set first**: 100 claim-citation pairs from your own papers, manually labeled
-2. **Benchmark baseline**: Run cross-encoder/nli-deberta-v3-base, measure accuracy
-3. **Decision gate**: If accuracy < 75%, either:
-   - Fine-tune on SciNLI/MSciNLI (adds weeks)
-   - Accept as "review aid" with explicit low-confidence warnings
-   - Abandon the feature
-4. **Consider LLM-based NLI**: Prompting Claude/GPT to classify entailment may outperform dedicated NLI models on academic text (untested hypothesis worth exploring)
+| Original Framing | Triage Framing |
+|------------------|----------------|
+| "Does this paper support this claim?" | "What papers are most related to this claim?" |
+| "What contradicts this?" | "What's related but doesn't strongly support this?" |
+| Requirement: High precision (>90%) | Requirement: Better than random (>50%) |
+| Failure: False confidence in wrong answer | Failure: Human reviews a few irrelevant candidates |
+| Risk: User trusts incorrect "SUPPORTED" label | Risk: User spends 30 extra seconds reviewing |
+
+**Why this works**: 77-78% NLI accuracy is insufficient for "trust this label" but excellent for "here are the top candidates, ranked by likelihood." The infrastructure is identical — same embeddings, same NLI model (optional), same ranking logic. Only the UX and expectations change.
+
+**The deeper insight**: Many "AI features" that seem blocked by accuracy concerns become viable when reframed as human-assistance rather than automation. The question isn't "can the system make the decision?" but "does the system make the human faster?" A 77% accurate ranker that surfaces 10 candidates for human review is useful; a 77% accurate automated verifier is dangerous.
+
+**Triage commands** (same infrastructure as citation suggestion):
+```bash
+# "What in my library is related to this claim?"
+cite-triage related "attention mechanisms improve sequence modeling"
+
+# "What might not support this claim?"
+cite-triage contradictions "transformers are always better than RNNs"
+```
+
+### Why NOT Full Verification/Contradiction (Yet)
+
+1. **NLI accuracy problem**: Standard models achieve ~90% on general text but only ~77-78% on academic text
+2. **Validation required**: You'd need to build a test set (50-100 labeled pairs) before knowing if it works
+3. **2-4 weeks to validate**, with significant risk of "not good enough"
+
+**If you still want full verification later**: See the detailed citation tooling report (Section 8.2) for the validation approach. Only pursue if you need automated workflows ("reject commits with unsupported citations").
 
 ### MVP Architecture
 
@@ -645,6 +821,16 @@ Your project's CLAUDE.md references sqlite-vss, which is deprecated. Update to r
    - Documentation
 
 ### Total: ~5-7 weeks to functional system
+
+### Pending: Evaluation Framework
+
+> **TODO**: A detailed evaluation framework needs to be researched and created before implementation begins. The v1 research (`v1_backport_content.md`) contains useful starter content including:
+> - Test set design (50-100 stratified queries)
+> - Quality targets (Precision@5 ≥60%, MRR ≥0.5, "I don't know" accuracy ≥80%)
+> - Latency targets per operation
+> - Evaluation code
+>
+> This framework should be adapted to our specific architecture (nomic-embed-text, sqlite-vec, hybrid search) and validated against actual library content before finalizing implementation decisions.
 
 ---
 
