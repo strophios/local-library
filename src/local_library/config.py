@@ -1,6 +1,10 @@
 """Path configuration using platformdirs for XDG-compliant storage."""
 
-# pattern: Functional Core
+# pattern: Mixed (Functional Core with I/O utility)
+# Justification: Path getters (lines 16-39) are pure functions with no side effects.
+# The ensure_directories() function (lines 42-46) performs I/O (creates directories).
+# Grouping them here is intentional for bootstrapping: callers need both path config
+# (pure) and directory creation (I/O) during initialization.
 
 from pathlib import Path
 
