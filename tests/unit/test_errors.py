@@ -1,0 +1,106 @@
+"""Unit tests for error module."""
+
+import pytest
+
+from local_library.core.errors import (
+    AcquisitionError,
+    ErrorCode,
+    ExtractionError,
+    LocalLibraryError,
+    LookupError,
+    QualityError,
+    StorageError,
+)
+
+
+class TestErrorCode:
+    """Tests for ErrorCode enum."""
+
+    def test_error_code_is_string(self) -> None:
+        """ErrorCode values should be strings for JSON serialization."""
+        assert isinstance(ErrorCode.ACQUISITION_FILE_NOT_FOUND.value, str)
+        assert ErrorCode.ACQUISITION_FILE_NOT_FOUND.value == "ACQUISITION_FILE_NOT_FOUND"
+
+    def test_all_error_codes_have_string_values(self) -> None:
+        """All error codes should have matching string values."""
+        for code in ErrorCode:
+            assert code.value == code.name
+
+
+class TestLocalLibraryError:
+    """Tests for base exception class."""
+
+    def test_exception_stores_message_and_code(self) -> None:
+        """Exception should store message and error code."""
+        error = LocalLibraryError("test message", ErrorCode.NOT_FOUND)
+
+        assert error.message == "test message"
+        assert error.code == ErrorCode.NOT_FOUND
+        assert error.details == {}
+
+    def test_exception_stores_details(self) -> None:
+        """Exception should store optional details dict."""
+        details = {"path": "/some/path", "size": 1024}
+        error = LocalLibraryError("test", ErrorCode.NOT_FOUND, details=details)
+
+        assert error.details == details
+
+    def test_str_format_includes_code(self) -> None:
+        """String representation should include error code."""
+        error = LocalLibraryError("file missing", ErrorCode.ACQUISITION_FILE_NOT_FOUND)
+
+        assert str(error) == "[ACQUISITION_FILE_NOT_FOUND] file missing"
+
+    def test_exception_is_catchable(self) -> None:
+        """Exception should be catchable as LocalLibraryError."""
+        with pytest.raises(LocalLibraryError):
+            raise LocalLibraryError("test", ErrorCode.NOT_FOUND)
+
+
+class TestSpecificExceptions:
+    """Tests for specific exception subclasses."""
+
+    def test_acquisition_error_inherits_from_base(self) -> None:
+        """AcquisitionError should inherit from LocalLibraryError."""
+        error = AcquisitionError("file not found", ErrorCode.ACQUISITION_FILE_NOT_FOUND)
+
+        assert isinstance(error, LocalLibraryError)
+        assert isinstance(error, AcquisitionError)
+
+    def test_extraction_error_inherits_from_base(self) -> None:
+        """ExtractionError should inherit from LocalLibraryError."""
+        error = ExtractionError("marker crashed", ErrorCode.EXTRACTION_MARKER_CRASH)
+
+        assert isinstance(error, LocalLibraryError)
+        assert isinstance(error, ExtractionError)
+
+    def test_quality_error_inherits_from_base(self) -> None:
+        """QualityError should inherit from LocalLibraryError."""
+        error = QualityError("output too short", ErrorCode.QUALITY_TOO_SHORT)
+
+        assert isinstance(error, LocalLibraryError)
+        assert isinstance(error, QualityError)
+
+    def test_storage_error_inherits_from_base(self) -> None:
+        """StorageError should inherit from LocalLibraryError."""
+        error = StorageError("database error", ErrorCode.STORAGE_DATABASE_ERROR)
+
+        assert isinstance(error, LocalLibraryError)
+        assert isinstance(error, StorageError)
+
+    def test_lookup_error_inherits_from_base(self) -> None:
+        """LookupError should inherit from LocalLibraryError."""
+        error = LookupError("not found", ErrorCode.NOT_FOUND)
+
+        assert isinstance(error, LocalLibraryError)
+        assert isinstance(error, LookupError)
+
+    def test_can_catch_specific_exception(self) -> None:
+        """Should be able to catch specific exception types."""
+        with pytest.raises(AcquisitionError):
+            raise AcquisitionError("test", ErrorCode.ACQUISITION_FILE_NOT_FOUND)
+
+    def test_can_catch_as_base_exception(self) -> None:
+        """Should be able to catch specific exceptions as base type."""
+        with pytest.raises(LocalLibraryError):
+            raise AcquisitionError("test", ErrorCode.ACQUISITION_FILE_NOT_FOUND)
