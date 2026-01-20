@@ -16,6 +16,19 @@ from local_library.core.models import (
     DocumentStatus,
     ExtractionResult,
 )
+from local_library.core.storage import (
+    create_document,
+    delete_document,
+    get_connection,
+    get_document_by_hash,
+    get_document_by_id,
+    get_document_by_path,
+    get_documents_by_partial_id,
+    init_schema,
+    list_documents,
+    transaction,
+    update_document_status,
+)
 
 __all__ = [
     # Errors
@@ -32,4 +45,16 @@ __all__ = [
     "AcquisitionResult",
     "ExtractionResult",
     "AddResult",
+    # Storage
+    "get_connection",
+    "init_schema",
+    "transaction",
+    "create_document",
+    "get_document_by_id",
+    "get_document_by_hash",
+    "get_document_by_path",
+    "get_documents_by_partial_id",
+    "list_documents",
+    "update_document_status",
+    "delete_document",
 ]
