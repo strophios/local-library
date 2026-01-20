@@ -46,24 +46,38 @@ Each document record contains:
 - Push auto-generated tags back via local API
 - Notes managed primarily in external system (bidirectional sync adds complexity)
 
-## Implementation Layers (Build Order)
+## Build Approach
 
-1. **Storage layer**: SQLite schema + filesystem layout for documents and notes
-2. **Ingestion layer**: Handlers for web URLs (trafilatura) and PDFs (marker/PyMuPDF)
-3. **Zotero import**: Read Zotero database, map to internal schema
-4. **Note management**: Generate markdown stubs, maintain frontmatter links
-5. **Embedding pipeline**: Chunk documents, compute embeddings, store vectors
-6. **Auto-tagging**: Nearest-neighbor tag suggestion or LLM classification
-7. **RAG interface**: Query interface feeding relevant chunks to LLM
-8. **Zotero export**: Push tags back, optional note sync
+Development follows a **pipeline-first, layer-complete** approach documented in `build_philosophy.md`. The key insight: pipeline stages (vertical data flow) and architectural layers (horizontal concerns) are orthogonal. Build along the pipeline for rapid feedback; implement layers completely when touched.
 
-Layers 1-4 yield a functional knowledge base. Layers 5-7 add ML features. Layer 8 closes the Zotero loop.
+### Current Phase: Phase 1 — PDF Pipeline
+
+Phase 1 delivers a complete RAG pipeline for PDF documents imported from Zotero. See `build_plan.md` for milestones and detailed planning.
+
+**Scope:**
+- PDF ingestion via Zotero import
+- Text extraction via Marker
+- Embeddings via nomic-embed-text-v1.5
+- Vector + full-text search via sqlite-vec + FTS5
+- RAG queries via custom wrapper + LiteLLM
+- CLI interface
+
+**Deferred to later phases:** Web content ingestion, citation tooling, auto-tagging, note management, Zotero export, Neovim plugin. See `future_roadmap.md` for full details.
+
+### Architectural Layers
+
+Four horizontal concerns cut across the system:
+
+1. **Storage**: SQLite schema, CRUD operations, sqlite-vec, FTS5
+2. **Ingestion**: Content acquisition, extraction (Marker), metadata handling
+3. **Embeddings**: Chunking, nomic-embed-text, similarity operations
+4. **Interface**: CLI, RAG queries, (later) daemon, Neovim plugin, HTTP API
 
 ## Key Libraries and Tools
 
 - **Web extraction**: trafilatura, readability-lxml
 - **PDF extraction**: Marker (primary), olmOCR (for scanned historical documents on remote GPU)
-- **Embeddings**: nomic-embed-text-v1.5 (local, 768 dims, 8192 context)
+- **Embeddings**: nomic-embed-text-v1.5 (local, 1024 dims, 8192 context)
 - **Metadata**: CrossRef API, GROBID (for academic PDFs), Open Graph tags (for web)
 - **Vector storage**: sqlite-vec (v0.1.6+), SQLite FTS5 for hybrid search
 - **LLM interface**: Custom RAGInterface + LiteLLM for provider abstraction
@@ -119,17 +133,22 @@ A detailed evaluation framework with quality targets, test set design, and evalu
 
 ## Background Documentation
 
-### RAG System Research (authoritative for implementation)
-- `RAG_background/00_final_summary_report.md`: **Start here** — consolidated recommendations with reasoning
+### Build Planning (start here for implementation)
+- `build_plan.md`: **Phase 1 implementation plan** — milestones, layer responsibilities, testing strategy
+- `build_philosophy.md`: Pipeline-first, layer-complete development approach (generalizable)
+- `future_roadmap.md`: Deferred features with context and implementation notes
+
+### RAG System Research (authoritative for implementation details)
+- `RAG_background/00_final_summary_report.md`: Consolidated recommendations — code patterns, schemas, library configuration
 - `RAG_background/pdf_extraction_tools_report.md`: Marker, Docling, olmOCR analysis
 - `RAG_background/embedding_approaches_report.md`: nomic-embed-text, chunking strategies, dual embeddings
 - `RAG_background/vector_storage_report.md`: sqlite-vec vs LanceDB, hybrid search patterns
 - `RAG_background/llm_query_interface_report.md`: Custom wrapper architecture, context assembly
 - `RAG_background/citation_tooling_report.md`: Suggestion, triage-based verification, Neovim integration
-- `RAG_report_guidance.md`: Original requirements and evaluation criteria
-- `summary_logs/rag_research_process_2.md`: Meta-documentation of research process
 
-### Project Planning
+### Project History
 - `background/chat_transcript.md`: Full verbatim transcript of initial planning conversation
 - `background/chat_summary.md`: Concise summary of architectural decisions and data model
+- `RAG_report_guidance.md`: Original requirements and evaluation criteria for RAG research
+- `summary_logs/rag_research_process_2.md`: Meta-documentation of research process
 - `README.md`: Project goals and development philosophy

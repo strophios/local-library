@@ -1,31 +1,39 @@
-# Build Plan: Local Library
+# Build Plan: Phase 1 — PDF Pipeline
 
-This document describes the implementation plan for the local-library project, a personal knowledge management system with RAG capabilities. It applies the pipeline-first, layer-complete development approach described in `build_philosophy.md`.
+This document describes the Phase 1 implementation plan for the local-library project. Phase 1 delivers a complete RAG pipeline for PDF documents imported from Zotero.
 
-## Strategic Context
+This plan applies the pipeline-first, layer-complete development approach described in `build_philosophy.md`.
 
-### Scope Decision: Thick Vertical Slice
+## Scope
 
-Rather than building all functionality for all content types, or building a thin proof-of-concept, we're taking a **thick vertical slice** approach:
+### What Phase 1 Includes
 
-- **Full depth:** Build the complete pipeline from ingestion through RAG query
-- **Narrow width:** Initially support only PDF ingestion via Zotero import
-- **Expand later:** Web content ingestion, auto-tagging, and other features can be added after the core pipeline works
+- **PDF ingestion** via Zotero import (the existing corpus)
+- **Text extraction** via Marker
+- **Embeddings** via nomic-embed-text-v1.5
+- **Vector + full-text search** via sqlite-vec + FTS5
+- **RAG queries** via custom wrapper + LiteLLM
+- **CLI interface** for document management and queries
 
-This approach prioritizes:
-- Getting to useful RAG functionality with the existing corpus (PDFs in Zotero)
-- Building each layer properly, not minimally
-- Deferring orthogonal concerns (web content) that don't block core value
+### What Phase 1 Does Not Include
 
-### What's Deferred
+Features deferred to later phases are documented in `future_roadmap.md`:
+- Web content ingestion (trafilatura)
+- Citation tooling (Neovim integration, CLI suggestion, MCP server)
+- Auto-tagging and dual embeddings
+- Note management
+- Zotero export (pushing tags back)
+- API/GUI interfaces
 
-| Feature | Reason for Deferral |
-|---------|---------------------|
-| Web content ingestion | Orthogonal to PDF pipeline; can be added as alternate ingestion path |
-| Auto-tagging | Enhancement layer; requires working embeddings first |
-| Zotero export | Closes the loop but not needed for querying |
-| Note management | Nice-to-have; doesn't block RAG functionality |
-| Dual embeddings | Optimization for auto-tagging; single embedding set sufficient initially |
+### Implementation References
+
+This plan focuses on milestones, layer responsibilities, and testing strategy. For detailed implementation guidance (code patterns, schema designs, library configuration), see:
+
+- **RAG_background/00_final_summary_report.md** — consolidated implementation recommendations
+  - Section 1: PDF extraction with Marker
+  - Section 2: Embeddings with nomic-embed-text, chunking strategy
+  - Section 3: Vector storage schema, hybrid search implementation
+  - Section 4: LLM query interface patterns
 
 ---
 
@@ -65,8 +73,6 @@ Four horizontal concerns cut across the entire system:
 
 **Components:**
 - PDF extraction via Marker
-- (Future: Web extraction via trafilatura)
-- (Future: EPUB, other formats)
 - Metadata extraction from content and external sources (CrossRef, GROBID)
 
 **Key Design Decisions:**
@@ -94,9 +100,9 @@ Four horizontal concerns cut across the entire system:
 - Document embedding with appropriate prefix (`search_document:`)
 
 **Key Design Decisions:**
-- nomic-embed-text-v1.5: 768 dimensions, 8192 token context
-- Task-specific prefixes are mandatory (model was trained with them)
-- Chunking strategy: ~512 tokens with ~50 token overlap, respect paragraph boundaries
+- nomic-embed-text-v1.5: 1024 dimensions, 8192 token context (see RAG report Section 2)
+- Task-specific prefixes are mandatory: `search_query:` for queries, `search_document:` for chunks
+- Chunking strategy: ~512 tokens with ~15% overlap, respect section boundaries
 - Brute-force search acceptable up to ~100K vectors
 
 **Completeness Checklist:**
@@ -114,8 +120,6 @@ Four horizontal concerns cut across the entire system:
 **Components:**
 - CLI for document operations (add, list, search, delete)
 - RAG query interface (natural language → retrieved context → LLM response)
-- (Future: API for programmatic access)
-- (Future: TUI or GUI for browsing)
 
 **Key Design Decisions:**
 - CLI-first for initial implementation
