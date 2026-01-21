@@ -179,6 +179,14 @@ class TestLibraryAdd:
         pdf_path.write_bytes(b"%PDF-1.4 test content for extraction")
         return pdf_path
 
+    def test_add_unsupported_source_raises(self, library: Library) -> None:
+        """add() should raise for sources no acquirer can handle."""
+        # URL is not handled by FileAcquirer
+        with pytest.raises(AcquisitionError) as exc_info:
+            library.add("https://example.com/doc.pdf")
+
+        assert exc_info.value.code == ErrorCode.ACQUISITION_UNSUPPORTED_SOURCE
+
     def test_add_unsupported_format_raises(self, library: Library, temp_dir: Path) -> None:
         """add() should raise for unsupported file formats."""
         txt_file = temp_dir / "test.txt"
@@ -241,6 +249,64 @@ class TestLibraryAdd:
             result2 = library.add(str(file2))
             assert result2.is_duplicate is True
             assert result2.duplicate_reason == "hash"
+
+    def test_add_unsupported_content_type_creates_failed_record(self, temp_dir: Path) -> None:
+        """add() should create failed record when no extractor can handle content."""
+        # Create library with empty extractors list
+        library = Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            extractors=[],  # No extractors - nothing can be extracted
+        )
+
+        # Create a file that can be acquired but not extracted
+        txt_file = temp_dir / "test.txt"
+        txt_file.write_text("test content")
+
+        with pytest.raises(ExtractionError) as exc_info:
+            library.add(str(txt_file))
+
+        assert exc_info.value.code == ErrorCode.EXTRACTION_UNSUPPORTED_FORMAT
+
+        # Verify a failed record was created
+        docs = library.list(status=DocumentStatus.FAILED)
+        assert len(docs) == 1
+        assert docs[0].error_code == ErrorCode.EXTRACTION_UNSUPPORTED_FORMAT.value
+
+        # Verify the storage file was preserved
+        storage_path = Path(docs[0].storage_path)
+        assert storage_path.exists()
+
+        library.close()
+
+    def test_add_preserves_file_when_no_extractor_available(self, temp_dir: Path) -> None:
+        """add() should preserve acquired file even when extraction fails."""
+        # Create library with no extractors
+        library = Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            extractors=[],
+        )
+
+        # Create file
+        pdf_file = temp_dir / "test.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4 content")
+
+        try:
+            library.add(str(pdf_file))
+        except ExtractionError:
+            pass  # Expected
+
+        # File should exist in storage
+        docs = library.list()
+        assert len(docs) == 1
+        storage_file = Path(docs[0].storage_path)
+        assert storage_file.exists()
+        assert storage_file.read_bytes() == b"%PDF-1.4 content"
+
+        library.close()
 
 
 class TestLibraryGet:
