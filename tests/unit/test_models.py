@@ -1,6 +1,6 @@
 """Unit tests for models module."""
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID
 
@@ -42,9 +42,9 @@ class TestDocument:
 
     def test_create_pending_sets_timestamps(self) -> None:
         """create_pending should set created_at and updated_at."""
-        before = datetime.now(UTC)
+        before = datetime.now(timezone.utc)
         doc = Document.create_pending("/path/to/file.pdf", "abc123", "/storage/ab/c1/abc123.pdf")
-        after = datetime.now(UTC)
+        after = datetime.now(timezone.utc)
 
         assert before <= doc.created_at <= after
         assert doc.created_at == doc.updated_at

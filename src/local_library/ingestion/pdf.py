@@ -169,7 +169,10 @@ class PdfExtractor:
 
         if result.printable_ratio < min_printable_ratio:
             raise QualityError(
-                f"low printable character ratio: {result.printable_ratio:.2%} (min: {min_printable_ratio:.0%})",
+                (
+                    f"low printable character ratio: {result.printable_ratio:.2%} "
+                    f"(min: {min_printable_ratio:.0%})"
+                ),
                 ErrorCode.QUALITY_LOW_PRINTABLE,
                 details={
                     "path": str(file_path),
