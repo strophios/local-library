@@ -3,6 +3,7 @@
 # pattern: Imperative Shell
 
 import hashlib
+import mimetypes
 from pathlib import Path
 
 from local_library.core.errors import AcquisitionError, ErrorCode
@@ -77,6 +78,18 @@ class FileAcquirer:
                 ErrorCode.ACQUISITION_FILE_NOT_READABLE,
                 details={"path": source},
             ) from e
+
+    def _detect_mime_type(self, file_path: Path) -> str:
+        """Detect MIME type from file extension.
+
+        Args:
+            file_path: Path to the file
+
+        Returns:
+            MIME type string, or 'application/octet-stream' if unknown
+        """
+        mime_type, _ = mimetypes.guess_type(str(file_path))
+        return mime_type or "application/octet-stream"
 
     def acquire(self, source: str, dest_dir: Path) -> AcquisitionResult:
         """Copy file to destination and compute hash.
