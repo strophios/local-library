@@ -1,5 +1,6 @@
 """CLI integration tests using real Library (with mocked extraction)."""
 
+import re
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -47,10 +48,9 @@ class TestCLIIntegration:
             # ADD
             result = runner.invoke(app, ["add", str(sample_pdf)])
             assert result.exit_code == 0, f"Add failed: {result.output}"
-            assert "added" in result.output or "added" in result.output.lower()
+            assert "added" in result.output.lower()
 
             # Extract doc ID from output using regex for UUID
-            import re
 
             uuid_pattern = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
             match = re.search(uuid_pattern, result.output)
@@ -80,8 +80,6 @@ class TestCLIIntegration:
 
     def test_cli_json_output(self, cli_env: dict) -> None:
         """CLI --json flag should produce valid JSON."""
-        import re
-
         sample_pdf = cli_env["sample_pdf"]
 
         with patch("local_library.core.library.PdfExtractor.extract_and_validate") as mock_extract:
