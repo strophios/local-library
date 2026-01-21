@@ -34,7 +34,7 @@ from local_library.core.storage import (
     list_documents,
     update_document_status,
 )
-from local_library.ingestion.base import compute_storage_path, ContentAcquirer, ContentExtractor
+from local_library.ingestion.base import ContentAcquirer, ContentExtractor, compute_storage_path
 from local_library.ingestion.file import FileAcquirer
 from local_library.ingestion.pdf import PdfExtractor
 
