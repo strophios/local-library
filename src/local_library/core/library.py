@@ -51,6 +51,8 @@ class Library:
         db_path: Path | None = None,
         storage_dir: Path | None = None,
         extracted_dir: Path | None = None,
+        acquirers: list[ContentAcquirer] | None = None,
+        extractors: list[ContentExtractor] | None = None,
     ) -> None:
         """Initialize the library.
 
@@ -58,15 +60,21 @@ class Library:
             db_path: Path to SQLite database (default: platformdirs user data)
             storage_dir: Directory for content-addressable storage (default: platformdirs)
             extracted_dir: Directory for extracted markdown (default: platformdirs)
+            acquirers: List of content acquirers (default: [FileAcquirer()])
+            extractors: List of content extractors (default: [PdfExtractor(lazy_load=True)])
         """
         # Use defaults from config if not specified
         self._db_path = db_path or get_database_path()
         self._storage_dir = storage_dir or get_storage_dir()
         self._extracted_dir = extracted_dir or get_extracted_dir()
 
-        # Initialize components
-        self._acquirer = FileAcquirer()
-        self._extractor = PdfExtractor(lazy_load=True)
+        # Initialize handler lists with defaults
+        self._acquirers: list[ContentAcquirer] = (
+            acquirers if acquirers is not None else [FileAcquirer()]
+        )
+        self._extractors: list[ContentExtractor] = (
+            extractors if extractors is not None else [PdfExtractor(lazy_load=True)]
+        )
 
         # Ensure directories exist
         ensure_directories()
@@ -107,9 +115,9 @@ class Library:
         Raises:
             AcquisitionError: If no acquirer can handle the source
         """
-        # For now, we only have one acquirer - will be refactored in Phase 3
-        if self._acquirer.can_handle(source):
-            return self._acquirer
+        for acquirer in self._acquirers:
+            if acquirer.can_handle(source):
+                return acquirer
 
         raise AcquisitionError(
             f"no acquirer can handle source: {source}",
@@ -132,9 +140,9 @@ class Library:
         Raises:
             ExtractionError: If no extractor can handle the file
         """
-        # For now, we only have one extractor - will be refactored in Phase 3
-        if self._extractor.can_handle(file_path):
-            return self._extractor
+        for extractor in self._extractors:
+            if extractor.can_handle(file_path):
+                return extractor
 
         raise ExtractionError(
             f"no extractor can handle file: {file_path}",
@@ -169,17 +177,12 @@ class Library:
             AcquisitionError: If source is invalid and force=False
             ExtractionError: If extraction fails (record created with failed status)
         """
-        # Check if we can handle this source
-        if not self._acquirer.can_handle(source):
-            raise AcquisitionError(
-                f"unsupported source type: {source}",
-                ErrorCode.ACQUISITION_INVALID_FORMAT,
-                details={"source": source},
-            )
+        # Find and use appropriate acquirer
+        acquirer = self._find_acquirer(source)
 
         # Validate source (unless force mode)
         try:
-            self._acquirer.validate(source)
+            acquirer.validate(source)
         except AcquisitionError as e:
             if force:
                 # Create failed record for inaccessible file
@@ -201,7 +204,7 @@ class Library:
         # Acquire content to temp directory
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            acquisition = self._acquirer.acquire(source, temp_path)
+            acquisition = acquirer.acquire(source, temp_path)
 
             # Check for duplicate by content hash
             existing = get_document_by_hash(self._conn, acquisition.content_hash)
@@ -232,7 +235,8 @@ class Library:
 
         # Extract text content
         try:
-            result = self._extractor.extract_and_validate(storage_path)
+            extractor = self._find_extractor(storage_path)
+            result = extractor.extract_and_validate(storage_path)
 
             # Write extracted markdown
             extracted_path = compute_storage_path(
