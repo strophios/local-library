@@ -41,9 +41,7 @@ class TestCLIIntegration:
         sample_pdf = cli_env["sample_pdf"]
 
         # Patch extraction in the Library class
-        with patch(
-            "local_library.core.library.PdfExtractor.extract_and_validate"
-        ) as mock_extract:
+        with patch("local_library.core.library.PdfExtractor.extract_and_validate") as mock_extract:
             mock_extract.return_value = MagicMock(text="Extracted content " * 20)
 
             # ADD
@@ -53,6 +51,7 @@ class TestCLIIntegration:
 
             # Extract doc ID from output using regex for UUID
             import re
+
             uuid_pattern = r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
             match = re.search(uuid_pattern, result.output)
             assert match is not None, f"Could not find UUID in: {result.output}"
@@ -81,14 +80,11 @@ class TestCLIIntegration:
 
     def test_cli_json_output(self, cli_env: dict) -> None:
         """CLI --json flag should produce valid JSON."""
-        import json
         import re
 
         sample_pdf = cli_env["sample_pdf"]
 
-        with patch(
-            "local_library.core.library.PdfExtractor.extract_and_validate"
-        ) as mock_extract:
+        with patch("local_library.core.library.PdfExtractor.extract_and_validate") as mock_extract:
             mock_extract.return_value = MagicMock(text="Extracted content " * 20)
 
             # ADD with JSON
@@ -101,7 +97,9 @@ class TestCLIIntegration:
             assert '"is_duplicate"' in result.output
 
             # Extract UUID to verify it's present
-            uuid_pattern = r'"id":\s*"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"'
+            uuid_pattern = (
+                r'"id":\s*"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})"'
+            )
             match = re.search(uuid_pattern, result.output)
             assert match is not None, f"Could not find id in JSON output: {result.output}"
             doc_id = match.group(1)

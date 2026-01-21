@@ -46,9 +46,7 @@ class TestAddListShowDeleteCycle:
             docs = lib.list()
             assert len(docs) == 0
 
-    def test_partial_id_lookup(
-        self, integration_library: Library, sample_pdf: Path
-    ) -> None:
+    def test_partial_id_lookup(self, integration_library: Library, sample_pdf: Path) -> None:
         """Should find documents by partial UUID prefix."""
         lib = integration_library
 
@@ -205,9 +203,7 @@ class TestForceMode:
         assert result.document.status == DocumentStatus.FAILED
         assert result.document.original_path == "/nonexistent/document.pdf"
 
-    def test_force_duplicate_returns_existing(
-        self, integration_library: Library
-    ) -> None:
+    def test_force_duplicate_returns_existing(self, integration_library: Library) -> None:
         """--force with same path twice should return existing failed record."""
         lib = integration_library
 
