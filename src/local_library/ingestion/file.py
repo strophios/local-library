@@ -138,7 +138,7 @@ class FileAcquirer:
             temp_path=temp_path,
             original_path=str(source_path),
             file_size=file_size,
-            mime_type="application/pdf",  # For now, only PDFs supported
+            mime_type=self._detect_mime_type(source_path),
         )
 
 
