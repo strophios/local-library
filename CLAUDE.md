@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+Last verified: 2026-01-21
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
@@ -50,19 +52,23 @@ Each document record contains:
 
 Development follows a **pipeline-first, layer-complete** approach documented in `build_philosophy.md`. The key insight: pipeline stages (vertical data flow) and architectural layers (horizontal concerns) are orthogonal. Build along the pipeline for rapid feedback; implement layers completely when touched.
 
-### Current Phase: Phase 1 — PDF Pipeline
+### Current Status: M1-M2 Complete (Record Storage + Extraction)
 
-Phase 1 delivers a complete RAG pipeline for PDF documents imported from Zotero. See `build_plan.md` for milestones and detailed planning.
+Milestones M1 (record storage) and M2 (PDF extraction) are implemented. The system can:
+- Ingest local PDF files via CLI (`local-library add <path>`)
+- Extract text to markdown via Marker
+- Store documents in content-addressable storage with SQLite metadata
+- Query, list, and delete documents via CLI
 
-**Scope:**
-- PDF ingestion via Zotero import
-- Text extraction via Marker
-- Embeddings via nomic-embed-text-v1.5
-- Vector + full-text search via sqlite-vec + FTS5
-- RAG queries via custom wrapper + LiteLLM
-- CLI interface
+**Implemented:**
+- PDF ingestion from local filesystem
+- Text extraction via Marker with quality validation
+- SQLite storage with content-addressable file layout
+- CLI interface (add, list, show, delete)
 
-**Deferred to later phases:** Web content ingestion, citation tooling, auto-tagging, note management, Zotero export, Neovim plugin. See `future_roadmap.md` for full details.
+**Next milestones:** M3 (embeddings via nomic-embed-text), M4 (vector search via sqlite-vec + FTS5), M5 (RAG queries)
+
+**Deferred to later phases:** Web content ingestion, Zotero sync, citation tooling, auto-tagging, note management, Neovim plugin. See `future_roadmap.md` for full details.
 
 ### Architectural Layers
 
@@ -131,12 +137,52 @@ A detailed evaluation framework with quality targets, test set design, and evalu
 - Duplicate storage (e.g., PDFs in both systems) is acceptable for independence
 - Prioritize easy ingestion: adding a blog post should require only a URL
 
+## Python Tooling
+
+**Always** use uv for package management, ruff for linting, and ty for type checking. Invoke the relevant skill via `astral:uv`, `astral:ruff`, or `astral:ty` when needed.
+
+## Commands
+
+- `uv run local-library add <path>` - Add a PDF to the library
+- `uv run local-library list` - List all documents
+- `uv run local-library show <id>` - Show document details
+- `uv run local-library delete <id>` - Delete a document
+- `uv run pytest` - Run tests
+- `uv run ruff check` - Lint code
+- `uv run ruff format` - Format code
+
+## Package Structure
+
+```
+src/local_library/
+├── __init__.py          # Package root
+├── config.py            # XDG-compliant path configuration
+├── core/                # Domain: models, storage, orchestration
+│   ├── models.py        # Document, result types (Functional Core)
+│   ├── errors.py        # Exception hierarchy with ErrorCode (Functional Core)
+│   ├── storage.py       # SQLite CRUD operations (Imperative Shell)
+│   └── library.py       # Library orchestrator (Imperative Shell)
+├── ingestion/           # Domain: content acquisition and extraction
+│   ├── base.py          # Protocols: ContentAcquirer, ContentExtractor
+│   ├── file.py          # FileAcquirer implementation
+│   └── pdf.py           # PdfExtractor (Marker wrapper)
+└── cli/                 # CLI interface (Typer/Rich)
+    ├── main.py          # Entry point, command registration
+    ├── add.py           # Add command
+    ├── list.py          # List command
+    ├── show.py          # Show command
+    └── delete.py        # Delete command
+```
+
+See `src/local_library/core/CLAUDE.md` and `src/local_library/ingestion/CLAUDE.md` for domain contracts.
+
 ## Background Documentation
 
-### Build Planning (start here for implementation)
-- `build_plan.md`: **Phase 1 implementation plan** — milestones, layer responsibilities, testing strategy
-- `build_philosophy.md`: Pipeline-first, layer-complete development approach (generalizable)
+### Build Planning
+- `build_plan.md`: Milestone overview and layer responsibilities
+- `build_philosophy.md`: Pipeline-first, layer-complete development approach
 - `future_roadmap.md`: Deferred features with context and implementation notes
+- `docs/implementation-plans/2025-01-20-m1-m2-record-storage-extraction/`: Detailed implementation plans for M1-M2 (8 phases)
 
 ### RAG System Research (authoritative for implementation details)
 - `RAG_background/00_final_summary_report.md`: Consolidated recommendations — code patterns, schemas, library configuration
