@@ -13,8 +13,8 @@ Handles content acquisition (getting files into the system) and extraction (conv
   - `can_handle()` returns True only for sources/files the handler can process
   - Acquirers copy to temp location (never modify source)
   - AcquisitionResult.content_hash is SHA-256 of acquired content
-  - Extractors produce ExtractionResult with quality metrics
-  - PdfExtractor validates output (min length, printable ratio)
+  - ContentExtractor.extract() produces ExtractionResult with quality metrics
+  - ContentExtractor.extract_and_validate() combines extraction + validation in one call
   - FileAcquirer handles any local file path (content-agnostic); detects MIME type dynamically
 - **Expects**: Source paths exist and are readable; temp directories provided by caller
 
@@ -48,7 +48,7 @@ Handles content acquisition (getting files into the system) and extraction (conv
 
 ## Gotchas
 
-- PdfExtractor.extract_and_validate() is the preferred method (combines extraction + validation)
+- Use `extract_and_validate()` over `extract()` when quality validation is needed (protocol method)
 - FileAcquirer.acquire() returns resolved absolute path in original_path
 - Quality thresholds are configurable but default to min_length=100, min_printable_ratio=0.8
 - FileAcquirer returns detected MIME type (not hardcoded); callers should not assume PDF
