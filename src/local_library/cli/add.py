@@ -46,7 +46,7 @@ def add(
             err_console.print(json.dumps({"error": e.message, "code": e.code.value}))
         else:
             err_console.print(f"[yellow]warning:[/yellow] extraction failed: {e.message}")
-            err_console.print(f"[dim]Document created with status 'failed'[/dim]")
+            err_console.print("[dim]Document created with status 'failed'[/dim]")
         raise typer.Exit(code=2)
 
     doc = result.document

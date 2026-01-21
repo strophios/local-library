@@ -215,9 +215,7 @@ class Library:
 
         return AddResult(document=doc)
 
-    def _create_failed_record(
-        self, source: str, error: AcquisitionError
-    ) -> AddResult:
+    def _create_failed_record(self, source: str, error: AcquisitionError) -> AddResult:
         """Create a failed record for an inaccessible file.
 
         Used when --force is specified for files that can't be accessed.

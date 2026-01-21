@@ -3,7 +3,7 @@
 # pattern: Imperative Shell
 
 import json
-from typing import Annotated, Optional
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -16,7 +16,7 @@ console = Console()
 
 def list_docs(
     status: Annotated[
-        Optional[str],
+        str | None,
         typer.Option("--status", "-s", help="Filter by status (pending, ready, failed)"),
     ] = None,
     json_output: Annotated[
@@ -36,7 +36,7 @@ def list_docs(
             status_filter = DocumentStatus(status.lower())
         except ValueError:
             console.print(f"[red]error:[/red] invalid status '{status}'")
-            console.print(f"[dim]valid values: pending, ready, failed[/dim]")
+            console.print("[dim]valid values: pending, ready, failed[/dim]")
             raise typer.Exit(code=1)
 
     with Library() as lib:

@@ -2,13 +2,13 @@
 
 # pattern: Imperative Shell
 
-import sys
-from pathlib import Path
-from typing import Annotated, Optional
-
 import typer
 from rich.console import Console
 
+from local_library.cli import add as add_cmd
+from local_library.cli import delete as delete_cmd
+from local_library.cli import list as list_cmd
+from local_library.cli import show as show_cmd
 from local_library.core import Library
 
 # Create Typer app
@@ -34,12 +34,7 @@ def error(message: str, code: int = 1) -> None:
     raise typer.Exit(code=code)
 
 
-# Import and register subcommands
-from local_library.cli import add as add_cmd
-from local_library.cli import delete as delete_cmd
-from local_library.cli import list as list_cmd
-from local_library.cli import show as show_cmd
-
+# Register subcommands
 app.command(name="add")(add_cmd.add)
 app.command(name="list")(list_cmd.list_docs)
 app.command(name="show")(show_cmd.show)

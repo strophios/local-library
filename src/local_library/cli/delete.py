@@ -42,13 +42,13 @@ def delete(
 
             # Confirmation prompt unless --force
             if not force and not json_output:
-                console.print(f"[yellow]About to delete:[/yellow]")
+                console.print("[yellow]About to delete:[/yellow]")
                 console.print(f"  ID: {doc.id}")
                 console.print(f"  Path: {doc.original_path}")
                 console.print(f"  Status: {doc.status.value}")
 
                 if not keep_files:
-                    console.print(f"  [dim]Files will be deleted from disk[/dim]")
+                    console.print("  [dim]Files will be deleted from disk[/dim]")
 
                 confirmed = typer.confirm("Continue?")
                 if not confirmed:

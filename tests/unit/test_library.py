@@ -78,9 +78,7 @@ class TestLibraryAdd:
 
         assert exc_info.value.code == ErrorCode.ACQUISITION_FILE_NOT_FOUND
 
-    def test_add_nonexistent_with_force_creates_failed_record(
-        self, library: Library
-    ) -> None:
+    def test_add_nonexistent_with_force_creates_failed_record(self, library: Library) -> None:
         """add() with force=True should create failed record for inaccessible files."""
         result = library.add("/nonexistent/path.pdf", force=True)
 
@@ -88,9 +86,7 @@ class TestLibraryAdd:
         assert result.document.status == DocumentStatus.FAILED
         assert result.is_duplicate is False
 
-    def test_add_duplicate_path_returns_existing(
-        self, library: Library, sample_pdf: Path
-    ) -> None:
+    def test_add_duplicate_path_returns_existing(self, library: Library, sample_pdf: Path) -> None:
         """add() should return existing record for duplicate path."""
         # Mock the extractor to avoid loading Marker
         with patch.object(library._extractor, "extract_and_validate") as mock_extract:
@@ -106,9 +102,7 @@ class TestLibraryAdd:
             assert result2.duplicate_reason == "path"
             assert result2.document.id == result1.document.id
 
-    def test_add_duplicate_hash_returns_existing(
-        self, library: Library, temp_dir: Path
-    ) -> None:
+    def test_add_duplicate_hash_returns_existing(self, library: Library, temp_dir: Path) -> None:
         """add() should return existing record for duplicate content hash."""
         # Create two files with identical content
         content = b"%PDF-1.4 identical content"
@@ -257,9 +251,7 @@ class TestLibraryDelete:
 
         return library, str(result.document.id), Path(result.document.storage_path)
 
-    def test_delete_removes_document(
-        self, library_with_doc: tuple[Library, str, Path]
-    ) -> None:
+    def test_delete_removes_document(self, library_with_doc: tuple[Library, str, Path]) -> None:
         """delete() should remove document from database."""
         library, doc_id, _ = library_with_doc
 
@@ -269,9 +261,7 @@ class TestLibraryDelete:
         with pytest.raises(LookupError):
             library.get(doc_id)
 
-    def test_delete_removes_files(
-        self, library_with_doc: tuple[Library, str, Path]
-    ) -> None:
+    def test_delete_removes_files(self, library_with_doc: tuple[Library, str, Path]) -> None:
         """delete() should remove storage files by default."""
         library, doc_id, storage_path = library_with_doc
         assert storage_path.exists()

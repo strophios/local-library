@@ -7,7 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from local_library.cli.main import app
-from local_library.core.models import AddResult, Document, DocumentStatus
+from local_library.core.models import AddResult, DocumentStatus
 
 runner = CliRunner()
 
@@ -15,11 +15,12 @@ runner = CliRunner()
 @pytest.fixture
 def mock_library():
     """Provide a mock Library for CLI testing."""
-    with patch("local_library.cli.add.Library") as mock_add, \
-         patch("local_library.cli.list.Library") as mock_list, \
-         patch("local_library.cli.show.Library") as mock_show, \
-         patch("local_library.cli.delete.Library") as mock_delete:
-
+    with (
+        patch("local_library.cli.add.Library") as mock_add,
+        patch("local_library.cli.list.Library") as mock_list,
+        patch("local_library.cli.show.Library") as mock_show,
+        patch("local_library.cli.delete.Library") as mock_delete,
+    ):
         mock_lib = MagicMock()
         mock_add.return_value.__enter__ = MagicMock(return_value=mock_lib)
         mock_add.return_value.__exit__ = MagicMock(return_value=False)
@@ -172,9 +173,7 @@ class TestShowCommand:
         """show command should handle not found."""
         from local_library.core import ErrorCode, LookupError
 
-        mock_library.get.side_effect = LookupError(
-            "document not found", ErrorCode.NOT_FOUND
-        )
+        mock_library.get.side_effect = LookupError("document not found", ErrorCode.NOT_FOUND)
 
         result = runner.invoke(app, ["show", "nonexistent"])
 
@@ -204,9 +203,7 @@ class TestDeleteCommand:
         """delete command should handle not found."""
         from local_library.core import ErrorCode, LookupError
 
-        mock_library.get.side_effect = LookupError(
-            "document not found", ErrorCode.NOT_FOUND
-        )
+        mock_library.get.side_effect = LookupError("document not found", ErrorCode.NOT_FOUND)
 
         result = runner.invoke(app, ["delete", "--force", "nonexistent"])
 
