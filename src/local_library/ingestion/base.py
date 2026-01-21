@@ -89,6 +89,28 @@ class ContentExtractor(Protocol):
         """
         ...
 
+    def extract_and_validate(
+        self,
+        file_path: Path,
+        min_length: int | None = None,
+        min_printable_ratio: float | None = None,
+    ) -> ExtractionResult:
+        """Extract text and validate quality.
+
+        Args:
+            file_path: Path to the file to extract
+            min_length: Minimum character count
+            min_printable_ratio: Minimum printable character ratio
+
+        Returns:
+            ExtractionResult if extraction passes quality checks
+
+        Raises:
+            ExtractionError: If extraction fails
+            QualityError: If extraction fails quality validation
+        """
+        ...
+
 
 def compute_storage_path(content_hash: str, extension: str, base_dir: Path) -> Path:
     """Compute content-addressable storage path.
