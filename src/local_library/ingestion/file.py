@@ -16,22 +16,23 @@ class FileAcquirer:
     and computes SHA-256 content hash.
     """
 
-    # Supported file extensions
-    SUPPORTED_EXTENSIONS = {".pdf"}
-
     def can_handle(self, source: str) -> bool:
-        """Check if source is a local file path with supported extension.
+        """Check if source is a local file path (not a URL).
 
         Args:
             source: Source path to check
 
         Returns:
-            True if source is a local file path with supported extension
+            True if source appears to be a local file path
         """
+        # Reject URLs (simple heuristic: starts with common URL schemes)
+        if source.startswith(("http://", "https://", "ftp://", "file://")):
+            return False
+
         try:
-            path = Path(source)
-            # Check it's a file path (not URL) with supported extension
-            return path.suffix.lower() in self.SUPPORTED_EXTENSIONS
+            # Check it's a valid path-like string
+            Path(source)
+            return True
         except (ValueError, OSError):
             return False
 
