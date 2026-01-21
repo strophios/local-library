@@ -66,7 +66,7 @@ Milestones M1 (record storage) and M2 (PDF extraction) are implemented. The syst
 - SQLite storage with content-addressable file layout
 - CLI interface (add, list, show, delete)
 
-**Next milestones:** M3 (embeddings via nomic-embed-text), M4 (vector search via sqlite-vec + FTS5), M5 (RAG queries)
+**Next milestones:** M3 (metadata handling), M4 (Zotero import), M5 (embedding pipeline). See `build_plan.md` for full details. 
 
 **Deferred to later phases:** Web content ingestion, Zotero sync, citation tooling, auto-tagging, note management, Neovim plugin. See `future_roadmap.md` for full details.
 
