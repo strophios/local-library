@@ -120,9 +120,7 @@ class TestLibraryDispatch:
             extracted_dir=temp_dir / "extracted",
         )
 
-    def test_find_acquirer_returns_handler_for_pdf(
-        self, library: Library, temp_dir: Path
-    ) -> None:
+    def test_find_acquirer_returns_handler_for_pdf(self, library: Library, temp_dir: Path) -> None:
         """_find_acquirer should return handler for supported PDF path."""
         pdf_path = temp_dir / "test.pdf"
         pdf_path.write_bytes(b"%PDF-1.4 test")
@@ -139,9 +137,7 @@ class TestLibraryDispatch:
 
         assert exc_info.value.code == ErrorCode.ACQUISITION_UNSUPPORTED_SOURCE
 
-    def test_find_extractor_returns_handler_for_pdf(
-        self, library: Library, temp_dir: Path
-    ) -> None:
+    def test_find_extractor_returns_handler_for_pdf(self, library: Library, temp_dir: Path) -> None:
         """_find_extractor should return handler for PDF file."""
         pdf_path = temp_dir / "test.pdf"
         pdf_path.write_bytes(b"%PDF-1.4 test")
