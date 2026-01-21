@@ -63,7 +63,7 @@ def delete(
             err_console.print(json.dumps({"error": e.message, "code": e.code.value}))
         else:
             err_console.print(f"[red]error:[/red] {e.message}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
     if json_output:
         console.print(json.dumps({"deleted": str(doc.id), "files_deleted": not keep_files}))

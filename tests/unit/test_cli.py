@@ -7,6 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from local_library.cli.main import app
+from local_library.core import ErrorCode, LookupError
 from local_library.core.models import AddResult, DocumentStatus
 
 runner = CliRunner()
@@ -171,8 +172,6 @@ class TestShowCommand:
 
     def test_show_not_found(self, mock_library: MagicMock) -> None:
         """show command should handle not found."""
-        from local_library.core import ErrorCode, LookupError
-
         mock_library.get.side_effect = LookupError("document not found", ErrorCode.NOT_FOUND)
 
         result = runner.invoke(app, ["show", "nonexistent"])
@@ -201,8 +200,6 @@ class TestDeleteCommand:
 
     def test_delete_not_found(self, mock_library: MagicMock) -> None:
         """delete command should handle not found."""
-        from local_library.core import ErrorCode, LookupError
-
         mock_library.get.side_effect = LookupError("document not found", ErrorCode.NOT_FOUND)
 
         result = runner.invoke(app, ["delete", "--force", "nonexistent"])

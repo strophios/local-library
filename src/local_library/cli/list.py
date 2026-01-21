@@ -37,7 +37,7 @@ def list_docs(
         except ValueError:
             console.print(f"[red]error:[/red] invalid status '{status}'")
             console.print("[dim]valid values: pending, ready, failed[/dim]")
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
 
     with Library() as lib:
         docs = lib.list(status=status_filter)

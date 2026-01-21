@@ -3,13 +3,11 @@
 # pattern: Imperative Shell
 
 import typer
-from rich.console import Console
 
 from local_library.cli import add as add_cmd
 from local_library.cli import delete as delete_cmd
 from local_library.cli import list as list_cmd
 from local_library.cli import show as show_cmd
-from local_library.core import Library
 
 # Create Typer app
 app = typer.Typer(
@@ -17,22 +15,6 @@ app = typer.Typer(
     help="Personal knowledge management for local documents.",
     add_completion=False,
 )
-
-# Rich consoles for output
-console = Console()
-err_console = Console(stderr=True)
-
-
-def get_library() -> Library:
-    """Get a Library instance with default paths."""
-    return Library()
-
-
-def error(message: str, code: int = 1) -> None:
-    """Print error message to stderr and exit."""
-    err_console.print(f"[red]error:[/red] {message}")
-    raise typer.Exit(code=code)
-
 
 # Register subcommands
 app.command(name="add")(add_cmd.add)

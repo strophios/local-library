@@ -39,7 +39,7 @@ def add(
             err_console.print(json.dumps({"error": e.message, "code": e.code.value}))
         else:
             err_console.print(f"[red]error:[/red] {e.message}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
     except (ExtractionError, QualityError) as e:
         # Document was created but extraction failed
         if json_output:
@@ -47,7 +47,7 @@ def add(
         else:
             err_console.print(f"[yellow]warning:[/yellow] extraction failed: {e.message}")
             err_console.print("[dim]Document created with status 'failed'[/dim]")
-        raise typer.Exit(code=2)
+        raise typer.Exit(code=2) from None
 
     doc = result.document
 
