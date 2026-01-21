@@ -136,8 +136,11 @@ class Library:
                 return self._create_failed_record(source, e)
             raise
 
+        # Resolve source path for consistent duplicate checking
+        resolved_source = str(Path(source).resolve())
+
         # Check for duplicate by original path
-        existing = get_document_by_path(self._conn, source)
+        existing = get_document_by_path(self._conn, resolved_source)
         if existing:
             return AddResult(
                 document=existing,
