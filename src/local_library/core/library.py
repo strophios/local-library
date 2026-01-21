@@ -34,7 +34,7 @@ from local_library.core.storage import (
     list_documents,
     update_document_status,
 )
-from local_library.ingestion.base import compute_storage_path
+from local_library.ingestion.base import compute_storage_path, ContentAcquirer
 from local_library.ingestion.file import FileAcquirer
 from local_library.ingestion.pdf import PdfExtractor
 
@@ -91,6 +91,31 @@ class Library:
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """Context manager exit."""
         self.close()
+
+    def _find_acquirer(self, source: str) -> ContentAcquirer:
+        """Find an acquirer that can handle the given source.
+
+        Iterates through registered acquirers and returns the first
+        one whose can_handle() returns True.
+
+        Args:
+            source: Source identifier (path, URL, etc.)
+
+        Returns:
+            The acquirer that can handle this source
+
+        Raises:
+            AcquisitionError: If no acquirer can handle the source
+        """
+        # For now, we only have one acquirer - will be refactored in Phase 3
+        if self._acquirer.can_handle(source):
+            return self._acquirer
+
+        raise AcquisitionError(
+            f"no acquirer can handle source: {source}",
+            ErrorCode.ACQUISITION_UNSUPPORTED_SOURCE,
+            details={"source": source},
+        )
 
     # --- Add Pipeline ---
 
