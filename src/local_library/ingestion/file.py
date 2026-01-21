@@ -3,7 +3,6 @@
 # pattern: Imperative Shell
 
 import hashlib
-import shutil
 from pathlib import Path
 
 from local_library.core.errors import AcquisitionError, ErrorCode

@@ -7,7 +7,6 @@ import pytest
 from local_library.core.errors import AcquisitionError, ErrorCode
 from local_library.ingestion.base import (
     ContentAcquirer,
-    ContentExtractor,
     compute_storage_path,
 )
 from local_library.ingestion.file import FileAcquirer, compute_file_hash
@@ -65,7 +64,9 @@ class TestFileAcquirer:
 
         assert acquirer.can_handle(str(pdf_path)) is True
 
-    def test_cannot_handle_unsupported_extension(self, acquirer: FileAcquirer, temp_dir: Path) -> None:
+    def test_cannot_handle_unsupported_extension(
+        self, acquirer: FileAcquirer, temp_dir: Path
+    ) -> None:
         """can_handle should return False for unsupported extensions."""
         txt_path = temp_dir / "sample.txt"
         txt_path.write_text("test")
@@ -111,7 +112,9 @@ class TestFileAcquirer:
 
     # --- acquire tests ---
 
-    def test_acquire_copies_file(self, acquirer: FileAcquirer, sample_pdf: Path, temp_dir: Path) -> None:
+    def test_acquire_copies_file(
+        self, acquirer: FileAcquirer, sample_pdf: Path, temp_dir: Path
+    ) -> None:
         """acquire should copy file to destination."""
         dest_dir = temp_dir / "dest"
         result = acquirer.acquire(str(sample_pdf), dest_dir)
@@ -119,7 +122,9 @@ class TestFileAcquirer:
         assert result.temp_path.exists()
         assert result.temp_path.read_bytes() == sample_pdf.read_bytes()
 
-    def test_acquire_computes_correct_hash(self, acquirer: FileAcquirer, sample_pdf: Path, temp_dir: Path) -> None:
+    def test_acquire_computes_correct_hash(
+        self, acquirer: FileAcquirer, sample_pdf: Path, temp_dir: Path
+    ) -> None:
         """acquire should compute correct SHA-256 hash."""
         dest_dir = temp_dir / "dest"
         result = acquirer.acquire(str(sample_pdf), dest_dir)
@@ -127,21 +132,27 @@ class TestFileAcquirer:
         expected_hash = compute_file_hash(sample_pdf)
         assert result.content_hash == expected_hash
 
-    def test_acquire_returns_original_path(self, acquirer: FileAcquirer, sample_pdf: Path, temp_dir: Path) -> None:
+    def test_acquire_returns_original_path(
+        self, acquirer: FileAcquirer, sample_pdf: Path, temp_dir: Path
+    ) -> None:
         """acquire should return resolved original path."""
         dest_dir = temp_dir / "dest"
         result = acquirer.acquire(str(sample_pdf), dest_dir)
 
         assert result.original_path == str(sample_pdf.resolve())
 
-    def test_acquire_returns_file_size(self, acquirer: FileAcquirer, sample_pdf: Path, temp_dir: Path) -> None:
+    def test_acquire_returns_file_size(
+        self, acquirer: FileAcquirer, sample_pdf: Path, temp_dir: Path
+    ) -> None:
         """acquire should return correct file size."""
         dest_dir = temp_dir / "dest"
         result = acquirer.acquire(str(sample_pdf), dest_dir)
 
         assert result.file_size == sample_pdf.stat().st_size
 
-    def test_acquire_creates_dest_directory(self, acquirer: FileAcquirer, sample_pdf: Path, temp_dir: Path) -> None:
+    def test_acquire_creates_dest_directory(
+        self, acquirer: FileAcquirer, sample_pdf: Path, temp_dir: Path
+    ) -> None:
         """acquire should create destination directory if needed."""
         dest_dir = temp_dir / "nested" / "dest"
         assert not dest_dir.exists()
