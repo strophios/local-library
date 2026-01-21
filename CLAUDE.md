@@ -131,6 +131,11 @@ A detailed evaluation framework with quality targets, test set design, and evalu
 - Duplicate storage (e.g., PDFs in both systems) is acceptable for independence
 - Prioritize easy ingestion: adding a blog post should require only a URL
 
+# Python Tooling
+
+When working with Python in this project **always** use uv for package management, ruff for linting, and ty for LSP to ensure best practices are followed. Do this by invoking the relevant skill via `astral:uv`, `astral:ruff`, or `astral:ty` when needed. 
+
+
 ## Background Documentation
 
 ### Build Planning (start here for implementation)
