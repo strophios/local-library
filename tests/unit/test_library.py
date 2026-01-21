@@ -184,10 +184,10 @@ class TestLibraryAdd:
         txt_file = temp_dir / "test.txt"
         txt_file.write_text("test")
 
-        with pytest.raises(AcquisitionError) as exc_info:
+        with pytest.raises(ExtractionError) as exc_info:
             library.add(str(txt_file))
 
-        assert exc_info.value.code == ErrorCode.ACQUISITION_UNSUPPORTED_SOURCE
+        assert exc_info.value.code == ErrorCode.EXTRACTION_UNSUPPORTED_FORMAT
 
     def test_add_nonexistent_file_raises(self, library: Library) -> None:
         """add() should raise for nonexistent file."""
