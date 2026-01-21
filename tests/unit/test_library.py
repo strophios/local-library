@@ -9,6 +9,8 @@ import pytest
 from local_library.core.errors import AcquisitionError, ErrorCode, ExtractionError, LookupError
 from local_library.core.library import Library
 from local_library.core.models import DocumentStatus
+from local_library.ingestion.file import FileAcquirer
+from local_library.ingestion.pdf import PdfExtractor
 
 
 class TestLibraryInit:
@@ -40,6 +42,70 @@ class TestLibraryInit:
         # Attempting to use it should fail
         with pytest.raises(sqlite3.ProgrammingError):
             conn.execute("SELECT 1")
+
+    def test_default_acquirers_includes_file_acquirer(self, temp_dir: Path) -> None:
+        """Library should have FileAcquirer in default acquirers list."""
+        with Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+        ) as lib:
+            assert len(lib._acquirers) == 1
+            assert isinstance(lib._acquirers[0], FileAcquirer)
+
+    def test_default_extractors_includes_pdf_extractor(self, temp_dir: Path) -> None:
+        """Library should have PdfExtractor in default extractors list."""
+        with Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+        ) as lib:
+            assert len(lib._extractors) == 1
+            assert isinstance(lib._extractors[0], PdfExtractor)
+
+    def test_custom_acquirers_override_defaults(self, temp_dir: Path) -> None:
+        """Library should use custom acquirers when provided."""
+        custom_acquirer = FileAcquirer()  # Could be any ContentAcquirer
+
+        with Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            acquirers=[custom_acquirer],
+        ) as lib:
+            assert lib._acquirers == [custom_acquirer]
+
+    def test_custom_extractors_override_defaults(self, temp_dir: Path) -> None:
+        """Library should use custom extractors when provided."""
+        custom_extractor = PdfExtractor(lazy_load=True)  # Could be any ContentExtractor
+
+        with Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            extractors=[custom_extractor],
+        ) as lib:
+            assert lib._extractors == [custom_extractor]
+
+    def test_empty_acquirers_list_is_valid(self, temp_dir: Path) -> None:
+        """Library should accept empty acquirers list (all sources will fail)."""
+        with Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            acquirers=[],
+        ) as lib:
+            assert lib._acquirers == []
+
+    def test_empty_extractors_list_is_valid(self, temp_dir: Path) -> None:
+        """Library should accept empty extractors list (all extractions will fail)."""
+        with Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            extractors=[],
+        ) as lib:
+            assert lib._extractors == []
 
 
 class TestLibraryDispatch:
@@ -125,7 +191,7 @@ class TestLibraryAdd:
         with pytest.raises(AcquisitionError) as exc_info:
             library.add(str(txt_file))
 
-        assert exc_info.value.code == ErrorCode.ACQUISITION_INVALID_FORMAT
+        assert exc_info.value.code == ErrorCode.ACQUISITION_UNSUPPORTED_SOURCE
 
     def test_add_nonexistent_file_raises(self, library: Library) -> None:
         """add() should raise for nonexistent file."""
@@ -145,7 +211,7 @@ class TestLibraryAdd:
     def test_add_duplicate_path_returns_existing(self, library: Library, sample_pdf: Path) -> None:
         """add() should return existing record for duplicate path."""
         # Mock the extractor to avoid loading Marker
-        with patch.object(library._extractor, "extract_and_validate") as mock_extract:
+        with patch.object(library._extractors[0], "extract_and_validate") as mock_extract:
             mock_extract.return_value = MagicMock(text="Extracted content" * 20)
 
             # First add
@@ -168,7 +234,7 @@ class TestLibraryAdd:
         file2.write_bytes(content)
 
         # Mock the extractor
-        with patch.object(library._extractor, "extract_and_validate") as mock_extract:
+        with patch.object(library._extractors[0], "extract_and_validate") as mock_extract:
             mock_extract.return_value = MagicMock(text="Extracted content" * 20)
 
             # First add
@@ -196,7 +262,7 @@ class TestLibraryGet:
         pdf_path = temp_dir / "sample.pdf"
         pdf_path.write_bytes(b"%PDF-1.4 test content")
 
-        with patch.object(library._extractor, "extract_and_validate") as mock_extract:
+        with patch.object(library._extractors[0], "extract_and_validate") as mock_extract:
             mock_extract.return_value = MagicMock(text="Extracted content" * 20)
             result = library.add(str(pdf_path))
 
@@ -255,7 +321,7 @@ class TestLibraryList:
         pdf1.write_bytes(b"%PDF-1.4 content one")
         pdf2.write_bytes(b"%PDF-1.4 content two")
 
-        with patch.object(library._extractor, "extract_and_validate") as mock_extract:
+        with patch.object(library._extractors[0], "extract_and_validate") as mock_extract:
             mock_extract.return_value = MagicMock(text="Extracted content" * 20)
             library.add(str(pdf1))
             library.add(str(pdf2))
@@ -270,7 +336,7 @@ class TestLibraryList:
         pdf1 = temp_dir / "success.pdf"
         pdf1.write_bytes(b"%PDF-1.4 success content")
 
-        with patch.object(library._extractor, "extract_and_validate") as mock_extract:
+        with patch.object(library._extractors[0], "extract_and_validate") as mock_extract:
             mock_extract.return_value = MagicMock(text="Extracted content" * 20)
             library.add(str(pdf1))
 
@@ -301,7 +367,7 @@ class TestLibraryDelete:
         pdf_path = temp_dir / "sample.pdf"
         pdf_path.write_bytes(b"%PDF-1.4 test content")
 
-        with patch.object(library._extractor, "extract_and_validate") as mock_extract:
+        with patch.object(library._extractors[0], "extract_and_validate") as mock_extract:
             mock_extract.return_value = MagicMock(text="Extracted content" * 20)
             result = library.add(str(pdf_path))
 
