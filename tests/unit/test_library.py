@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from local_library.core.errors import AcquisitionError, ErrorCode, LookupError
+from local_library.core.errors import AcquisitionError, ErrorCode, ExtractionError, LookupError
 from local_library.core.library import Library
 from local_library.core.models import DocumentStatus
 
@@ -40,6 +40,62 @@ class TestLibraryInit:
         # Attempting to use it should fail
         with pytest.raises(sqlite3.ProgrammingError):
             conn.execute("SELECT 1")
+
+
+class TestLibraryDispatch:
+    """Tests for Library dispatch methods."""
+
+    @pytest.fixture
+    def library(self, temp_dir: Path) -> Library:
+        """Provide an initialized Library for testing."""
+        return Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+        )
+
+    def test_find_acquirer_returns_handler_for_pdf(
+        self, library: Library, temp_dir: Path
+    ) -> None:
+        """_find_acquirer should return handler for supported PDF path."""
+        pdf_path = temp_dir / "test.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 test")
+
+        acquirer = library._find_acquirer(str(pdf_path))
+
+        assert acquirer is not None
+        assert acquirer.can_handle(str(pdf_path))
+
+    def test_find_acquirer_raises_for_unsupported_source(self, library: Library) -> None:
+        """_find_acquirer should raise for unsupported source type."""
+        with pytest.raises(AcquisitionError) as exc_info:
+            library._find_acquirer("https://example.com/doc.html")
+
+        assert exc_info.value.code == ErrorCode.ACQUISITION_UNSUPPORTED_SOURCE
+
+    def test_find_extractor_returns_handler_for_pdf(
+        self, library: Library, temp_dir: Path
+    ) -> None:
+        """_find_extractor should return handler for PDF file."""
+        pdf_path = temp_dir / "test.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 test")
+
+        extractor = library._find_extractor(pdf_path)
+
+        assert extractor is not None
+        assert extractor.can_handle(pdf_path)
+
+    def test_find_extractor_raises_for_unsupported_format(
+        self, library: Library, temp_dir: Path
+    ) -> None:
+        """_find_extractor should raise for unsupported file format."""
+        txt_path = temp_dir / "test.txt"
+        txt_path.write_text("plain text")
+
+        with pytest.raises(ExtractionError) as exc_info:
+            library._find_extractor(txt_path)
+
+        assert exc_info.value.code == ErrorCode.EXTRACTION_UNSUPPORTED_FORMAT
 
 
 class TestLibraryAdd:
