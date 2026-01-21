@@ -34,7 +34,7 @@ from local_library.core.storage import (
     list_documents,
     update_document_status,
 )
-from local_library.ingestion.base import compute_storage_path, ContentAcquirer
+from local_library.ingestion.base import compute_storage_path, ContentAcquirer, ContentExtractor
 from local_library.ingestion.file import FileAcquirer
 from local_library.ingestion.pdf import PdfExtractor
 
@@ -115,6 +115,31 @@ class Library:
             f"no acquirer can handle source: {source}",
             ErrorCode.ACQUISITION_UNSUPPORTED_SOURCE,
             details={"source": source},
+        )
+
+    def _find_extractor(self, file_path: Path) -> ContentExtractor:
+        """Find an extractor that can handle the given file.
+
+        Iterates through registered extractors and returns the first
+        one whose can_handle() returns True.
+
+        Args:
+            file_path: Path to the file to extract
+
+        Returns:
+            The extractor that can handle this file
+
+        Raises:
+            ExtractionError: If no extractor can handle the file
+        """
+        # For now, we only have one extractor - will be refactored in Phase 3
+        if self._extractor.can_handle(file_path):
+            return self._extractor
+
+        raise ExtractionError(
+            f"no extractor can handle file: {file_path}",
+            ErrorCode.EXTRACTION_UNSUPPORTED_FORMAT,
+            details={"file_path": str(file_path)},
         )
 
     # --- Add Pipeline ---
