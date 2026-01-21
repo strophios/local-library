@@ -9,6 +9,7 @@ from local_library.core.errors import (
     QualityError,
     StorageError,
 )
+from local_library.core.library import Library
 from local_library.core.models import (
     AcquisitionResult,
     AddResult,
@@ -57,4 +58,6 @@ __all__ = [
     "list_documents",
     "update_document_status",
     "delete_document",
+    # Orchestration
+    "Library",
 ]
