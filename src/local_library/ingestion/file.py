@@ -78,14 +78,6 @@ class FileAcquirer:
                 details={"path": source},
             ) from e
 
-        # Validate extension
-        if path.suffix.lower() not in self.SUPPORTED_EXTENSIONS:
-            raise AcquisitionError(
-                f"unsupported file type: {path.suffix}",
-                ErrorCode.ACQUISITION_INVALID_FORMAT,
-                details={"path": source, "extension": path.suffix},
-            )
-
     def acquire(self, source: str, dest_dir: Path) -> AcquisitionResult:
         """Copy file to destination and compute hash.
 
