@@ -6,6 +6,7 @@ from local_library.ingestion.base import (
     compute_storage_path,
 )
 from local_library.ingestion.file import FileAcquirer, compute_file_hash
+from local_library.ingestion.pdf import PdfExtractor
 
 __all__ = [
     # Protocols
@@ -16,4 +17,5 @@ __all__ = [
     "compute_file_hash",
     # Implementations
     "FileAcquirer",
+    "PdfExtractor",
 ]
