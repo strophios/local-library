@@ -3,6 +3,7 @@
 # pattern: Imperative Shell
 
 import hashlib
+import mimetypes
 from pathlib import Path
 
 from local_library.core.errors import AcquisitionError, ErrorCode
@@ -16,22 +17,23 @@ class FileAcquirer:
     and computes SHA-256 content hash.
     """
 
-    # Supported file extensions
-    SUPPORTED_EXTENSIONS = {".pdf"}
-
     def can_handle(self, source: str) -> bool:
-        """Check if source is a local file path with supported extension.
+        """Check if source is a local file path (not a URL).
 
         Args:
             source: Source path to check
 
         Returns:
-            True if source is a local file path with supported extension
+            True if source appears to be a local file path
         """
+        # Reject URLs (simple heuristic: starts with common URL schemes)
+        if source.startswith(("http://", "https://", "ftp://", "file://")):
+            return False
+
         try:
-            path = Path(source)
-            # Check it's a file path (not URL) with supported extension
-            return path.suffix.lower() in self.SUPPORTED_EXTENSIONS
+            # Check it's a valid path-like string
+            Path(source)
+            return True
         except (ValueError, OSError):
             return False
 
@@ -77,13 +79,17 @@ class FileAcquirer:
                 details={"path": source},
             ) from e
 
-        # Validate extension
-        if path.suffix.lower() not in self.SUPPORTED_EXTENSIONS:
-            raise AcquisitionError(
-                f"unsupported file type: {path.suffix}",
-                ErrorCode.ACQUISITION_INVALID_FORMAT,
-                details={"path": source, "extension": path.suffix},
-            )
+    def _detect_mime_type(self, file_path: Path) -> str:
+        """Detect MIME type from file extension.
+
+        Args:
+            file_path: Path to the file
+
+        Returns:
+            MIME type string, or 'application/octet-stream' if unknown
+        """
+        mime_type, _ = mimetypes.guess_type(str(file_path))
+        return mime_type or "application/octet-stream"
 
     def acquire(self, source: str, dest_dir: Path) -> AcquisitionResult:
         """Copy file to destination and compute hash.
@@ -132,7 +138,7 @@ class FileAcquirer:
             temp_path=temp_path,
             original_path=str(source_path),
             file_size=file_size,
-            mime_type="application/pdf",  # For now, only PDFs supported
+            mime_type=self._detect_mime_type(source_path),
         )
 
 

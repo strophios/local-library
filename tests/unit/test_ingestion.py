@@ -53,38 +53,33 @@ class TestFileAcquirer:
 
     # --- can_handle tests ---
 
-    def test_can_handle_pdf_file(self, acquirer: FileAcquirer, sample_pdf: Path) -> None:
-        """can_handle should return True for PDF files."""
-        assert acquirer.can_handle(str(sample_pdf)) is True
+    def test_can_handle_local_path(self, acquirer: FileAcquirer) -> None:
+        """can_handle should return True for local file paths."""
+        assert acquirer.can_handle("/path/to/file.pdf") is True
+        assert acquirer.can_handle("/path/to/file.txt") is True
+        assert acquirer.can_handle("relative/path.epub") is True
 
-    def test_can_handle_uppercase_extension(self, acquirer: FileAcquirer, temp_dir: Path) -> None:
-        """can_handle should handle uppercase extensions."""
-        pdf_path = temp_dir / "sample.PDF"
-        pdf_path.write_bytes(b"%PDF-1.4")
+    def test_can_handle_rejects_http_url(self, acquirer: FileAcquirer) -> None:
+        """can_handle should return False for HTTP URLs."""
+        assert acquirer.can_handle("http://example.com/doc.pdf") is False
 
-        assert acquirer.can_handle(str(pdf_path)) is True
+    def test_can_handle_rejects_https_url(self, acquirer: FileAcquirer) -> None:
+        """can_handle should return False for HTTPS URLs."""
+        assert acquirer.can_handle("https://example.com/doc.pdf") is False
 
-    def test_cannot_handle_unsupported_extension(
-        self, acquirer: FileAcquirer, temp_dir: Path
-    ) -> None:
-        """can_handle should return False for unsupported extensions."""
-        txt_path = temp_dir / "sample.txt"
-        txt_path.write_text("test")
-
-        assert acquirer.can_handle(str(txt_path)) is False
-
-    def test_cannot_handle_no_extension(self, acquirer: FileAcquirer, temp_dir: Path) -> None:
-        """can_handle should return False for files without extension."""
-        no_ext = temp_dir / "sample"
-        no_ext.write_text("test")
-
-        assert acquirer.can_handle(str(no_ext)) is False
+    def test_can_handle_rejects_ftp_url(self, acquirer: FileAcquirer) -> None:
+        """can_handle should return False for FTP URLs."""
+        assert acquirer.can_handle("ftp://example.com/doc.pdf") is False
 
     # --- validate tests ---
 
-    def test_validate_existing_file(self, acquirer: FileAcquirer, sample_pdf: Path) -> None:
+    def test_validate_existing_file(self, acquirer: FileAcquirer, temp_dir: Path) -> None:
         """validate should pass for existing readable file."""
-        acquirer.validate(str(sample_pdf))  # Should not raise
+        test_file = temp_dir / "test.txt"
+        test_file.write_text("test content")
+
+        # Should not raise
+        acquirer.validate(str(test_file))
 
     def test_validate_nonexistent_file(self, acquirer: FileAcquirer) -> None:
         """validate should raise for nonexistent file."""
@@ -97,16 +92,6 @@ class TestFileAcquirer:
         """validate should raise for directory path."""
         with pytest.raises(AcquisitionError) as exc_info:
             acquirer.validate(str(temp_dir))
-
-        assert exc_info.value.code == ErrorCode.ACQUISITION_INVALID_FORMAT
-
-    def test_validate_unsupported_extension(self, acquirer: FileAcquirer, temp_dir: Path) -> None:
-        """validate should raise for unsupported extension."""
-        txt_path = temp_dir / "sample.txt"
-        txt_path.write_text("test")
-
-        with pytest.raises(AcquisitionError) as exc_info:
-            acquirer.validate(str(txt_path))
 
         assert exc_info.value.code == ErrorCode.ACQUISITION_INVALID_FORMAT
 
@@ -161,6 +146,42 @@ class TestFileAcquirer:
 
         assert dest_dir.exists()
         assert result.temp_path.exists()
+
+    def test_acquire_detects_mime_type_for_pdf(
+        self, acquirer: FileAcquirer, temp_dir: Path
+    ) -> None:
+        """acquire should detect correct MIME type for PDF."""
+        pdf_file = temp_dir / "test.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4 test content")
+        dest_dir = temp_dir / "dest"
+
+        result = acquirer.acquire(str(pdf_file), dest_dir)
+
+        assert result.mime_type == "application/pdf"
+
+    def test_acquire_detects_mime_type_for_txt(
+        self, acquirer: FileAcquirer, temp_dir: Path
+    ) -> None:
+        """acquire should detect correct MIME type for text file."""
+        txt_file = temp_dir / "test.txt"
+        txt_file.write_text("plain text content")
+        dest_dir = temp_dir / "dest"
+
+        result = acquirer.acquire(str(txt_file), dest_dir)
+
+        assert result.mime_type == "text/plain"
+
+    def test_acquire_fallback_mime_type_for_unknown(
+        self, acquirer: FileAcquirer, temp_dir: Path
+    ) -> None:
+        """acquire should use fallback MIME type for unknown extension."""
+        unknown_file = temp_dir / "test.unknownextension12345"
+        unknown_file.write_bytes(b"unknown content")
+        dest_dir = temp_dir / "dest"
+
+        result = acquirer.acquire(str(unknown_file), dest_dir)
+
+        assert result.mime_type == "application/octet-stream"
 
 
 class TestComputeFileHash:

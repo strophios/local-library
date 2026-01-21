@@ -26,6 +26,16 @@ class TestErrorCode:
         for code in ErrorCode:
             assert code.value == code.name
 
+    def test_acquisition_unsupported_source_is_string(self) -> None:
+        """ACQUISITION_UNSUPPORTED_SOURCE should have string value."""
+        assert ErrorCode.ACQUISITION_UNSUPPORTED_SOURCE == "ACQUISITION_UNSUPPORTED_SOURCE"
+        assert isinstance(ErrorCode.ACQUISITION_UNSUPPORTED_SOURCE, str)
+
+    def test_extraction_unsupported_format_is_string(self) -> None:
+        """EXTRACTION_UNSUPPORTED_FORMAT should have string value."""
+        assert ErrorCode.EXTRACTION_UNSUPPORTED_FORMAT == "EXTRACTION_UNSUPPORTED_FORMAT"
+        assert isinstance(ErrorCode.EXTRACTION_UNSUPPORTED_FORMAT, str)
+
 
 class TestLocalLibraryError:
     """Tests for base exception class."""

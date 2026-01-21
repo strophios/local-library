@@ -34,7 +34,7 @@ from local_library.core.storage import (
     list_documents,
     update_document_status,
 )
-from local_library.ingestion.base import compute_storage_path
+from local_library.ingestion.base import ContentAcquirer, ContentExtractor, compute_storage_path
 from local_library.ingestion.file import FileAcquirer
 from local_library.ingestion.pdf import PdfExtractor
 
@@ -51,6 +51,8 @@ class Library:
         db_path: Path | None = None,
         storage_dir: Path | None = None,
         extracted_dir: Path | None = None,
+        acquirers: list[ContentAcquirer] | None = None,
+        extractors: list[ContentExtractor] | None = None,
     ) -> None:
         """Initialize the library.
 
@@ -58,15 +60,21 @@ class Library:
             db_path: Path to SQLite database (default: platformdirs user data)
             storage_dir: Directory for content-addressable storage (default: platformdirs)
             extracted_dir: Directory for extracted markdown (default: platformdirs)
+            acquirers: List of content acquirers (default: [FileAcquirer()])
+            extractors: List of content extractors (default: [PdfExtractor(lazy_load=True)])
         """
         # Use defaults from config if not specified
         self._db_path = db_path or get_database_path()
         self._storage_dir = storage_dir or get_storage_dir()
         self._extracted_dir = extracted_dir or get_extracted_dir()
 
-        # Initialize components
-        self._acquirer = FileAcquirer()
-        self._extractor = PdfExtractor(lazy_load=True)
+        # Initialize handler lists with defaults
+        self._acquirers: list[ContentAcquirer] = (
+            acquirers if acquirers is not None else [FileAcquirer()]
+        )
+        self._extractors: list[ContentExtractor] = (
+            extractors if extractors is not None else [PdfExtractor(lazy_load=True)]
+        )
 
         # Ensure directories exist
         ensure_directories()
@@ -91,6 +99,56 @@ class Library:
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """Context manager exit."""
         self.close()
+
+    def _find_acquirer(self, source: str) -> ContentAcquirer:
+        """Find an acquirer that can handle the given source.
+
+        Iterates through registered acquirers and returns the first
+        one whose can_handle() returns True.
+
+        Args:
+            source: Source identifier (path, URL, etc.)
+
+        Returns:
+            The acquirer that can handle this source
+
+        Raises:
+            AcquisitionError: If no acquirer can handle the source
+        """
+        for acquirer in self._acquirers:
+            if acquirer.can_handle(source):
+                return acquirer
+
+        raise AcquisitionError(
+            f"no acquirer can handle source: {source}",
+            ErrorCode.ACQUISITION_UNSUPPORTED_SOURCE,
+            details={"source": source},
+        )
+
+    def _find_extractor(self, file_path: Path) -> ContentExtractor:
+        """Find an extractor that can handle the given file.
+
+        Iterates through registered extractors and returns the first
+        one whose can_handle() returns True.
+
+        Args:
+            file_path: Path to the file to extract
+
+        Returns:
+            The extractor that can handle this file
+
+        Raises:
+            ExtractionError: If no extractor can handle the file
+        """
+        for extractor in self._extractors:
+            if extractor.can_handle(file_path):
+                return extractor
+
+        raise ExtractionError(
+            f"no extractor can handle file: {file_path}",
+            ErrorCode.EXTRACTION_UNSUPPORTED_FORMAT,
+            details={"file_path": str(file_path)},
+        )
 
     # --- Add Pipeline ---
 
@@ -119,17 +177,12 @@ class Library:
             AcquisitionError: If source is invalid and force=False
             ExtractionError: If extraction fails (record created with failed status)
         """
-        # Check if we can handle this source
-        if not self._acquirer.can_handle(source):
-            raise AcquisitionError(
-                f"unsupported source type: {source}",
-                ErrorCode.ACQUISITION_INVALID_FORMAT,
-                details={"source": source},
-            )
+        # Find and use appropriate acquirer
+        acquirer = self._find_acquirer(source)
 
         # Validate source (unless force mode)
         try:
-            self._acquirer.validate(source)
+            acquirer.validate(source)
         except AcquisitionError as e:
             if force:
                 # Create failed record for inaccessible file
@@ -151,7 +204,7 @@ class Library:
         # Acquire content to temp directory
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
-            acquisition = self._acquirer.acquire(source, temp_path)
+            acquisition = acquirer.acquire(source, temp_path)
 
             # Check for duplicate by content hash
             existing = get_document_by_hash(self._conn, acquisition.content_hash)
@@ -182,7 +235,8 @@ class Library:
 
         # Extract text content
         try:
-            result = self._extractor.extract_and_validate(storage_path)
+            extractor = self._find_extractor(storage_path)
+            result = extractor.extract_and_validate(storage_path)
 
             # Write extracted markdown
             extracted_path = compute_storage_path(

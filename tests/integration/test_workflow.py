@@ -19,7 +19,7 @@ class TestAddListShowDeleteCycle:
         lib = integration_library
 
         # Mock extraction to avoid loading Marker models
-        with patch.object(lib._extractor, "extract_and_validate") as mock_extract:
+        with patch.object(lib._extractors[0], "extract_and_validate") as mock_extract:
             mock_extract.return_value = MagicMock(text="Extracted content " * 20)
 
             # ADD
@@ -50,7 +50,7 @@ class TestAddListShowDeleteCycle:
         """Should find documents by partial UUID prefix."""
         lib = integration_library
 
-        with patch.object(lib._extractor, "extract_and_validate") as mock_extract:
+        with patch.object(lib._extractors[0], "extract_and_validate") as mock_extract:
             mock_extract.return_value = MagicMock(text="Extracted content " * 20)
 
             result = lib.add(str(sample_pdf))
@@ -67,7 +67,7 @@ class TestAddListShowDeleteCycle:
         """Should handle multiple documents correctly."""
         lib = integration_library
 
-        with patch.object(lib._extractor, "extract_and_validate") as mock_extract:
+        with patch.object(lib._extractors[0], "extract_and_validate") as mock_extract:
             mock_extract.return_value = MagicMock(text="Extracted content " * 20)
 
             # Add all PDFs
@@ -100,7 +100,7 @@ class TestDuplicateDetection:
         """Adding same path twice should return existing document."""
         lib = integration_library
 
-        with patch.object(lib._extractor, "extract_and_validate") as mock_extract:
+        with patch.object(lib._extractors[0], "extract_and_validate") as mock_extract:
             mock_extract.return_value = MagicMock(text="Extracted content " * 20)
 
             # First add
@@ -125,7 +125,7 @@ class TestDuplicateDetection:
         pdf1.write_bytes(sample_pdf_content)
         pdf2.write_bytes(sample_pdf_content)
 
-        with patch.object(lib._extractor, "extract_and_validate") as mock_extract:
+        with patch.object(lib._extractors[0], "extract_and_validate") as mock_extract:
             mock_extract.return_value = MagicMock(text="Extracted content " * 20)
 
             # First add
@@ -150,7 +150,7 @@ class TestExtractionFailures:
 
         from local_library.core import ErrorCode, ExtractionError
 
-        with patch.object(lib._extractor, "extract_and_validate") as mock_extract:
+        with patch.object(lib._extractors[0], "extract_and_validate") as mock_extract:
             mock_extract.side_effect = ExtractionError(
                 "marker extraction failed",
                 ErrorCode.EXTRACTION_MARKER_CRASH,
@@ -173,7 +173,7 @@ class TestExtractionFailures:
 
         from local_library.core import ErrorCode, QualityError
 
-        with patch.object(lib._extractor, "extract_and_validate") as mock_extract:
+        with patch.object(lib._extractors[0], "extract_and_validate") as mock_extract:
             mock_extract.side_effect = QualityError(
                 "content too short",
                 ErrorCode.QUALITY_TOO_SHORT,
@@ -226,7 +226,7 @@ class TestFileCleanup:
         """delete() should remove storage and extracted files."""
         lib = integration_library
 
-        with patch.object(lib._extractor, "extract_and_validate") as mock_extract:
+        with patch.object(lib._extractors[0], "extract_and_validate") as mock_extract:
             mock_extract.return_value = MagicMock(text="Extracted content " * 20)
 
             result = lib.add(str(sample_pdf))
@@ -247,7 +247,7 @@ class TestFileCleanup:
         """delete() with delete_files=False should keep storage files."""
         lib = integration_library
 
-        with patch.object(lib._extractor, "extract_and_validate") as mock_extract:
+        with patch.object(lib._extractors[0], "extract_and_validate") as mock_extract:
             mock_extract.return_value = MagicMock(text="Extracted content " * 20)
 
             result = lib.add(str(sample_pdf))
