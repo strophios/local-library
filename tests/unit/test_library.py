@@ -1,5 +1,6 @@
 """Unit tests for Library orchestration."""
 
+import sqlite3
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -21,7 +22,7 @@ class TestLibraryInit:
             db_path=db_path,
             storage_dir=temp_dir / "storage",
             extracted_dir=temp_dir / "extracted",
-        ) as lib:
+        ):
             assert db_path.exists()
 
     def test_context_manager_closes_connection(self, temp_dir: Path) -> None:
@@ -37,7 +38,7 @@ class TestLibraryInit:
 
         # Connection should be closed after context exit
         # Attempting to use it should fail
-        with pytest.raises(Exception):
+        with pytest.raises(sqlite3.ProgrammingError):
             conn.execute("SELECT 1")
 
 
