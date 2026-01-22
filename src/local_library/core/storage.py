@@ -293,6 +293,57 @@ def get_document_by_path(conn: sqlite3.Connection, original_path: str) -> Docume
     return _row_to_document(row)
 
 
+def get_document_by_citekey(conn: sqlite3.Connection, citekey: str) -> Document | None:
+    """Get a document by its citekey.
+
+    Args:
+        conn: Database connection
+        citekey: Citation key to look up
+
+    Returns:
+        Document if found, None otherwise
+    """
+    cursor = conn.execute(
+        "SELECT * FROM documents WHERE citekey = ?",
+        (citekey,),
+    )
+    row = cursor.fetchone()
+    if row is None:
+        return None
+    return _row_to_document(row)
+
+
+def get_unique_citekey(conn: sqlite3.Connection, base_citekey: str) -> str:
+    """Get a unique citekey, adding suffix if necessary.
+
+    If base_citekey exists, tries base_citekey + 'a', 'b', 'c', etc.
+
+    Args:
+        conn: Database connection
+        base_citekey: Desired citekey
+
+    Returns:
+        Unique citekey (may be base_citekey or with suffix)
+    """
+    # Check if base key is available
+    if get_document_by_citekey(conn, base_citekey) is None:
+        return base_citekey
+
+    # Try suffixes a-z
+    for suffix in "abcdefghijklmnopqrstuvwxyz":
+        candidate = f"{base_citekey}{suffix}"
+        if get_document_by_citekey(conn, candidate) is None:
+            return candidate
+
+    # If all a-z exhausted, use numeric suffix
+    counter = 1
+    while True:
+        candidate = f"{base_citekey}{counter}"
+        if get_document_by_citekey(conn, candidate) is None:
+            return candidate
+        counter += 1
+
+
 def get_documents_by_partial_id(conn: sqlite3.Connection, partial_id: str) -> list[Document]:
     """Get documents matching a partial UUID prefix.
 
