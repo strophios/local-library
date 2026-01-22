@@ -20,7 +20,6 @@ from local_library.core.errors import (
     ErrorCode,
     ExtractionError,
     LookupError,
-    MetadataError,
     QualityError,
 )
 from local_library.core.models import AddResult, Document, DocumentStatus
@@ -38,9 +37,9 @@ from local_library.core.storage import (
     update_document_metadata,
     update_document_status,
 )
-from local_library.ingestion.metadata import MetadataHandler
 from local_library.ingestion.base import ContentAcquirer, ContentExtractor, compute_storage_path
 from local_library.ingestion.file import FileAcquirer
+from local_library.ingestion.metadata import MetadataHandler
 from local_library.ingestion.pdf import PdfExtractor
 
 
