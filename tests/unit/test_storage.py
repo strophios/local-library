@@ -379,6 +379,37 @@ class TestMetadataStorage:
         assert updated.issued_date is None
         assert updated.csl_json is None
 
+    def test_update_document_metadata_partial_preserves_existing(
+        self, db_conn: sqlite3.Connection
+    ) -> None:
+        """update_document_metadata should preserve existing non-NULL values when not specified."""
+        doc = create_document(db_conn, "/test.pdf", "hash123", "/storage/path.pdf")
+
+        # First, set all metadata fields
+        update_document_metadata(
+            db_conn,
+            doc.id,
+            citekey="Original2020",
+            csl_json={"type": "article-journal", "title": "Original"},
+            title="Original Title",
+            authors="Original, A.",
+            issued_date="2020",
+        )
+
+        # Now update only some fields
+        updated = update_document_metadata(
+            db_conn,
+            doc.id,
+            title="New Title",
+        )
+
+        # Verify the other fields retained their original values
+        assert updated.citekey == "Original2020"  # preserved
+        assert updated.csl_json == {"type": "article-journal", "title": "Original"}  # preserved
+        assert updated.title == "New Title"  # updated
+        assert updated.authors == "Original, A."  # preserved
+        assert updated.issued_date == "2020"  # preserved
+
     def test_update_document_metadata_not_found(self, db_conn: sqlite3.Connection) -> None:
         """update_document_metadata should raise for missing document."""
         with pytest.raises(LookupError):
@@ -419,9 +450,7 @@ class TestCitekeyCollision:
 
         assert result == "Smith2020Testa"
 
-    def test_get_unique_citekey_multiple_collisions(
-        self, db_conn: sqlite3.Connection
-    ) -> None:
+    def test_get_unique_citekey_multiple_collisions(self, db_conn: sqlite3.Connection) -> None:
         """get_unique_citekey should increment suffix for multiple collisions."""
         doc1 = create_document(db_conn, "/test1.pdf", "hash1", "/storage/1.pdf")
         update_document_metadata(db_conn, doc1.id, citekey="Key2020")
