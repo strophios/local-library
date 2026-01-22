@@ -35,6 +35,11 @@ class ErrorCode(str, Enum):
     NOT_FOUND = "NOT_FOUND"
     AMBIGUOUS_MATCH = "AMBIGUOUS_MATCH"
 
+    # Metadata errors
+    METADATA_INVALID_SCHEMA = "METADATA_INVALID_SCHEMA"
+    METADATA_INVALID_TYPE = "METADATA_INVALID_TYPE"
+    METADATA_CITEKEY_INVALID = "METADATA_CITEKEY_INVALID"
+
 
 class LocalLibraryError(Exception):
     """Base exception for all local-library errors."""
