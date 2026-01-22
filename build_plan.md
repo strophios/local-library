@@ -212,7 +212,7 @@ The record flow—what happens when a document enters the system:
 
 Each milestone extends the pipeline and delivers testable functionality.
 
-### M1: Record Creation and Storage
+### M1: Record Creation and Storage ✓
 
 **Goal:** Create document records, store basic metadata, persist to SQLite.
 
@@ -223,16 +223,18 @@ Each milestone extends the pipeline and delivers testable functionality.
 - CLI: `add` (creates record from path), `list`, `show`, `delete`
 
 **Done when:**
-- Can create a document record from a PDF path
-- Record persists across program restarts
-- Can list, view, and delete records
-- Tests pass for CRUD operations and error cases
+- Can create a document record from a PDF path ✓
+- Record persists across program restarts ✓
+- Can list, view, and delete records ✓
+- Tests pass for CRUD operations and error cases ✓
 
 **Layers touched:** Storage (primary), Interface (basic CLI)
 
+**Status:** Complete
+
 ---
 
-### M2: Content Acquisition and Extraction
+### M2: Content Acquisition and Extraction ✓
 
 **Goal:** Copy PDFs to managed storage, extract text via Marker.
 
@@ -243,52 +245,109 @@ Each milestone extends the pipeline and delivers testable functionality.
 - Duplicate detection (by path and hash)
 
 **Done when:**
-- PDFs are copied to library storage on add
-- Markdown extraction produces readable text
-- Duplicate files are detected and rejected
-- Tests pass for extraction and duplicate detection
+- PDFs are copied to library storage on add ✓
+- Markdown extraction produces readable text ✓
+- Duplicate files are detected and rejected ✓
+- Tests pass for extraction and duplicate detection ✓
 
 **Layers touched:** Ingestion (primary), Storage (path/hash storage)
 
+**Status:** Complete
+
 ---
 
-### M3: Metadata Handling
+### M3a: Metadata Validation and Citekeys ✓
 
 **Goal:** Parse, validate, and store CSL-JSON metadata; generate citekeys.
 
 **Delivers:**
-- CSL-JSON schema validation
-- Citekey generation (BetterBibTeX-style)
-- Indexed field extraction (title, author, date)
-- Metadata extraction from PDF if not provided
+- CSL-JSON schema validation against official schema
+- Citekey generation (BetterBibTeX-style: AuthorYearTitleword)
+- Indexed field extraction (title, authors, issued_date)
+- CLI `--metadata` flag for providing CSL-JSON at add time
 
 **Done when:**
-- Metadata stored correctly for manually-provided CSL-JSON
-- Citekeys generated consistently
-- Basic metadata extracted from PDFs lacking explicit metadata
-- Tests pass for metadata validation and citekey generation
+- Metadata stored correctly for manually-provided CSL-JSON ✓
+- Citekeys generated consistently and deterministically ✓
+- Field extraction produces searchable indexed values ✓
+- Tests pass for metadata validation and citekey generation ✓
 
-**Layers touched:** Ingestion (metadata extraction), Storage (metadata storage)
+**Layers touched:** Ingestion (MetadataHandler), Storage (metadata columns)
+
+**Status:** Complete
 
 ---
 
-### M4: Zotero Import
+### M4: Zotero Import (Reordered)
 
-**Goal:** Batch import documents from Zotero database.
+> **Note:** M4 is implemented before M3b because Zotero read-only access provides
+> ground-truth metadata for testing the extraction quality and metadata extraction
+> accuracy in M3b. See [Extraction Testing Infrastructure](#extraction-testing-infrastructure).
+
+**Goal:** Read-only access to Zotero database for import and ground-truth testing.
 
 **Delivers:**
 - Zotero SQLite reader (read-only, with copy-if-locked handling)
 - Item/attachment enumeration
 - CSL-JSON construction from Zotero schema
-- Batch invocation of record flow
+- Ground-truth metadata access for extraction testing
 
 **Done when:**
-- Can import all PDF items from a Zotero library
+- Can read items and attachments from Zotero database
 - Metadata correctly mapped to CSL-JSON
-- Already-imported items are skipped
+- Can access PDF paths and associated metadata for any item
 - Tests pass for Zotero schema mapping
 
-**Layers touched:** Ingestion (Zotero reader), Interface (import command)
+**Layers touched:** Ingestion (Zotero reader)
+
+**Deferred to later:** Full batch import CLI command (depends on M3b for complete pipeline)
+
+---
+
+### M3b: Text-Based Metadata Extraction
+
+> **Dependency:** Requires M4 (Zotero Import) for ground-truth testing data.
+
+**Goal:** Extract bibliographic metadata from document text when not explicitly provided.
+
+**Delivers:**
+- Heuristic extraction of title from extracted markdown (first heading, font size signals)
+- Author name extraction from document headers/footers
+- Date extraction from document content
+- Confidence scoring for extracted metadata
+- Integration with MetadataHandler (extracted metadata → validation → storage)
+
+**Done when:**
+- Title extracted correctly for >80% of test corpus (against Zotero ground truth)
+- Author names extracted correctly for >70% of test corpus
+- Date/year extracted correctly for >75% of test corpus
+- Confidence scores correlate with actual accuracy
+- Graceful fallback when extraction confidence is low
+
+**Layers touched:** Ingestion (new TextMetadataExtractor), Core (confidence model)
+
+**Testing:** See [Extraction Testing Infrastructure](#extraction-testing-infrastructure)
+
+---
+
+### M3c: External API Metadata Enrichment (Deferred)
+
+**Goal:** Enrich metadata via external APIs when text-based extraction is uncertain.
+
+**Delivers:**
+- CrossRef API lookup by DOI or title/author query
+- GROBID integration for structured header extraction
+- OpenAlex as fallback/supplementary source
+- Caching layer to avoid redundant API calls
+
+**Done when:**
+- API enrichment improves metadata accuracy for uncertain extractions
+- Graceful degradation when APIs unavailable
+- Rate limiting and caching prevent API abuse
+
+**Layers touched:** Ingestion (API clients), Core (enrichment orchestration)
+
+**Status:** Deferred to post-Phase 1. Evaluate need based on M3b accuracy results.
 
 ---
 
@@ -352,6 +411,78 @@ Each milestone extends the pipeline and delivers testable functionality.
 
 ---
 
+## Extraction Testing Infrastructure
+
+Testing metadata extraction quality requires ground-truth data. Rather than manually annotating PDFs, we leverage Zotero's existing metadata as the authoritative source. This creates a dependency: M4 (Zotero read-only access) must be implemented before M3b (text-based metadata extraction) can be properly tested.
+
+### Dependency Chain
+
+```
+Extraction Quality → Metadata Extraction Accuracy
+       ↓                        ↓
+   Marker output         Title/Author/Date parsing
+   (M2, complete)           (M3b, pending)
+                               ↓
+                    Zotero ground truth (M4)
+```
+
+Poor extraction quality will cause metadata extraction to fail regardless of how sophisticated the parsing heuristics are. Testing must validate both layers.
+
+### Test Corpus Design (Two-Tier)
+
+**Tier 1: Golden Set (~10-20 PDFs)**
+- Hand-selected to cover diverse document types
+- Categories:
+  - Single-column academic (journal articles)
+  - Two-column academic (IEEE, ACM formats)
+  - Book chapters
+  - Technical reports
+  - Scanned/OCR-heavy documents
+  - Math-heavy papers
+  - Tables-heavy papers
+- Each PDF has manually verified Zotero metadata
+- Used for detailed quality analysis and debugging
+
+**Tier 2: Smoke Set (~50-100 PDFs)**
+- Stratified random sample from Zotero library
+- Used for regression testing and aggregate accuracy metrics
+- Zotero metadata assumed correct (fix edge cases in Zotero itself)
+
+### Ground Truth Source
+
+Zotero metadata serves as ground truth for testing:
+- **Title**: `items.title` field
+- **Authors**: `creators` table with `creatorTypeID=1` (author)
+- **Date**: `items.date` or parsed from `itemData` fields
+- **Type**: `itemTypes.typeName`
+
+If Zotero metadata is incorrect for a test document, fix it in Zotero rather than creating separate annotations.
+
+### Quality Metrics
+
+**Extraction Quality (M2 validation)**
+- Character count (minimum threshold)
+- Printable character ratio (detect garbled output)
+- Structure preservation (heading count, paragraph count)
+- Section detection accuracy (for documents with known structure)
+
+**Metadata Extraction Accuracy (M3b validation)**
+- Title: Exact match or normalized similarity (Levenshtein, token overlap)
+- Authors: Set comparison (order-independent), partial credit for subset
+- Date: Year match (strict), full date match (bonus)
+- Aggregate: Precision, recall, F1 per field
+
+### Test Implementation
+
+Tests live in `tests/extraction/` with:
+- `conftest.py` - Fixtures for loading test corpus and Zotero ground truth
+- `test_extraction_quality.py` - Marker output quality validation
+- `test_metadata_extraction.py` - Title/author/date extraction accuracy
+- `golden_set/` - Golden set PDFs (git-lfs or symlinks to Zotero storage)
+- `smoke_set_manifest.json` - List of Zotero item keys for smoke testing
+
+---
+
 ## Testing Strategy
 
 Following the layered testing model from `build_philosophy.md`:
@@ -376,6 +507,14 @@ Following the layered testing model from `build_philosophy.md`:
 - Extraction output is valid input for chunking
 - Zotero reader output matches expected record flow input
 
+### Extraction Quality Tests
+
+See [Extraction Testing Infrastructure](#extraction-testing-infrastructure) for detailed design.
+
+- **Golden set tests**: Detailed quality validation against hand-selected PDFs
+- **Smoke tests**: Aggregate accuracy metrics across stratified sample
+- **Metadata extraction accuracy**: Title/author/date extraction validated against Zotero ground truth
+
 ### Layer Completeness Tests
 
 - Storage: CRUD for all entities, error handling, transaction rollback
@@ -394,21 +533,27 @@ Following the layered testing model from `build_philosophy.md`:
 
 Decisions to make during implementation:
 
-1. **Extracted text storage:** In database as TEXT column, or as separate .md files? (Tradeoff: query simplicity vs. filesystem browsability)
+1. ~~**Extracted text storage:** In database as TEXT column, or as separate .md files?~~ **Resolved:** TEXT column in database (implemented in M2)
 
 2. **Chunking boundaries:** How aggressively to respect paragraph/section boundaries vs. fixed token counts?
 
 3. **FTS configuration:** Which tokenizer? Stemming? The right FTS5 options for academic text.
 
-4. **Error recovery:** If extraction fails mid-import, what state should the record be in? Tombstone? Deleted? Marked failed?
+4. ~~**Error recovery:** If extraction fails mid-import, what state should the record be in?~~ **Resolved:** Transaction rollback, no partial records (implemented in M1-M2)
 
-5. **CLI framework:** Click? Typer? argparse? (Affects interface layer implementation)
+5. ~~**CLI framework:** Click? Typer? argparse?~~ **Resolved:** Typer with Rich (implemented in M1)
+
+6. **Metadata extraction heuristics:** What signals best identify title vs. heading? How to handle multi-line titles? Author name formats vary widely.
+
+7. **Confidence thresholds:** At what confidence level should extracted metadata be auto-accepted vs. flagged for review?
 
 ---
 
 ## Next Steps
 
-1. Begin M1: Design and implement SQLite schema
-2. Scaffold project structure (src layout, test directories, dependencies)
-3. Implement basic CLI with record CRUD
-4. Write initial test suite for storage layer
+Current status: M1 ✓, M2 ✓, M3a ✓
+
+1. **M4: Zotero read-only access** — Implement Zotero SQLite reader for ground-truth testing
+2. **Extraction test corpus** — Curate golden set PDFs, create smoke set manifest
+3. **M3b: Text-based metadata extraction** — Implement heuristics with confidence scoring
+4. Continue to M5 (embeddings) once metadata pipeline is complete
