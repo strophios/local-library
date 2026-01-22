@@ -120,6 +120,70 @@ Now that we're on the same page, we can get to my questions. I'd like you first 
 
 ooh, is there anything special we want/need to do for particularly long documents? I'm thinking in particular about books (whether in ebook formats or as PDFs)
 
+I went ahead and reviewed them both and they overall look really good. I do have a couple of questions/comments. Let's talk about @build_philosophy.md first: 
+
+1) I'm curious about the setup and flow: your statement of the motivating problem makes sense, but you don't actually explain the specific relationship between "The Problem" and "The Two-Axis Model". This is exacerbated by some of the language: you state the problem in terms of bottom-up/layer-first vs. top-down/feature-first and the directional spatial language of bottom-up/top-down resonates with the horizontal/vertical language in the two-axis model, but that resonance doesn't (to me) have any immediate meaning or payoff. Likewise, *layer*-first obviously lines up with the language of "horizontal layers" in the two-axis model, and they're even arguably the same thing, but feature-first doesn't particularly align with "pipeline" and they're not necessarily the same thing. 
+
+I'd like to revise the opening to be more explicit about the relationship between "The Problem" and "The Two-Axis Model" and to clarify the language. Now, to be clear, it's entirely possible that you have a particular relationship between "The Problem" and "The Two-Axis Model" in mind, for which the language choices are doing useful work (or just that you have specific reasons for the language). If that's so, I'd like to hear it and then we can work on revising the opening on that basis. If not, we can work on pinning one down as we revise.
+
+2) I had another thought that might contribute to the "Why Pipeline-First?"/"Why Layer-Complete?" comparison, and I'm curious whether you think it's worth incorporating (either as another pair of bullet points or in some other way): Pipeline-first (helps) prevent mistakes in architectural decisions that can result from a blindness to practical functional requirements. / Layer-complete prevents the deferral/avoidance of necessary architectural decisions. Thoughts?
+
+for clarifying language in the opening, maybe cut bottom-up/top-down and just use a single distinction, then change "layer" to "system" (or something else)?
+
+
+Yeah, the revisions are solid. Now we can talk about the build plan. As a both a practical plan and a useful document, I think it's already quite good. But I have two meta-level concerns about how to most effectively fit it into the larger project. First, it currently has a brief "What's Deferred" section and then notes some components as "Future" features in parentheses in the overview of the architectural layers. This is a totally reasonable way to do this, but I'm wondering if we might be better of reframing this as just the "immediate"/"MVP"/"minimum (pdf) pipeline" build plan (or similar), with a ground-level awareness that it will be incomplete. Then we'd keep a record of stuff that will be implemented in future steps in a separate document, allowing us to be more complete and detailed in discussing those features without either wasting tokens in the active build plan or accidentally losing track of a future feature by leaving it out. 
+
+The second concern is related to the question of overall implementation and what we're deferring, so I'd like your thoughts on this before we bring in the second issue. 
+
+
+Yep, that's basically exactly what I had in mind. The second concern is about making sure we don't lose any of the work we've done in previous sessions as we start to move forward with this build plan. Specifically, we did a fair bit of preparatory work on the RAG first approach (see @RAG_background/00_final_summary_report.md ), which is similar to our current "thick slice"/pipeline approach, but still quite different, with some overlap (including additional helpfuld detail in some places) but also a number of distinct concerns and features. This kind of the ideal test case to make the most of the two file approach: we want to fold the overlap into the current build plan and move the non-overlapping features into the future_roadmap.md
+
+Does this match your thinking?
+
+We're taking the first steps to actually implement the local-library system described in @CLAUDE.md A lot of planning work has been done and we have an initial @build_plan.md as an overarching guide for building Phase 1, the PDF pipeline. Following the build plan, our task here is to complete the first milestone "M1: Record Creation and Storage" (unless you think a larger or smaller implementation chunk is substantially preferable). Additionally, take a look at @build_philosophy.md as this will guide our approach (at this stage of the project it's likely to be especially relevant for making tooling and architectural decisions). 
+
+1. The full library is ~1400 items at present, the large majority of which have attached PDFs. These are mostly journal articles, but a fair number of conference papers and preprints, as well as a few books, book sections, and reports. Most of these should be relatively easy cases, but there are a number of scanned and non-English documents (some of which are both) and a limited number of historical texts (though nothing handwritten or pre-1800). I've already selected a relatively representative set (or at least a set with good coverage of potential kinds of cases) and put the PDFs in /pdf_test_set
+2. Robust vs. manual: Both. Robust automated validation will remain especially useful in production, but having a convenient setup for manual review will be helpful as we're building the prototype. 
+    Metadata: I do have at least some ground-truth metadata for the test set available.
+3. I have run the add command on two examples thusfar and the extraction quality has been fairly good, but there are a number of particular failure modes I'm worried about: 
+    - OCR: both issues of OCR quality in general, but also the failure to use it when appropriate (i.e., if Marker doesn't recognize that it's extracted garbage or extremely incomplete text that would be improved by OCR). 
+    - Reading order issues, especially with OCR'd PDFs and especially especially with pdfs that are photocopies of books (i.e., they have facing pages as a single image) or other common but oddly arranged texts (newspaper articles being another example, though uncommon in my particular use case).
+    - Finally, while I don't think this is a Marker issue per se, but eventually I'll care about how well we can deal with boilerplate (e.g., page numbers, copyright info, etc.) and annotations (e.g., bibliographic references, footnotes, etc.).
+4. Probably option (A) since that's where we construct the archetype of what we're trying to extract. That said, I might actually bundle it slightly differently: metadata *handling* as one step, i.e., when provided with some metadata in some specified format, how do we handle it (so CSL-JSON validation, citekey generation, indexed field extraction, etc.) and then metadata *extraction* as a separate step, i.e., how we get metadata out of PDFs and their extracted markdown when it isn't provided. And we'd build the testing infrastructure as part of this step.  
+
+
+Note: currently, the metadata handler requires a "type" from the input JSON, which is fine for now, but I want to flag that we may not want to leave type assignment to metadata extraction and have the option (or require) that it be passed in by the user from the start
+
+
+is Marker using MPS acceleration?
+    "surya: `TableRecEncoderDecoderModel` is not compatible with mps backend. Defaulting to cpu instead"
+        https://github.com/datalab-to/marker/issues/960
+
+
+1. Your Zotero library characteristics:
+    - Roughly how many PDFs? What range of document types? (journal articles, books, conference papers, preprints, etc.)
+    - Any challenging cases you're aware of? (scanned documents, non-English, historical texts, etc.)
+    - Is there a representative subset you'd use for testing, or would you select that as part of this work?
+2. What "quality tests" means to you:
+    - Are you thinking automated validation (e.g., "extracted text contains expected keywords"), manual review ("I look at 20 PDFs and judge quality"), or both?
+    - For metadata specifically: do you have ground-truth metadata in Zotero to compare against, or would you be validating extraction against the PDF content itself?
+3. Current state observations:
+    - Have you run the existing add command on any PDFs? What's your sense of extraction quality so far?
+    - Are there specific failure modes you're concerned about?
+4. Scope preference:
+    - If we split this, would you prefer: (A) M3 first with synthetic/minimal test cases, then a separate "quality validation" phase, or (B) build quality testing infrastructure first, then use it to validate M3?
+
+other options for embedding: 
+
+- Qwen3
+- BGE
+- E5-Mistral
+
+To-Do: 
+
+- more robust testing framework for PDF extraction pipeline (especially Marker extraction) using a selection of actual pdfs from my Zotero library.
+    - currently not including any really long docs (anything more than 50/100 pages), but we will need a strategy for dealing with them in actual production. 
+    - 20 docs, combination of easy + hard, some non-english, some rotated pages, etc.
 
 
 ## Implementation Layers (Build Order)
