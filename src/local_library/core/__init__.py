@@ -6,6 +6,7 @@ from local_library.core.errors import (
     ExtractionError,
     LocalLibraryError,
     LookupError,
+    MetadataError,
     QualityError,
     StorageError,
 )
@@ -40,6 +41,7 @@ __all__ = [
     "QualityError",
     "StorageError",
     "LookupError",
+    "MetadataError",
     # Models
     "DocumentStatus",
     "Document",

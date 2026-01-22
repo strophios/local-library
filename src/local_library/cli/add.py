@@ -9,7 +9,13 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from local_library.core import AcquisitionError, ExtractionError, Library, QualityError
+from local_library.core import (
+    AcquisitionError,
+    ExtractionError,
+    Library,
+    MetadataError,
+    QualityError,
+)
 
 console = Console()
 err_console = Console(stderr=True)
@@ -21,6 +27,17 @@ def add(
         bool,
         typer.Option("--force", "-f", help="Create failed record for inaccessible files"),
     ] = False,
+    metadata_path: Annotated[
+        Path | None,
+        typer.Option(
+            "--metadata",
+            "-m",
+            help="Path to CSL-JSON metadata file",
+            exists=True,
+            dir_okay=False,
+            readable=True,
+        ),
+    ] = None,
     json_output: Annotated[
         bool,
         typer.Option("--json", "-j", help="Output result as JSON"),
@@ -30,15 +47,36 @@ def add(
 
     Copies the file to managed storage, extracts text content, and creates
     a database record. Duplicates are detected by path and content hash.
+
+    Optionally provide CSL-JSON metadata with --metadata for bibliographic
+    information like title, authors, and publication date.
     """
+    # Load metadata if provided
+    metadata = None
+    if metadata_path:
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            if json_output:
+                err_console.print(json.dumps({"error": f"invalid JSON in metadata file: {e}"}))
+            else:
+                err_console.print(f"[red]error:[/red] invalid JSON in metadata file: {e}")
+            raise typer.Exit(code=1) from None
+
     try:
         with Library() as lib:
-            result = lib.add(str(path), force=force)
+            result = lib.add(str(path), force=force, metadata=metadata)
     except AcquisitionError as e:
         if json_output:
             err_console.print(json.dumps({"error": e.message, "code": e.code.value}))
         else:
             err_console.print(f"[red]error:[/red] {e.message}")
+        raise typer.Exit(code=1) from None
+    except MetadataError as e:
+        if json_output:
+            err_console.print(json.dumps({"error": e.message, "code": e.code.value}))
+        else:
+            err_console.print(f"[red]error:[/red] metadata validation failed: {e.message}")
         raise typer.Exit(code=1) from None
     except (ExtractionError, QualityError) as e:
         # Document was created but extraction failed
@@ -58,6 +96,10 @@ def add(
             "original_path": doc.original_path,
             "storage_path": doc.storage_path,
             "content_hash": doc.content_hash,
+            "citekey": doc.citekey,
+            "title": doc.title,
+            "authors": doc.authors,
+            "issued_date": doc.issued_date,
             "is_duplicate": result.is_duplicate,
         }
         if result.is_duplicate:
@@ -69,4 +111,8 @@ def add(
         else:
             console.print(f"[green]added[/green]: {doc.id}")
             console.print(f"  [dim]status:[/dim] {doc.status.value}")
+            if doc.citekey:
+                console.print(f"  [dim]citekey:[/dim] {doc.citekey}")
+            if doc.title:
+                console.print(f"  [dim]title:[/dim] {doc.title}")
             console.print(f"  [dim]path:[/dim] {doc.storage_path}")
