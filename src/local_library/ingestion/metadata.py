@@ -8,12 +8,10 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-import jsonschema
 from jsonschema import Draft7Validator
 
 from local_library.core.errors import ErrorCode, MetadataError
 from local_library.core.models import MetadataResult
-
 
 # Load schema once at module level
 _SCHEMA_PATH = Path(__file__).parent / "schemas" / "csl-data.json"
@@ -65,53 +63,55 @@ class MetadataHandler:
     """
 
     # Valid CSL item types (subset - full list in schema)
-    VALID_TYPES = frozenset({
-        "article",
-        "article-journal",
-        "article-magazine",
-        "article-newspaper",
-        "bill",
-        "book",
-        "broadcast",
-        "chapter",
-        "classic",
-        "collection",
-        "dataset",
-        "document",
-        "entry",
-        "entry-dictionary",
-        "entry-encyclopedia",
-        "event",
-        "figure",
-        "graphic",
-        "hearing",
-        "interview",
-        "legal_case",
-        "legislation",
-        "manuscript",
-        "map",
-        "motion_picture",
-        "musical_score",
-        "pamphlet",
-        "paper-conference",
-        "patent",
-        "performance",
-        "periodical",
-        "personal_communication",
-        "post",
-        "post-weblog",
-        "regulation",
-        "report",
-        "review",
-        "review-book",
-        "software",
-        "song",
-        "speech",
-        "standard",
-        "thesis",
-        "treaty",
-        "webpage",
-    })
+    VALID_TYPES = frozenset(
+        {
+            "article",
+            "article-journal",
+            "article-magazine",
+            "article-newspaper",
+            "bill",
+            "book",
+            "broadcast",
+            "chapter",
+            "classic",
+            "collection",
+            "dataset",
+            "document",
+            "entry",
+            "entry-dictionary",
+            "entry-encyclopedia",
+            "event",
+            "figure",
+            "graphic",
+            "hearing",
+            "interview",
+            "legal_case",
+            "legislation",
+            "manuscript",
+            "map",
+            "motion_picture",
+            "musical_score",
+            "pamphlet",
+            "paper-conference",
+            "patent",
+            "performance",
+            "periodical",
+            "personal_communication",
+            "post",
+            "post-weblog",
+            "regulation",
+            "report",
+            "review",
+            "review-book",
+            "software",
+            "song",
+            "speech",
+            "standard",
+            "thesis",
+            "treaty",
+            "webpage",
+        }
+    )
 
     def __init__(self) -> None:
         """Initialize the handler with cached validator."""
