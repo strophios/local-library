@@ -8,6 +8,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from local_library.core.errors import ErrorCode, LookupError, StorageError
@@ -399,6 +400,81 @@ def update_document_status(
     except sqlite3.Error as e:
         raise StorageError(
             f"failed to update document status: {e}",
+            ErrorCode.STORAGE_DATABASE_ERROR,
+            details={"doc_id": str(doc_id)},
+        ) from e
+
+
+def update_document_metadata(
+    conn: sqlite3.Connection,
+    doc_id: UUID,
+    citekey: str | None = None,
+    csl_json: dict[str, Any] | None = None,
+    title: str | None = None,
+    authors: str | None = None,
+    issued_date: str | None = None,
+) -> Document:
+    """Update a document's metadata fields.
+
+    Args:
+        conn: Database connection
+        doc_id: Document UUID
+        citekey: Citation key
+        csl_json: Full CSL-JSON metadata
+        title: Extracted title
+        authors: Formatted author string
+        issued_date: ISO date or year
+
+    Returns:
+        Updated Document
+
+    Raises:
+        LookupError: If document not found
+        StorageError: If database operation fails
+    """
+    now = datetime.now(timezone.utc)
+
+    # Serialize csl_json if provided
+    csl_json_str = json.dumps(csl_json) if csl_json else None
+
+    try:
+        cursor = conn.execute(
+            """
+            UPDATE documents
+            SET citekey = ?, csl_json = ?, title = ?, authors = ?,
+                issued_date = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                citekey,
+                csl_json_str,
+                title,
+                authors,
+                issued_date,
+                now.isoformat(),
+                str(doc_id),
+            ),
+        )
+        conn.commit()
+
+        if cursor.rowcount == 0:
+            raise LookupError(
+                f"document not found: {doc_id}",
+                ErrorCode.NOT_FOUND,
+                details={"doc_id": str(doc_id)},
+            )
+
+        doc = get_document_by_id(conn, doc_id)
+        if doc is None:
+            raise LookupError(
+                f"document not found after update: {doc_id}",
+                ErrorCode.NOT_FOUND,
+            )
+        return doc
+
+    except sqlite3.Error as e:
+        raise StorageError(
+            f"failed to update document metadata: {e}",
             ErrorCode.STORAGE_DATABASE_ERROR,
             details={"doc_id": str(doc_id)},
         ) from e
