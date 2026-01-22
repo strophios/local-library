@@ -38,6 +38,9 @@ class Document:
     extracted_path: str | None = None  # Path to extracted markdown
     citekey: str | None = None  # BetterBibTeX-style citation key
     csl_json: dict[str, Any] | None = None  # Bibliographic metadata
+    title: str | None = None  # Extracted title for search
+    authors: str | None = None  # Formatted author string for search
+    issued_date: str | None = None  # ISO date or year for search
 
     # Error tracking for failed documents
     error_message: str | None = None
