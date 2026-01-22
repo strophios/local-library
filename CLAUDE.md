@@ -52,23 +52,27 @@ Each document record contains:
 
 Development follows a **pipeline-first, layer-complete** approach documented in `build_philosophy.md`. The key insight: pipeline stages (vertical data flow) and architectural layers (horizontal concerns) are orthogonal. Build along the pipeline for rapid feedback; implement layers completely when touched.
 
-### Current Status: M1-M2 Complete (Record Storage + Extraction)
+### Current Status: M1-M3a Complete (Record Storage + Extraction + Metadata Validation)
 
-Milestones M1 (record storage) and M2 (PDF extraction) are implemented. The system can:
+Milestones M1 (record storage), M2 (PDF extraction), and M3a (metadata validation) are implemented. The system can:
 - Ingest local PDF files via CLI (`local-library add <path>`)
+- Accept explicit CSL-JSON metadata (`--metadata <file>`)
 - Extract text to markdown via Marker
+- Validate metadata against CSL-JSON schema and generate citekeys
 - Store documents in content-addressable storage with SQLite metadata
 - Query, list, and delete documents via CLI
 
 **Implemented:**
 - PDF ingestion from local filesystem
 - Text extraction via Marker with quality validation
+- CSL-JSON metadata validation with BetterBibTeX-style citekey generation
+- Indexed field extraction (title, authors, issued_date)
 - SQLite storage with content-addressable file layout
-- CLI interface (add, list, show, delete)
+- CLI interface (add, list, show, delete, --metadata flag)
 
-**Next milestones:** M3 (metadata handling), M4 (Zotero import), M5 (embedding pipeline). See `build_plan.md` for full details. 
+**Next milestones:** M4 (Zotero read-only access), M3b (text-based metadata extraction), M5 (embedding pipeline). Note: M4 is implemented before M3b because Zotero provides ground-truth metadata for testing extraction accuracy. See `build_plan.md` for full details.
 
-**Deferred to later phases:** Web content ingestion, Zotero sync, citation tooling, auto-tagging, note management, Neovim plugin. See `future_roadmap.md` for full details.
+**Deferred to later phases:** M3c (API metadata enrichment), web content ingestion, Zotero sync, citation tooling, auto-tagging, note management, Neovim plugin. See `future_roadmap.md` for full details.
 
 ### Architectural Layers
 

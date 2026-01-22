@@ -334,20 +334,9 @@ Each milestone extends the pipeline and delivers testable functionality.
 
 **Goal:** Enrich metadata via external APIs when text-based extraction is uncertain.
 
-**Delivers:**
-- CrossRef API lookup by DOI or title/author query
-- GROBID integration for structured header extraction
-- OpenAlex as fallback/supplementary source
-- Caching layer to avoid redundant API calls
-
-**Done when:**
-- API enrichment improves metadata accuracy for uncertain extractions
-- Graceful degradation when APIs unavailable
-- Rate limiting and caching prevent API abuse
-
-**Layers touched:** Ingestion (API clients), Core (enrichment orchestration)
-
 **Status:** Deferred to post-Phase 1. Evaluate need based on M3b accuracy results.
+
+**See:** `future_roadmap.md` § "External API Metadata Enrichment (M3c)" for full implementation details, API cascade architecture, and decision criteria.
 
 ---
 

@@ -66,6 +66,50 @@ The goal is to preserve enough information that future work can pick up these fe
 
 ---
 
+## Metadata Enrichment
+
+### External API Metadata Enrichment (M3c)
+
+**What:** Enrich document metadata via external APIs when text-based extraction (M3b) produces uncertain or incomplete results.
+
+**Why deferred:** Text-based extraction should be evaluated first. API enrichment adds network dependencies and complexity that may not be needed if heuristic extraction achieves acceptable accuracy.
+
+**Dependencies:** M3b (text-based metadata extraction) complete and evaluated
+
+**Implementation notes:**
+- **CrossRef API**: Lookup by DOI (reliable) or title/author query (fuzzy matching)
+- **GROBID**: Structured header extraction from PDFs (more accurate than heuristics but requires running GROBID server)
+- **OpenAlex**: Open scholarly metadata, good coverage of recent publications
+- See RAG report Section 1 for metadata extraction discussion
+
+**Architecture:**
+```
+Text extraction (M3b) → confidence score
+                            │
+        ┌───────────────────┼───────────────────┐
+        ▼                   ▼                   ▼
+   High confidence     Medium confidence    Low confidence
+   (use extracted)     (try API enrich)    (require API or manual)
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │  API cascade  │
+                    │ DOI → CrossRef│
+                    │ else → GROBID │
+                    │ else → OpenAlex│
+                    └───────────────┘
+```
+
+**Design considerations:**
+- Caching layer to avoid redundant API calls (by content hash or DOI)
+- Rate limiting (CrossRef: 50 req/sec polite pool; GROBID: depends on instance)
+- Graceful degradation when APIs unavailable
+- Confidence thresholds: at what level to auto-accept vs. flag for review?
+
+**Decision point:** Evaluate M3b accuracy on test corpus before implementing. If text-based extraction achieves >85% accuracy across fields, API enrichment may be unnecessary for Phase 1.
+
+---
+
 ## Citation Tooling
 
 ### Citation Suggestion (CLI + API)
