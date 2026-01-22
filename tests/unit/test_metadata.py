@@ -268,13 +268,17 @@ class TestMetadataHandlerProcess:
         assert result.citekey == "CustomKey2020"
 
     def test_process_generates_citekey_if_not_provided(self, handler: MetadataHandler) -> None:
-        """process() should generate citekey if not provided."""
-        csl_json = {"type": "article-journal", "title": "Test"}
+        """process() should generate proper citekey if not provided."""
+        csl_json = {
+            "type": "article-journal",
+            "title": "Attention Is All You Need",
+            "author": [{"family": "Vaswani", "given": "Ashish"}],
+            "issued": {"date-parts": [[2017]]},
+        }
 
         result = handler.process(csl_json)
 
-        assert result.citekey is not None
-        assert len(result.citekey) > 0
+        assert result.citekey == "Vaswani2017Attention"
 
     def test_process_raises_for_invalid_csl(self, handler: MetadataHandler) -> None:
         """process() should raise MetadataError for invalid CSL-JSON."""
@@ -353,3 +357,199 @@ class TestMetadataHandlerProcess:
         result = handler.process(csl_json)
 
         assert result.issued_date == "2020-06"
+
+
+class TestCitekeyGeneration:
+    """Tests for generate_citekey function."""
+
+    def test_standard_article(self) -> None:
+        """Standard article generates AuthorYearTitle key."""
+        from local_library.ingestion.metadata import generate_citekey
+
+        csl_json = {
+            "type": "article-journal",
+            "title": "Attention Is All You Need",
+            "author": [{"family": "Vaswani", "given": "Ashish"}],
+            "issued": {"date-parts": [[2017]]},
+        }
+
+        result = generate_citekey(csl_json)
+
+        assert result == "Vaswani2017Attention"
+
+    def test_multiple_authors_uses_first(self) -> None:
+        """Multiple authors should use only first author."""
+        from local_library.ingestion.metadata import generate_citekey
+
+        csl_json = {
+            "type": "article-journal",
+            "title": "Deep Learning",
+            "author": [
+                {"family": "LeCun", "given": "Yann"},
+                {"family": "Bengio", "given": "Yoshua"},
+                {"family": "Hinton", "given": "Geoffrey"},
+            ],
+            "issued": {"date-parts": [[2015]]},
+        }
+
+        result = generate_citekey(csl_json)
+
+        assert result == "LeCun2015Deep"
+
+    def test_non_ascii_author_folded(self) -> None:
+        """Non-ASCII author names should be folded to ASCII."""
+        from local_library.ingestion.metadata import generate_citekey
+
+        csl_json = {
+            "type": "article-journal",
+            "title": "Zur Kritik der Gewalt",
+            "author": [{"family": "Müller", "given": "Hans"}],
+            "issued": {"date-parts": [[1990]]},
+        }
+
+        result = generate_citekey(csl_json)
+
+        # "Zur" is the first significant word (not a stopword, > 2 chars)
+        assert result == "Muller1990Zur"
+
+    def test_accented_title_folded(self) -> None:
+        """Non-ASCII title words should be folded to ASCII."""
+        from local_library.ingestion.metadata import generate_citekey
+
+        csl_json = {
+            "type": "book",
+            "title": "L'Étranger",
+            "author": [{"family": "Camus", "given": "Albert"}],
+            "issued": {"date-parts": [[1942]]},
+        }
+
+        result = generate_citekey(csl_json)
+
+        # "L'" is filtered out, "Étranger" becomes "Etranger"
+        assert result == "Camus1942Etranger"
+
+    def test_stopwords_filtered(self) -> None:
+        """Title stopwords should be filtered out."""
+        from local_library.ingestion.metadata import generate_citekey
+
+        csl_json = {
+            "type": "article-journal",
+            "title": "The Role of the Hippocampus",
+            "author": [{"family": "Smith", "given": "J."}],
+            "issued": {"date-parts": [[2000]]},
+        }
+
+        result = generate_citekey(csl_json)
+
+        # "The", "of" are stopwords
+        assert result == "Smith2000Role"
+
+    def test_literal_author_organization(self) -> None:
+        """Literal/organizational author uses first word."""
+        from local_library.ingestion.metadata import generate_citekey
+
+        csl_json = {
+            "type": "report",
+            "title": "World Development Report",
+            "author": [{"literal": "World Bank Group"}],
+            "issued": {"date-parts": [[2023]]},
+        }
+
+        result = generate_citekey(csl_json)
+
+        # Author: "World" (first word of literal)
+        # Title: "World" is first significant word from title
+        assert result == "World2023World"
+
+    def test_editor_fallback_when_no_author(self) -> None:
+        """Editor used when no author provided."""
+        from local_library.ingestion.metadata import generate_citekey
+
+        csl_json = {
+            "type": "book",
+            "title": "Collected Essays",
+            "editor": [{"family": "Johnson", "given": "Mary"}],
+            "issued": {"date-parts": [[2010]]},
+        }
+
+        result = generate_citekey(csl_json)
+
+        assert result == "Johnson2010Collected"
+
+    def test_missing_author_still_generates_key(self) -> None:
+        """Missing author should still generate key from year and title."""
+        from local_library.ingestion.metadata import generate_citekey
+
+        csl_json = {
+            "type": "article-journal",
+            "title": "Anonymous Article",
+            "issued": {"date-parts": [[2015]]},
+        }
+
+        result = generate_citekey(csl_json)
+
+        assert result == "2015Anonymous"
+
+    def test_missing_year_still_generates_key(self) -> None:
+        """Missing year should still generate key from author and title."""
+        from local_library.ingestion.metadata import generate_citekey
+
+        csl_json = {
+            "type": "manuscript",
+            "title": "Undated Manuscript",
+            "author": [{"family": "Unknown", "given": "A."}],
+        }
+
+        result = generate_citekey(csl_json)
+
+        assert result == "UnknownUndated"
+
+    def test_missing_title_still_generates_key(self) -> None:
+        """Missing title should still generate key from author and year."""
+        from local_library.ingestion.metadata import generate_citekey
+
+        csl_json = {
+            "type": "article-journal",
+            "author": [{"family": "Smith", "given": "J."}],
+            "issued": {"date-parts": [[2020]]},
+        }
+
+        result = generate_citekey(csl_json)
+
+        assert result == "Smith2020"
+
+    def test_fallback_for_minimal_data(self) -> None:
+        """Minimal data should produce hash-based fallback key."""
+        from local_library.ingestion.metadata import generate_citekey
+
+        csl_json = {"type": "document"}
+
+        result = generate_citekey(csl_json)
+
+        assert result.startswith("unknown-")
+        assert len(result) == len("unknown-") + 8  # 8 char hash
+
+    def test_different_inputs_produce_different_fallback_hashes(self) -> None:
+        """Different inputs should produce different fallback hashes."""
+        from local_library.ingestion.metadata import generate_citekey
+
+        result1 = generate_citekey({"type": "document", "id": "1"})
+        result2 = generate_citekey({"type": "document", "id": "2"})
+
+        assert result1 != result2
+
+    def test_hyphenated_author_name(self) -> None:
+        """Hyphenated author names handled correctly."""
+        from local_library.ingestion.metadata import generate_citekey
+
+        csl_json = {
+            "type": "article-journal",
+            "title": "Test Article",
+            "author": [{"family": "García-López", "given": "María"}],
+            "issued": {"date-parts": [[2018]]},
+        }
+
+        result = generate_citekey(csl_json)
+
+        # Hyphen removed, diacritics folded
+        assert result == "GarciaLopez2018Test"
