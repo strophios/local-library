@@ -1,6 +1,6 @@
 """Unit tests for metadata processing."""
 
-from typing import Any
+from typing import Any, cast
 
 import pytest
 
@@ -283,7 +283,7 @@ class TestMetadataHandlerProcess:
         with pytest.raises(MetadataError) as exc_info:
             handler.process(csl_json)
 
-        assert exc_info.value.code == ErrorCode.METADATA_INVALID_SCHEMA
+        assert cast(MetadataError, exc_info.value).code == ErrorCode.METADATA_INVALID_SCHEMA
 
     def test_process_raises_for_invalid_citekey(self, handler: MetadataHandler) -> None:
         """process() should raise MetadataError for invalid citekey format."""
@@ -292,7 +292,7 @@ class TestMetadataHandlerProcess:
         with pytest.raises(MetadataError) as exc_info:
             handler.process(csl_json, citekey="invalid key with spaces")
 
-        assert exc_info.value.code == ErrorCode.METADATA_CITEKEY_INVALID
+        assert cast(MetadataError, exc_info.value).code == ErrorCode.METADATA_CITEKEY_INVALID
 
     def test_process_collects_warnings(self, handler: MetadataHandler) -> None:
         """process() should collect validation warnings in result."""
@@ -302,3 +302,54 @@ class TestMetadataHandlerProcess:
 
         assert len(result.validation_warnings) > 0
         assert any("title" in w for w in result.validation_warnings)
+
+    def test_process_handles_empty_author_list(self, handler: MetadataHandler) -> None:
+        """process() should handle empty author list gracefully."""
+        csl_json = {
+            "type": "article-journal",
+            "title": "Test",
+            "author": [],  # Empty author list
+        }
+
+        result = handler.process(csl_json)
+
+        assert result.authors is None
+        assert result.author_list == ()
+
+    def test_process_rejects_empty_date_parts(self, handler: MetadataHandler) -> None:
+        """process() should reject empty date-parts array (invalid CSL-JSON)."""
+        csl_json = {
+            "type": "article-journal",
+            "title": "Test",
+            "issued": {"date-parts": []},  # Empty date-parts array is invalid
+        }
+
+        with pytest.raises(MetadataError) as exc_info:
+            handler.process(csl_json)
+
+        assert cast(MetadataError, exc_info.value).code == ErrorCode.METADATA_INVALID_SCHEMA
+
+    def test_process_rejects_empty_inner_date_parts(self, handler: MetadataHandler) -> None:
+        """process() should reject empty inner date-parts array (invalid CSL-JSON)."""
+        csl_json = {
+            "type": "article-journal",
+            "title": "Test",
+            "issued": {"date-parts": [[]]},  # Inner array is empty (invalid)
+        }
+
+        with pytest.raises(MetadataError) as exc_info:
+            handler.process(csl_json)
+
+        assert cast(MetadataError, exc_info.value).code == ErrorCode.METADATA_INVALID_SCHEMA
+
+    def test_process_extracts_issued_year_month(self, handler: MetadataHandler) -> None:
+        """process() should extract year-month date format."""
+        csl_json = {
+            "type": "article-journal",
+            "title": "Test",
+            "issued": {"date-parts": [[2020, 6]]},  # Year and month only
+        }
+
+        result = handler.process(csl_json)
+
+        assert result.issued_date == "2020-06"

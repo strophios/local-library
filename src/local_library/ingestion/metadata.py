@@ -1,6 +1,7 @@
 """Metadata processing handler for CSL-JSON validation and enrichment."""
 
-# pattern: Functional Core
+# pattern: Imperative Shell
+# This module performs I/O (file loading) and coordinates validation logic
 
 import json
 import re
@@ -37,11 +38,12 @@ def _load_item_schema() -> dict[str, Any]:
 
 
 # Cache the validator for reuse
+# Note: Using Any for Draft7Validator since jsonschema lacks complete type stubs
 _CSL_SCHEMA: dict[str, Any] | None = None
-_CSL_VALIDATOR: Draft7Validator | None = None
+_CSL_VALIDATOR: Any = None
 
 
-def _get_validator() -> Draft7Validator:
+def _get_validator() -> Any:
     """Get or create the cached CSL-JSON validator."""
     global _CSL_SCHEMA, _CSL_VALIDATOR
     if _CSL_VALIDATOR is None:
@@ -156,7 +158,8 @@ class MetadataHandler:
             # Required field errors: 'id' is lenient (warning), others fatal
             elif error.validator == "required":
                 # 'id' can be generated later; other required fields are fatal
-                if "'id'" in error.message or "id" in error.message:
+                # Check specifically for 'id' field using regex to avoid false matches
+                if re.search(r"'id'.*required", error.message):
                     issues.append(f"warning: {error.message}")
                 else:
                     fatal_errors.append(f"missing required field: {error.message}")
