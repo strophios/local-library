@@ -6,6 +6,7 @@ import shutil
 import sqlite3
 import tempfile
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from local_library.config import (
@@ -30,12 +31,15 @@ from local_library.core.storage import (
     get_document_by_id,
     get_document_by_path,
     get_documents_by_partial_id,
+    get_unique_citekey,
     init_schema,
     list_documents,
+    update_document_metadata,
     update_document_status,
 )
 from local_library.ingestion.base import ContentAcquirer, ContentExtractor, compute_storage_path
 from local_library.ingestion.file import FileAcquirer
+from local_library.ingestion.metadata import MetadataHandler
 from local_library.ingestion.pdf import PdfExtractor
 
 
@@ -75,6 +79,9 @@ class Library:
         self._extractors: list[ContentExtractor] = (
             extractors if extractors is not None else [PdfExtractor(lazy_load=True)]
         )
+
+        # Initialize metadata handler
+        self._metadata_handler = MetadataHandler()
 
         # Ensure directories exist
         ensure_directories()
@@ -152,7 +159,12 @@ class Library:
 
     # --- Add Pipeline ---
 
-    def add(self, source: str, force: bool = False) -> AddResult:
+    def add(
+        self,
+        source: str,
+        force: bool = False,
+        metadata: dict[str, Any] | None = None,
+    ) -> AddResult:
         """Add a document to the library.
 
         The add pipeline:
@@ -164,11 +176,13 @@ class Library:
         6. Move to content-addressable storage
         7. Create database record
         8. Extract text content
-        9. Update record status
+        9. Process metadata (if provided)
+        10. Update record status
 
         Args:
             source: Path to the source file
             force: If True, create failed record for inaccessible files
+            metadata: Optional CSL-JSON metadata dict
 
         Returns:
             AddResult containing the document and duplicate status
@@ -176,6 +190,7 @@ class Library:
         Raises:
             AcquisitionError: If source is invalid and force=False
             ExtractionError: If extraction fails (record created with failed status)
+            MetadataError: If metadata validation fails
         """
         # Find and use appropriate acquirer
         acquirer = self._find_acquirer(source)
@@ -255,6 +270,10 @@ class Library:
                 extracted_path=str(extracted_path),
             )
 
+            # Process metadata if provided
+            if metadata:
+                doc = self._process_metadata(doc, metadata)
+
         except (ExtractionError, QualityError) as e:
             # Update record to failed
             doc = update_document_status(
@@ -319,6 +338,36 @@ class Library:
         )
 
         return AddResult(document=doc)
+
+    def _process_metadata(self, doc: Document, metadata: dict[str, Any]) -> Document:
+        """Process and store metadata for a document.
+
+        Args:
+            doc: The document to update
+            metadata: CSL-JSON metadata dict
+
+        Returns:
+            Updated document with metadata
+
+        Raises:
+            MetadataError: If metadata validation fails
+        """
+        # Process metadata through handler
+        result = self._metadata_handler.process(metadata)
+
+        # Get unique citekey (handle collisions)
+        unique_citekey = get_unique_citekey(self._conn, result.citekey)
+
+        # Update document with metadata
+        return update_document_metadata(
+            self._conn,
+            doc.id,
+            citekey=unique_citekey,
+            csl_json=result.csl_json,
+            title=result.title,
+            authors=result.authors,
+            issued_date=result.issued_date,
+        )
 
     # --- Query Operations ---
 

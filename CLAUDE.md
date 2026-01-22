@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-01-21
+Last verified: 2026-01-22
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -144,6 +144,7 @@ A detailed evaluation framework with quality targets, test set design, and evalu
 ## Commands
 
 - `uv run local-library add <path>` - Add a PDF to the library
+- `uv run local-library add <path> --metadata <csl-json-file>` - Add with bibliographic metadata
 - `uv run local-library list` - List all documents
 - `uv run local-library show <id>` - Show document details
 - `uv run local-library delete <id>` - Delete a document
@@ -165,7 +166,8 @@ src/local_library/
 ├── ingestion/           # Domain: content acquisition and extraction
 │   ├── base.py          # Protocols: ContentAcquirer, ContentExtractor
 │   ├── file.py          # FileAcquirer implementation
-│   └── pdf.py           # PdfExtractor (Marker wrapper)
+│   ├── pdf.py           # PdfExtractor (Marker wrapper)
+│   └── metadata.py      # MetadataHandler (CSL-JSON validation, citekey generation)
 └── cli/                 # CLI interface (Typer/Rich)
     ├── main.py          # Entry point, command registration
     ├── add.py           # Add command

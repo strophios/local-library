@@ -8,6 +8,7 @@ from local_library.core.errors import (
     ExtractionError,
     LocalLibraryError,
     LookupError,
+    MetadataError,
     QualityError,
     StorageError,
 )
@@ -114,3 +115,50 @@ class TestSpecificExceptions:
         """Should be able to catch specific exceptions as base type."""
         with pytest.raises(LocalLibraryError):
             raise AcquisitionError("test", ErrorCode.ACQUISITION_FILE_NOT_FOUND)
+
+
+class TestMetadataErrorCodes:
+    """Tests for metadata-related error codes."""
+
+    def test_metadata_invalid_schema_is_string(self) -> None:
+        """METADATA_INVALID_SCHEMA should have string value."""
+        assert ErrorCode.METADATA_INVALID_SCHEMA == "METADATA_INVALID_SCHEMA"
+        assert isinstance(ErrorCode.METADATA_INVALID_SCHEMA, str)
+
+    def test_metadata_invalid_type_is_string(self) -> None:
+        """METADATA_INVALID_TYPE should have string value."""
+        assert ErrorCode.METADATA_INVALID_TYPE == "METADATA_INVALID_TYPE"
+        assert isinstance(ErrorCode.METADATA_INVALID_TYPE, str)
+
+    def test_metadata_citekey_invalid_is_string(self) -> None:
+        """METADATA_CITEKEY_INVALID should have string value."""
+        assert ErrorCode.METADATA_CITEKEY_INVALID == "METADATA_CITEKEY_INVALID"
+        assert isinstance(ErrorCode.METADATA_CITEKEY_INVALID, str)
+
+
+class TestMetadataError:
+    """Tests for MetadataError exception class."""
+
+    def test_metadata_error_inherits_from_base(self) -> None:
+        """MetadataError should inherit from LocalLibraryError."""
+        error = MetadataError("invalid schema", ErrorCode.METADATA_INVALID_SCHEMA)
+
+        assert isinstance(error, LocalLibraryError)
+        assert isinstance(error, MetadataError)
+
+    def test_metadata_error_stores_message_and_code(self) -> None:
+        """MetadataError should store message and code."""
+        error = MetadataError(
+            "missing type field",
+            ErrorCode.METADATA_INVALID_TYPE,
+            details={"field": "type"},
+        )
+
+        assert error.message == "missing type field"
+        assert error.code == ErrorCode.METADATA_INVALID_TYPE
+        assert error.details == {"field": "type"}
+
+    def test_can_catch_metadata_error_as_base(self) -> None:
+        """Should be able to catch MetadataError as LocalLibraryError."""
+        with pytest.raises(LocalLibraryError):
+            raise MetadataError("test", ErrorCode.METADATA_INVALID_SCHEMA)

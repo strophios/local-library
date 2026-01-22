@@ -49,6 +49,10 @@ class TestAddCommand:
         mock_doc.storage_path = "/storage/12/34/1234.pdf"
         mock_doc.original_path = str(pdf_path)
         mock_doc.content_hash = "abcd1234"
+        mock_doc.citekey = None
+        mock_doc.title = None
+        mock_doc.authors = None
+        mock_doc.issued_date = None
 
         mock_library.add.return_value = AddResult(document=mock_doc)
 
@@ -68,6 +72,10 @@ class TestAddCommand:
         mock_doc.storage_path = "/storage/test.pdf"
         mock_doc.original_path = str(pdf_path)
         mock_doc.content_hash = "abcd1234"
+        mock_doc.citekey = None
+        mock_doc.title = None
+        mock_doc.authors = None
+        mock_doc.issued_date = None
 
         mock_library.add.return_value = AddResult(
             document=mock_doc,
@@ -91,6 +99,10 @@ class TestAddCommand:
         mock_doc.storage_path = "/storage/test.pdf"
         mock_doc.original_path = str(pdf_path)
         mock_doc.content_hash = "abcd1234"
+        mock_doc.citekey = None
+        mock_doc.title = None
+        mock_doc.authors = None
+        mock_doc.issued_date = None
 
         mock_library.add.return_value = AddResult(document=mock_doc)
 

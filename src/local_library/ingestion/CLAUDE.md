@@ -1,10 +1,10 @@
 # Ingestion Domain
 
-Last verified: 2026-01-21
+Last verified: 2026-01-22
 
 ## Purpose
 
-Handles content acquisition (getting files into the system) and extraction (converting to searchable text). Defines protocols for extensibility; implementations handle specific source types.
+Handles content acquisition (getting files into the system), extraction (converting to searchable text), and metadata processing (CSL-JSON validation). Defines protocols for extensibility; implementations handle specific source types.
 
 ## Contracts
 
@@ -32,6 +32,7 @@ Handles content acquisition (getting files into the system) and extraction (conv
 - **Lazy Marker loading**: PdfExtractor defers model load until first extraction (saves startup time)
 - **Quality validation**: ExtractionResult.validate() checks min length and printable ratio
 - **compute_storage_path**: Git-style `ab/cd/hash.ext` layout for content-addressable storage
+- **MetadataHandler**: Stateless CSL-JSON validation with citekey generation (internal, used by Library)
 
 ## Invariants
 
@@ -45,6 +46,7 @@ Handles content acquisition (getting files into the system) and extraction (conv
 - `base.py` - ContentAcquirer, ContentExtractor protocols; compute_storage_path utility
 - `file.py` - FileAcquirer (any local file), compute_file_hash, dynamic MIME detection
 - `pdf.py` - PdfExtractor (Marker wrapper with quality validation)
+- `metadata.py` - MetadataHandler (CSL-JSON validation, citekey generation, field extraction)
 
 ## Gotchas
 

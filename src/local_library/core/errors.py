@@ -35,6 +35,11 @@ class ErrorCode(str, Enum):
     NOT_FOUND = "NOT_FOUND"
     AMBIGUOUS_MATCH = "AMBIGUOUS_MATCH"
 
+    # Metadata errors
+    METADATA_INVALID_SCHEMA = "METADATA_INVALID_SCHEMA"
+    METADATA_INVALID_TYPE = "METADATA_INVALID_TYPE"
+    METADATA_CITEKEY_INVALID = "METADATA_CITEKEY_INVALID"
+
 
 class LocalLibraryError(Exception):
     """Base exception for all local-library errors."""
@@ -80,5 +85,11 @@ class StorageError(LocalLibraryError):
 
 class LookupError(LocalLibraryError):
     """Error when looking up records (not found, ambiguous match)."""
+
+    pass
+
+
+class MetadataError(LocalLibraryError):
+    """Error during metadata validation or processing."""
 
     pass

@@ -38,6 +38,9 @@ class Document:
     extracted_path: str | None = None  # Path to extracted markdown
     citekey: str | None = None  # BetterBibTeX-style citation key
     csl_json: dict[str, Any] | None = None  # Bibliographic metadata
+    title: str | None = None  # Extracted title for search
+    authors: str | None = None  # Formatted author string for search
+    issued_date: str | None = None  # ISO date or year for search
 
     # Error tracking for failed documents
     error_message: str | None = None
@@ -139,3 +142,44 @@ class AddResult:
     document: Document
     is_duplicate: bool = False  # True if returning existing record
     duplicate_reason: str | None = None  # "path" or "hash" if duplicate
+
+
+@dataclass(frozen=True)
+class MetadataResult:
+    """Result of processing metadata through MetadataHandler.
+
+    Contains validated CSL-JSON, generated citekey, extracted indexed fields,
+    and any validation warnings for non-fatal issues.
+    """
+
+    csl_json: dict[str, Any]  # Validated CSL-JSON metadata
+    citekey: str  # Generated or provided citation key
+    title: str | None = None  # Extracted title for indexing
+    authors: str | None = None  # Formatted author string for indexing
+    issued_date: str | None = None  # ISO date or year for indexing
+    validation_warnings: tuple[str, ...] = ()  # Non-fatal validation issues
+
+    # Structured data for future use (e.g., normalized authors table)
+    author_list: tuple[str, ...] = ()  # Individual author names
+
+    @classmethod
+    def create(
+        cls,
+        csl_json: dict[str, Any],
+        citekey: str,
+        title: str | None = None,
+        authors: str | None = None,
+        issued_date: str | None = None,
+        validation_warnings: list[str] | None = None,
+        author_list: list[str] | None = None,
+    ) -> "MetadataResult":
+        """Create a MetadataResult with proper tuple conversion."""
+        return cls(
+            csl_json=csl_json,
+            citekey=citekey,
+            title=title,
+            authors=authors,
+            issued_date=issued_date,
+            validation_warnings=tuple(validation_warnings or []),
+            author_list=tuple(author_list or []),
+        )
