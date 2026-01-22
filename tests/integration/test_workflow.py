@@ -261,3 +261,88 @@ class TestFileCleanup:
 
             # Storage file should still exist
             assert storage_path.exists()
+
+
+class TestMetadataWorkflow:
+    """Tests for end-to-end metadata workflow."""
+
+    def test_add_with_metadata(
+        self, integration_library: Library, sample_pdf: Path
+    ) -> None:
+        """Adding document with metadata should store all fields."""
+        metadata = {
+            "type": "article-journal",
+            "title": "Attention Is All You Need",
+            "author": [
+                {"family": "Vaswani", "given": "Ashish"},
+                {"family": "Shazeer", "given": "Noam"},
+            ],
+            "issued": {"date-parts": [[2017]]},
+        }
+
+        # Mock extraction to avoid loading Marker
+        with patch.object(
+            integration_library._extractors[0], "extract_and_validate"
+        ) as mock_extract:
+            mock_extract.return_value = MagicMock(text="Extracted content " * 20)
+
+            result = integration_library.add(str(sample_pdf), metadata=metadata)
+
+        assert result.document.citekey == "Vaswani2017Attention"
+        assert result.document.title == "Attention Is All You Need"
+        assert result.document.authors == "Vaswani, A.; Shazeer, N."
+        assert result.document.issued_date == "2017"
+        assert result.document.csl_json == metadata
+
+    def test_add_with_metadata_citekey_collision(
+        self, integration_library: Library, multiple_pdfs: list[Path]
+    ) -> None:
+        """Multiple documents with same generated citekey should get suffixes."""
+        metadata = {
+            "type": "article-journal",
+            "title": "Test Article",
+            "author": [{"family": "Smith", "given": "John"}],
+            "issued": {"date-parts": [[2020]]},
+        }
+
+        with patch.object(
+            integration_library._extractors[0], "extract_and_validate"
+        ) as mock_extract:
+            mock_extract.return_value = MagicMock(text="Extracted content " * 20)
+
+            result1 = integration_library.add(str(multiple_pdfs[0]), metadata=metadata)
+            result2 = integration_library.add(str(multiple_pdfs[1]), metadata=metadata)
+
+        assert result1.document.citekey == "Smith2020Test"
+        assert result2.document.citekey == "Smith2020Testa"
+
+    def test_add_with_invalid_metadata_raises(
+        self, integration_library: Library, sample_pdf: Path
+    ) -> None:
+        """Invalid metadata should raise MetadataError."""
+        from local_library.core.errors import MetadataError
+
+        invalid_metadata = {"title": "No type field"}  # Missing required 'type'
+
+        # Mock extraction to reach metadata validation
+        with patch.object(
+            integration_library._extractors[0], "extract_and_validate"
+        ) as mock_extract:
+            mock_extract.return_value = MagicMock(text="Extracted content " * 20)
+
+            with pytest.raises(MetadataError):
+                integration_library.add(str(sample_pdf), metadata=invalid_metadata)
+
+    def test_add_without_metadata_works(
+        self, integration_library: Library, sample_pdf: Path
+    ) -> None:
+        """Adding without metadata should still work (no citekey)."""
+        with patch.object(
+            integration_library._extractors[0], "extract_and_validate"
+        ) as mock_extract:
+            mock_extract.return_value = MagicMock(text="Extracted content " * 20)
+
+            result = integration_library.add(str(sample_pdf))
+
+        assert result.document.citekey is None
+        assert result.document.title is None
