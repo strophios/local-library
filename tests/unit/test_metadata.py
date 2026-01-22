@@ -553,3 +553,209 @@ class TestCitekeyGeneration:
 
         # Hyphen removed, diacritics folded
         assert result == "GarciaLopez2018Test"
+
+
+class TestIndexedFieldExtraction:
+    """Tests for indexed field extraction methods."""
+
+    @pytest.fixture
+    def handler(self) -> MetadataHandler:
+        """Provide a MetadataHandler instance."""
+        return MetadataHandler()
+
+    # --- Author extraction tests ---
+
+    def test_extract_authors_standard_format(self, handler: MetadataHandler) -> None:
+        """Standard author with family and given names."""
+        csl_json = {
+            "type": "article-journal",
+            "author": [{"family": "Smith", "given": "John Robert"}],
+        }
+
+        result = handler.process(csl_json)
+
+        assert result.authors == "Smith, J.R."
+        assert result.author_list == ("Smith, J.R.",)
+
+    def test_extract_authors_single_initial(self, handler: MetadataHandler) -> None:
+        """Author with already-initialized given name."""
+        csl_json = {
+            "type": "article-journal",
+            "author": [{"family": "Smith", "given": "J."}],
+        }
+
+        result = handler.process(csl_json)
+
+        assert result.authors == "Smith, J."
+
+    def test_extract_authors_hyphenated_given(self, handler: MetadataHandler) -> None:
+        """Author with hyphenated given name."""
+        csl_json = {
+            "type": "article-journal",
+            "author": [{"family": "Dupont", "given": "Jean-Pierre"}],
+        }
+
+        result = handler.process(csl_json)
+
+        assert result.authors == "Dupont, J.-P."
+
+    def test_extract_authors_with_particle(self, handler: MetadataHandler) -> None:
+        """Author with non-dropping particle (von, de, etc.)."""
+        csl_json = {
+            "type": "book",
+            "author": [
+                {
+                    "family": "Beethoven",
+                    "given": "Ludwig",
+                    "non-dropping-particle": "van",
+                }
+            ],
+        }
+
+        result = handler.process(csl_json)
+
+        assert result.authors == "van Beethoven, L."
+
+    def test_extract_authors_multiple(self, handler: MetadataHandler) -> None:
+        """Multiple authors separated by semicolon."""
+        csl_json = {
+            "type": "article-journal",
+            "author": [
+                {"family": "Smith", "given": "John"},
+                {"family": "Jones", "given": "Mary Ann"},
+                {"family": "Brown", "given": "Robert"},
+            ],
+        }
+
+        result = handler.process(csl_json)
+
+        assert result.authors == "Smith, J.; Jones, M.A.; Brown, R."
+        assert len(result.author_list) == 3
+
+    def test_extract_authors_literal(self, handler: MetadataHandler) -> None:
+        """Organizational/literal author."""
+        csl_json = {
+            "type": "report",
+            "author": [{"literal": "World Health Organization"}],
+        }
+
+        result = handler.process(csl_json)
+
+        assert result.authors == "World Health Organization"
+        assert result.author_list == ("World Health Organization",)
+
+    def test_extract_authors_family_only(self, handler: MetadataHandler) -> None:
+        """Author with only family name (no given name)."""
+        csl_json = {
+            "type": "article-journal",
+            "author": [{"family": "Aristotle"}],
+        }
+
+        result = handler.process(csl_json)
+
+        assert result.authors == "Aristotle"
+
+    def test_extract_authors_editor_fallback(self, handler: MetadataHandler) -> None:
+        """Editor used when no author present."""
+        csl_json = {
+            "type": "book",
+            "editor": [{"family": "Johnson", "given": "Mary"}],
+        }
+
+        result = handler.process(csl_json)
+
+        assert result.authors == "Johnson, M."
+
+    def test_extract_authors_missing(self, handler: MetadataHandler) -> None:
+        """Missing author returns None."""
+        csl_json = {"type": "article-journal", "title": "Anonymous Work"}
+
+        result = handler.process(csl_json)
+
+        assert result.authors is None
+        assert result.author_list == ()
+
+    # --- Date extraction tests ---
+
+    def test_extract_date_full(self, handler: MetadataHandler) -> None:
+        """Full date with year, month, day."""
+        csl_json = {
+            "type": "article-journal",
+            "issued": {"date-parts": [[2020, 6, 15]]},
+        }
+
+        result = handler.process(csl_json)
+
+        assert result.issued_date == "2020-06-15"
+
+    def test_extract_date_year_month(self, handler: MetadataHandler) -> None:
+        """Date with year and month only."""
+        csl_json = {
+            "type": "article-journal",
+            "issued": {"date-parts": [[2020, 6]]},
+        }
+
+        result = handler.process(csl_json)
+
+        assert result.issued_date == "2020-06"
+
+    def test_extract_date_year_only(self, handler: MetadataHandler) -> None:
+        """Date with year only."""
+        csl_json = {
+            "type": "book",
+            "issued": {"date-parts": [[1984]]},
+        }
+
+        result = handler.process(csl_json)
+
+        assert result.issued_date == "1984"
+
+    def test_extract_date_missing(self, handler: MetadataHandler) -> None:
+        """Missing date returns None."""
+        csl_json = {"type": "manuscript"}
+
+        result = handler.process(csl_json)
+
+        assert result.issued_date is None
+
+    def test_extract_date_empty_parts(self, handler: MetadataHandler) -> None:
+        """Empty date-parts returns None."""
+        csl_json = {
+            "type": "article-journal",
+            "issued": {"date-parts": [[]]},
+        }
+
+        with pytest.raises(MetadataError):
+            handler.process(csl_json)
+
+    def test_extract_date_pads_month_day(self, handler: MetadataHandler) -> None:
+        """Month and day should be zero-padded."""
+        csl_json = {
+            "type": "article-journal",
+            "issued": {"date-parts": [[2020, 1, 5]]},
+        }
+
+        result = handler.process(csl_json)
+
+        assert result.issued_date == "2020-01-05"
+
+    # --- Title extraction tests ---
+
+    def test_extract_title(self, handler: MetadataHandler) -> None:
+        """Title extracted as-is."""
+        csl_json = {
+            "type": "book",
+            "title": "The Art of Computer Programming",
+        }
+
+        result = handler.process(csl_json)
+
+        assert result.title == "The Art of Computer Programming"
+
+    def test_extract_title_missing(self, handler: MetadataHandler) -> None:
+        """Missing title returns None."""
+        csl_json = {"type": "article-journal"}
+
+        result = handler.process(csl_json)
+
+        assert result.title is None
