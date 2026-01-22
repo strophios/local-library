@@ -1,6 +1,6 @@
 # Core Domain
 
-Last verified: 2026-01-21
+Last verified: 2026-01-22
 
 ## Purpose
 
@@ -8,18 +8,19 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 
 ## Contracts
 
-- **Exposes**: Document, DocumentStatus, AddResult, ErrorCode hierarchy, Library class, storage functions
+- **Exposes**: Document, DocumentStatus, AddResult, ErrorCode hierarchy (including MetadataError), Library class, storage functions
 - **Guarantees**:
   - Document.id is UUID, globally unique
   - Document.content_hash is SHA-256, content-addressable
   - AddResult returns existing document on duplicate (idempotent adds)
   - All errors inherit LocalLibraryError with ErrorCode for programmatic handling
   - Library dispatches to appropriate handler via `can_handle()` protocol
+  - Library.add() accepts optional CSL-JSON metadata; validates and stores with collision-free citekeys
 - **Expects**: Sources handled by at least one registered acquirer; files handled by at least one extractor
 
 ## Dependencies
 
-- **Uses**: `config` (paths), `ingestion` (ContentAcquirer, ContentExtractor protocols)
+- **Uses**: `config` (paths), `ingestion` (ContentAcquirer, ContentExtractor protocols, MetadataHandler)
 - **Used by**: `cli`, future domains (embeddings, search)
 - **Boundary**: Core MUST NOT import from cli
 
@@ -31,6 +32,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 - **Status lifecycle**: PENDING -> READY or FAILED tracks extraction state
 - **Handler injection**: Library accepts `acquirers` and `extractors` lists via constructor (defaults: FileAcquirer, PdfExtractor)
 - **Protocol dispatch**: `_find_acquirer()` and `_find_extractor()` iterate handlers, first `can_handle()` wins
+- **Citekey collision handling**: `get_unique_citekey()` appends suffixes (a, b, c...) to ensure uniqueness
 
 ## Invariants
 
@@ -50,6 +52,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 ## Gotchas
 
 - Library.add() re-raises ExtractionError after creating FAILED record (caller sees both)
+- Library.add() raises MetadataError if provided metadata fails validation (before updating record)
 - get_documents_by_partial_id() is case-sensitive UUID prefix match
 - storage.py functions require explicit connection parameter (no global state)
 - No matching acquirer raises ACQUISITION_UNSUPPORTED_SOURCE; no matching extractor raises EXTRACTION_UNSUPPORTED_FORMAT
