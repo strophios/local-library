@@ -54,18 +54,96 @@ def _get_validator() -> Any:
 
 
 # English stopwords for title word extraction
-_STOPWORDS = frozenset({
-    "a", "an", "the", "and", "or", "but", "if", "then", "else", "when",
-    "at", "by", "for", "with", "about", "against", "between", "into",
-    "through", "during", "before", "after", "above", "below", "to", "from",
-    "up", "down", "in", "out", "on", "off", "over", "under", "again",
-    "further", "once", "here", "there", "where", "why", "how",
-    "all", "each", "few", "more", "most", "other", "some", "such", "no",
-    "nor", "not", "only", "own", "same", "so", "than", "too", "very",
-    "can", "will", "just", "should", "now", "of", "is", "are", "was",
-    "were", "be", "been", "being", "have", "has", "had", "having", "do",
-    "does", "did", "doing", "would", "could", "might", "must", "shall",
-})
+_STOPWORDS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "and",
+        "or",
+        "but",
+        "if",
+        "then",
+        "else",
+        "when",
+        "at",
+        "by",
+        "for",
+        "with",
+        "about",
+        "against",
+        "between",
+        "into",
+        "through",
+        "during",
+        "before",
+        "after",
+        "above",
+        "below",
+        "to",
+        "from",
+        "up",
+        "down",
+        "in",
+        "out",
+        "on",
+        "off",
+        "over",
+        "under",
+        "again",
+        "further",
+        "once",
+        "here",
+        "there",
+        "where",
+        "why",
+        "how",
+        "all",
+        "each",
+        "few",
+        "more",
+        "most",
+        "other",
+        "some",
+        "such",
+        "no",
+        "nor",
+        "not",
+        "only",
+        "own",
+        "same",
+        "so",
+        "than",
+        "too",
+        "very",
+        "can",
+        "will",
+        "just",
+        "should",
+        "now",
+        "of",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "having",
+        "do",
+        "does",
+        "did",
+        "doing",
+        "would",
+        "could",
+        "might",
+        "must",
+        "shall",
+    }
+)
 
 
 def generate_citekey(csl_json: dict[str, Any]) -> str:
@@ -142,7 +220,7 @@ def _extract_author_for_citekey(csl_json: dict[str, Any]) -> str:
 
     # Clean the name: fold diacritics, remove non-alphanumeric
     name = unidecode(name)
-    name = re.sub(r'[^a-zA-Z]', '', name)
+    name = re.sub(r"[^a-zA-Z]", "", name)
 
     return name
 
@@ -182,7 +260,7 @@ def _extract_titleword_for_citekey(csl_json: dict[str, Any]) -> str:
 
     # Fold diacritics and extract words
     title = unidecode(title)
-    words = re.findall(r'[a-zA-Z]+', title)
+    words = re.findall(r"[a-zA-Z]+", title)
 
     for word in words:
         word_lower = word.lower()
@@ -354,8 +432,6 @@ class MetadataHandler:
 
         # Generate or validate citekey
         if citekey is None:
-            # Citekey generation will be implemented in Phase 3
-            # For now, use a placeholder
             citekey = self._generate_citekey(csl_json)
         else:
             # Validate provided citekey format
