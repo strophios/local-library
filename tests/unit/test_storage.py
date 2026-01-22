@@ -12,13 +12,16 @@ from local_library.core.storage import (
     create_document,
     delete_document,
     get_connection,
+    get_document_by_citekey,
     get_document_by_hash,
     get_document_by_id,
     get_document_by_path,
     get_documents_by_partial_id,
+    get_unique_citekey,
     init_schema,
     list_documents,
     transaction,
+    update_document_metadata,
     update_document_status,
 )
 
@@ -334,3 +337,98 @@ class TestDeleteDocument:
         result = delete_document(db_conn, uuid4())
 
         assert result is False
+
+
+class TestMetadataStorage:
+    """Tests for metadata storage functions."""
+
+    def test_update_document_metadata(self, db_conn: sqlite3.Connection) -> None:
+        """update_document_metadata should update all metadata fields."""
+        doc = create_document(db_conn, "/test.pdf", "hash123", "/storage/path.pdf")
+
+        updated = update_document_metadata(
+            db_conn,
+            doc.id,
+            citekey="Smith2020Test",
+            csl_json={"type": "article-journal", "title": "Test"},
+            title="Test Article",
+            authors="Smith, J.",
+            issued_date="2020",
+        )
+
+        assert updated.citekey == "Smith2020Test"
+        assert updated.csl_json == {"type": "article-journal", "title": "Test"}
+        assert updated.title == "Test Article"
+        assert updated.authors == "Smith, J."
+        assert updated.issued_date == "2020"
+
+    def test_update_document_metadata_partial(self, db_conn: sqlite3.Connection) -> None:
+        """update_document_metadata should allow partial updates preserving unspecified fields."""
+        doc = create_document(db_conn, "/test.pdf", "hash123", "/storage/path.pdf")
+
+        updated = update_document_metadata(
+            db_conn,
+            doc.id,
+            citekey="Key2020",
+            title="Title Only",
+        )
+
+        assert updated.citekey == "Key2020"
+        assert updated.title == "Title Only"
+        assert updated.authors is None
+        assert updated.issued_date is None
+        assert updated.csl_json is None
+
+    def test_update_document_metadata_not_found(self, db_conn: sqlite3.Connection) -> None:
+        """update_document_metadata should raise for missing document."""
+        with pytest.raises(LookupError):
+            update_document_metadata(db_conn, uuid4(), citekey="Test")
+
+
+class TestCitekeyCollision:
+    """Tests for citekey collision handling."""
+
+    def test_get_document_by_citekey_found(self, db_conn: sqlite3.Connection) -> None:
+        """get_document_by_citekey should return document with matching key."""
+        doc = create_document(db_conn, "/test.pdf", "hash123", "/storage/path.pdf")
+        update_document_metadata(db_conn, doc.id, citekey="UniqueKey2020")
+
+        found = get_document_by_citekey(db_conn, "UniqueKey2020")
+
+        assert found is not None
+        assert found.id == doc.id
+
+    def test_get_document_by_citekey_not_found(self, db_conn: sqlite3.Connection) -> None:
+        """get_document_by_citekey should return None for missing key."""
+        result = get_document_by_citekey(db_conn, "NonexistentKey")
+
+        assert result is None
+
+    def test_get_unique_citekey_available(self, db_conn: sqlite3.Connection) -> None:
+        """get_unique_citekey should return base key if available."""
+        result = get_unique_citekey(db_conn, "Smith2020Test")
+
+        assert result == "Smith2020Test"
+
+    def test_get_unique_citekey_collision(self, db_conn: sqlite3.Connection) -> None:
+        """get_unique_citekey should add suffix for collision."""
+        doc1 = create_document(db_conn, "/test1.pdf", "hash1", "/storage/1.pdf")
+        update_document_metadata(db_conn, doc1.id, citekey="Smith2020Test")
+
+        result = get_unique_citekey(db_conn, "Smith2020Test")
+
+        assert result == "Smith2020Testa"
+
+    def test_get_unique_citekey_multiple_collisions(
+        self, db_conn: sqlite3.Connection
+    ) -> None:
+        """get_unique_citekey should increment suffix for multiple collisions."""
+        doc1 = create_document(db_conn, "/test1.pdf", "hash1", "/storage/1.pdf")
+        update_document_metadata(db_conn, doc1.id, citekey="Key2020")
+
+        doc2 = create_document(db_conn, "/test2.pdf", "hash2", "/storage/2.pdf")
+        update_document_metadata(db_conn, doc2.id, citekey="Key2020a")
+
+        result = get_unique_citekey(db_conn, "Key2020")
+
+        assert result == "Key2020b"
