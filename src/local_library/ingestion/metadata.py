@@ -486,29 +486,110 @@ class MetadataHandler:
 
         Returns:
             Tuple of (formatted_string, list_of_names)
-            Formatted string like "Smith, J.; Jones, M."
+            Formatted string like "Smith, J.; Jones, M.A."
+            List contains individual formatted names.
+
+        Author formatting rules:
+        - Personal: "Family, G." where G. is abbreviated given names
+        - Literal/org: Used as-is
+        - Multiple authors: separated by "; "
         """
-        # Placeholder: full implementation in Phase 4
-        authors = csl_json.get("author", [])
-        if not authors:
+        # Check author field first, then editor as fallback
+        contributors = csl_json.get("author") or csl_json.get("editor") or []
+
+        if not contributors:
             return None, []
 
         author_list: list[str] = []
-        for author in authors:
-            if isinstance(author, dict):
-                if "literal" in author:
-                    author_list.append(author["literal"])
-                elif "family" in author:
-                    name = author["family"]
-                    if "given" in author:
-                        # Abbreviate given name
-                        given = author["given"]
-                        initials = "".join(g[0] + "." for g in given.split() if g)
-                        name = f"{name}, {initials}"
-                    author_list.append(name)
+        for contributor in contributors:
+            if not isinstance(contributor, dict):
+                continue
+
+            formatted = self._format_contributor(contributor)
+            if formatted:
+                author_list.append(formatted)
 
         authors_str = "; ".join(author_list) if author_list else None
         return authors_str, author_list
+
+    def _format_contributor(self, contributor: dict[str, Any]) -> str | None:
+        """Format a single contributor for display.
+
+        Args:
+            contributor: CSL-JSON contributor object
+
+        Returns:
+            Formatted name string or None
+        """
+        if "literal" in contributor:
+            # Organizational/literal author - use as-is
+            return contributor["literal"]
+
+        if "family" not in contributor:
+            return None
+
+        family = contributor["family"]
+
+        # Handle particles (von, de, etc.)
+        if "non-dropping-particle" in contributor:
+            family = f"{contributor['non-dropping-particle']} {family}"
+
+        if "given" not in contributor:
+            return family
+
+        # Abbreviate given names to initials
+        given = contributor["given"]
+        initials = self._abbreviate_given_name(given)
+
+        if initials:
+            return f"{family}, {initials}"
+        return family
+
+    def _abbreviate_given_name(self, given: str) -> str:
+        """Abbreviate given name to initials.
+
+        "John" -> "J."
+        "John Robert" -> "J.R."
+        "J." -> "J."
+        "J.R." -> "J.R."
+        "Jean-Pierre" -> "J.-P."
+
+        Args:
+            given: Full given name(s)
+
+        Returns:
+            Abbreviated initials string
+        """
+        if not given:
+            return ""
+
+        parts: list[str] = []
+
+        # Split on spaces first
+        for part in given.split():
+            if not part:
+                continue
+
+            # Handle hyphenated names (Jean-Pierre -> J.-P.)
+            if "-" in part:
+                hyphen_parts = []
+                for hp in part.split("-"):
+                    if hp:
+                        # Already initial or needs abbreviation
+                        if len(hp) == 1 or (len(hp) == 2 and hp.endswith(".")):
+                            hyphen_parts.append(hp if hp.endswith(".") else f"{hp}.")
+                        else:
+                            hyphen_parts.append(f"{hp[0].upper()}.")
+                if hyphen_parts:
+                    parts.append("-".join(hyphen_parts))
+            else:
+                # Regular name part
+                if len(part) == 1 or (len(part) == 2 and part.endswith(".")):
+                    parts.append(part if part.endswith(".") else f"{part}.")
+                else:
+                    parts.append(f"{part[0].upper()}.")
+
+        return "".join(parts)
 
     def _extract_issued_date(self, csl_json: dict[str, Any]) -> str | None:
         """Extract issued date for indexing.
