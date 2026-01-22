@@ -12,6 +12,7 @@ from local_library.core.models import (
     Document,
     DocumentStatus,
     ExtractionResult,
+    MetadataResult,
 )
 
 
@@ -196,3 +197,81 @@ class TestAddResult:
 
         assert result.is_duplicate is True
         assert result.duplicate_reason == "hash"
+
+
+class TestMetadataResult:
+    """Tests for MetadataResult dataclass."""
+
+    def test_stores_required_fields(self) -> None:
+        """MetadataResult should store csl_json and citekey."""
+        csl = {"type": "article-journal", "title": "Test Article"}
+        result = MetadataResult(csl_json=csl, citekey="Smith2020Test")
+
+        assert result.csl_json == csl
+        assert result.citekey == "Smith2020Test"
+
+    def test_optional_fields_have_defaults(self) -> None:
+        """Optional fields should default to None or empty tuples."""
+        csl = {"type": "book", "title": "Test Book"}
+        result = MetadataResult(csl_json=csl, citekey="Author2021")
+
+        assert result.title is None
+        assert result.authors is None
+        assert result.issued_date is None
+        assert result.validation_warnings == ()
+        assert result.author_list == ()
+
+    def test_metadata_result_is_frozen(self) -> None:
+        """MetadataResult should be immutable."""
+        csl = {"type": "article", "title": "Test"}
+        result = MetadataResult(csl_json=csl, citekey="Test2020")
+
+        with pytest.raises(AttributeError):
+            result.citekey = "NewKey"  # type: ignore[misc]
+
+    def test_create_factory_converts_lists_to_tuples(self) -> None:
+        """create() factory should convert lists to tuples for immutability."""
+        csl = {"type": "article-journal", "title": "Test"}
+        result = MetadataResult.create(
+            csl_json=csl,
+            citekey="Smith2020",
+            title="Test Article",
+            authors="Smith, J.",
+            validation_warnings=["missing abstract"],
+            author_list=["Smith, John"],
+        )
+
+        assert isinstance(result.validation_warnings, tuple)
+        assert result.validation_warnings == ("missing abstract",)
+        assert isinstance(result.author_list, tuple)
+        assert result.author_list == ("Smith, John",)
+
+    def test_create_factory_handles_none_lists(self) -> None:
+        """create() factory should handle None for list parameters."""
+        csl = {"type": "book"}
+        result = MetadataResult.create(csl_json=csl, citekey="Test2020")
+
+        assert result.validation_warnings == ()
+        assert result.author_list == ()
+
+    def test_stores_extracted_fields(self) -> None:
+        """MetadataResult should store all extracted indexed fields."""
+        csl = {
+            "type": "article-journal",
+            "title": "Attention Is All You Need",
+            "author": [{"family": "Vaswani", "given": "A."}],
+            "issued": {"date-parts": [[2017]]},
+        }
+        result = MetadataResult.create(
+            csl_json=csl,
+            citekey="Vaswani2017Attention",
+            title="Attention Is All You Need",
+            authors="Vaswani, A.",
+            issued_date="2017",
+            author_list=["Vaswani, A."],
+        )
+
+        assert result.title == "Attention Is All You Need"
+        assert result.authors == "Vaswani, A."
+        assert result.issued_date == "2017"
+        assert result.author_list == ("Vaswani, A.",)
