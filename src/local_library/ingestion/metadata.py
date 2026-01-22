@@ -594,7 +594,16 @@ class MetadataHandler:
     def _extract_issued_date(self, csl_json: dict[str, Any]) -> str | None:
         """Extract issued date for indexing.
 
-        Returns ISO date (YYYY-MM-DD) or year only (YYYY).
+        Returns ISO date format:
+        - Full date: YYYY-MM-DD
+        - Year-month: YYYY-MM
+        - Year only: YYYY
+
+        Args:
+            csl_json: CSL-JSON metadata
+
+        Returns:
+            Formatted date string or None if not available
         """
         issued = csl_json.get("issued")
         if not issued:
@@ -605,11 +614,19 @@ class MetadataHandler:
             return None
 
         parts = date_parts[0]
-        if len(parts) >= 3:
-            return f"{parts[0]:04d}-{parts[1]:02d}-{parts[2]:02d}"
-        elif len(parts) >= 2:
-            return f"{parts[0]:04d}-{parts[1]:02d}"
-        elif len(parts) >= 1:
-            return str(parts[0])
 
-        return None
+        # Handle None values in date parts
+        if not parts or parts[0] is None:
+            return None
+
+        year = parts[0]
+
+        if len(parts) >= 3 and parts[1] is not None and parts[2] is not None:
+            # Full date: YYYY-MM-DD
+            return f"{int(year):04d}-{int(parts[1]):02d}-{int(parts[2]):02d}"
+        elif len(parts) >= 2 and parts[1] is not None:
+            # Year-month: YYYY-MM
+            return f"{int(year):04d}-{int(parts[1]):02d}"
+        else:
+            # Year only
+            return str(int(year))
