@@ -266,9 +266,7 @@ class TestFileCleanup:
 class TestMetadataWorkflow:
     """Tests for end-to-end metadata workflow."""
 
-    def test_add_with_metadata(
-        self, integration_library: Library, sample_pdf: Path
-    ) -> None:
+    def test_add_with_metadata(self, integration_library: Library, sample_pdf: Path) -> None:
         """Adding document with metadata should store all fields."""
         metadata = {
             "type": "article-journal",

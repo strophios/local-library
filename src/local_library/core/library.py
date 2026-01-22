@@ -339,9 +339,7 @@ class Library:
 
         return AddResult(document=doc)
 
-    def _process_metadata(
-        self, doc: Document, metadata: dict[str, Any]
-    ) -> Document:
+    def _process_metadata(self, doc: Document, metadata: dict[str, Any]) -> Document:
         """Process and store metadata for a document.
 
         Args:

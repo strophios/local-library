@@ -187,9 +187,7 @@ class TestAddWithMetadata:
         with patch("local_library.core.library.PdfExtractor") as MockExtractor:
             mock_extractor = MagicMock()
             mock_extractor.can_handle.return_value = True
-            mock_extractor.extract_and_validate.return_value = MagicMock(
-                text="Extracted " * 30
-            )
+            mock_extractor.extract_and_validate.return_value = MagicMock(text="Extracted " * 30)
             MockExtractor.return_value = mock_extractor
 
             result = runner.invoke(
@@ -238,9 +236,7 @@ class TestAddWithMetadata:
         with patch("local_library.core.library.PdfExtractor") as MockExtractor:
             mock_extractor = MagicMock()
             mock_extractor.can_handle.return_value = True
-            mock_extractor.extract_and_validate.return_value = MagicMock(
-                text="Extracted " * 30
-            )
+            mock_extractor.extract_and_validate.return_value = MagicMock(text="Extracted " * 30)
             MockExtractor.return_value = mock_extractor
 
             result = runner.invoke(
