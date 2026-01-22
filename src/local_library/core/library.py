@@ -6,6 +6,7 @@ import shutil
 import sqlite3
 import tempfile
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 from local_library.config import (
@@ -19,6 +20,7 @@ from local_library.core.errors import (
     ErrorCode,
     ExtractionError,
     LookupError,
+    MetadataError,
     QualityError,
 )
 from local_library.core.models import AddResult, Document, DocumentStatus
@@ -30,10 +32,13 @@ from local_library.core.storage import (
     get_document_by_id,
     get_document_by_path,
     get_documents_by_partial_id,
+    get_unique_citekey,
     init_schema,
     list_documents,
+    update_document_metadata,
     update_document_status,
 )
+from local_library.ingestion.metadata import MetadataHandler
 from local_library.ingestion.base import ContentAcquirer, ContentExtractor, compute_storage_path
 from local_library.ingestion.file import FileAcquirer
 from local_library.ingestion.pdf import PdfExtractor
@@ -75,6 +80,9 @@ class Library:
         self._extractors: list[ContentExtractor] = (
             extractors if extractors is not None else [PdfExtractor(lazy_load=True)]
         )
+
+        # Initialize metadata handler
+        self._metadata_handler = MetadataHandler()
 
         # Ensure directories exist
         ensure_directories()
