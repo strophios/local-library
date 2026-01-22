@@ -87,3 +87,9 @@ class LookupError(LocalLibraryError):
     """Error when looking up records (not found, ambiguous match)."""
 
     pass
+
+
+class MetadataError(LocalLibraryError):
+    """Error during metadata validation or processing."""
+
+    pass
