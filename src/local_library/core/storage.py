@@ -17,7 +17,7 @@ from local_library.core.models import Document, DocumentStatus
 # Schema version for migrations
 SCHEMA_VERSION = 2
 
-SCHEMA = """
+SCHEMA_TABLES = """
 CREATE TABLE IF NOT EXISTS schema_version (
     version INTEGER PRIMARY KEY
 );
@@ -39,7 +39,9 @@ CREATE TABLE IF NOT EXISTS documents (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+"""
 
+SCHEMA_INDEXES = """
 CREATE INDEX IF NOT EXISTS idx_documents_content_hash ON documents(content_hash);
 CREATE INDEX IF NOT EXISTS idx_documents_original_path ON documents(original_path);
 CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
@@ -47,6 +49,8 @@ CREATE INDEX IF NOT EXISTS idx_documents_citekey ON documents(citekey);
 CREATE INDEX IF NOT EXISTS idx_documents_title ON documents(title);
 CREATE INDEX IF NOT EXISTS idx_documents_issued_date ON documents(issued_date);
 """
+
+SCHEMA = SCHEMA_TABLES + SCHEMA_INDEXES
 
 
 def get_connection(db_path: Path) -> sqlite3.Connection:
@@ -98,17 +102,22 @@ def init_schema(conn: sqlite3.Connection) -> None:
     Args:
         conn: Database connection
     """
-    conn.executescript(SCHEMA)
+    # Step 1: Create tables only (without indexes on new columns)
+    conn.executescript(SCHEMA_TABLES)
 
-    # Check/set schema version
+    # Step 2: Check current schema version
     cursor = conn.execute("SELECT version FROM schema_version LIMIT 1")
     row = cursor.fetchone()
     if row is None:
+        # New database: set to current schema version
         conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
         conn.commit()
     elif row["version"] < SCHEMA_VERSION:
-        # Need to migrate
+        # Step 3: Run migration before creating indexes (migration adds columns)
         migrate_schema(conn)
+
+    # Step 4: Create indexes (now all columns exist, whether from tables or migration)
+    conn.executescript(SCHEMA_INDEXES)
 
 
 def migrate_schema(conn: sqlite3.Connection) -> None:
@@ -467,6 +476,9 @@ def update_document_metadata(
 ) -> Document:
     """Update a document's metadata fields.
 
+    Supports partial updates: only specified fields are updated,
+    unspecified fields (None) are preserved.
+
     Args:
         conn: Database connection
         doc_id: Document UUID
@@ -489,11 +501,17 @@ def update_document_metadata(
     csl_json_str = json.dumps(csl_json) if csl_json else None
 
     try:
+        # Use COALESCE to preserve existing values when parameters are None
+        # COALESCE(?, column) returns the first non-NULL value
         cursor = conn.execute(
             """
             UPDATE documents
-            SET citekey = ?, csl_json = ?, title = ?, authors = ?,
-                issued_date = ?, updated_at = ?
+            SET citekey = COALESCE(?, citekey),
+                csl_json = COALESCE(?, csl_json),
+                title = COALESCE(?, title),
+                authors = COALESCE(?, authors),
+                issued_date = COALESCE(?, issued_date),
+                updated_at = ?
             WHERE id = ?
             """,
             (
