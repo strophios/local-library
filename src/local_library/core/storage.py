@@ -14,7 +14,7 @@ from local_library.core.errors import ErrorCode, LookupError, StorageError
 from local_library.core.models import Document, DocumentStatus
 
 # Schema version for migrations
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS documents (
     status TEXT NOT NULL DEFAULT 'pending',
     citekey TEXT,
     csl_json TEXT,
+    title TEXT,
+    authors TEXT,
+    issued_date TEXT,
     error_message TEXT,
     error_code TEXT,
     created_at TEXT NOT NULL,
@@ -40,6 +43,8 @@ CREATE INDEX IF NOT EXISTS idx_documents_content_hash ON documents(content_hash)
 CREATE INDEX IF NOT EXISTS idx_documents_original_path ON documents(original_path);
 CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
 CREATE INDEX IF NOT EXISTS idx_documents_citekey ON documents(citekey);
+CREATE INDEX IF NOT EXISTS idx_documents_title ON documents(title);
+CREATE INDEX IF NOT EXISTS idx_documents_issued_date ON documents(issued_date);
 """
 
 
@@ -87,6 +92,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
 
     Creates tables and indexes if they don't exist.
     Safe to call multiple times (idempotent).
+    Automatically migrates from older schema versions.
 
     Args:
         conn: Database connection
@@ -98,6 +104,53 @@ def init_schema(conn: sqlite3.Connection) -> None:
     row = cursor.fetchone()
     if row is None:
         conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
+        conn.commit()
+    elif row["version"] < SCHEMA_VERSION:
+        # Need to migrate
+        migrate_schema(conn)
+
+
+def migrate_schema(conn: sqlite3.Connection) -> None:
+    """Migrate database schema to current version.
+
+    Handles incremental migrations from older schema versions.
+
+    Args:
+        conn: Database connection
+    """
+    cursor = conn.execute("SELECT version FROM schema_version LIMIT 1")
+    row = cursor.fetchone()
+    current_version = row["version"] if row else 0
+
+    if current_version < 2:
+        # Migration to v2: Add indexed metadata columns
+        _migrate_v1_to_v2(conn)
+
+    # Update schema version
+    conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
+    conn.commit()
+
+
+def _migrate_v1_to_v2(conn: sqlite3.Connection) -> None:
+    """Migrate from schema v1 to v2: add indexed metadata columns.
+
+    Adds title, authors, issued_date columns and their indexes.
+    """
+    # Check if columns already exist (idempotent)
+    cursor = conn.execute("PRAGMA table_info(documents)")
+    existing_columns = {row["name"] for row in cursor.fetchall()}
+
+    if "title" not in existing_columns:
+        conn.execute("ALTER TABLE documents ADD COLUMN title TEXT")
+    if "authors" not in existing_columns:
+        conn.execute("ALTER TABLE documents ADD COLUMN authors TEXT")
+    if "issued_date" not in existing_columns:
+        conn.execute("ALTER TABLE documents ADD COLUMN issued_date TEXT")
+
+    # Create indexes (IF NOT EXISTS makes this idempotent)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_title ON documents(title)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_documents_issued_date ON documents(issued_date)")
+
     conn.commit()
 
 
