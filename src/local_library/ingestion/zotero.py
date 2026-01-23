@@ -675,6 +675,14 @@ class ZoteroReader:
             ZoteroError: If zotero_dir doesn't exist (ZOTERO_DIR_NOT_FOUND)
             ZoteroError: If library.json doesn't exist (ZOTERO_LIBRARY_JSON_NOT_FOUND)
         """
+        # Check zotero_dir exists first (before trying to access library.json)
+        if not zotero_dir.exists():
+            raise ZoteroError(
+                message=f"zotero directory not found: {zotero_dir}",
+                code=ErrorCode.ZOTERO_DIR_NOT_FOUND,
+                details={"path": str(zotero_dir)},
+            )
+
         self._zotero_dir = zotero_dir
 
         # Determine library.json path

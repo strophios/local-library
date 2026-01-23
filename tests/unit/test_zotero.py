@@ -1228,3 +1228,102 @@ class TestZoteroReader:
 
         # Connections should be closed
         assert len(reader._db_manager._connections) == 0
+
+    def test_raises_for_missing_zotero_dir(self, temp_dir: Path) -> None:
+        """ZoteroReader should raise error if Zotero directory missing."""
+        missing_dir = temp_dir / "nonexistent"
+
+        with pytest.raises(ZoteroError) as exc_info:
+            ZoteroReader(missing_dir)
+
+        assert exc_info.value.code == ErrorCode.ZOTERO_DIR_NOT_FOUND
+
+    def test_raises_for_missing_library_json(self, temp_dir: Path) -> None:
+        """ZoteroReader should raise error if library.json missing."""
+        zotero_dir = temp_dir / "ZoteroNoJson"
+        zotero_dir.mkdir()
+
+        # Create databases but no library.json
+        (zotero_dir / "zotero.sqlite").touch()
+        (zotero_dir / "better-bibtex.sqlite").touch()
+
+        with pytest.raises(ZoteroError) as exc_info:
+            ZoteroReader(zotero_dir)
+
+        assert exc_info.value.code == ErrorCode.ZOTERO_LIBRARY_JSON_NOT_FOUND
+
+    def test_get_item_raises_for_unknown_citekey(
+        self, complete_zotero_dir: Path
+    ) -> None:
+        """get_item should raise error for citekey not in library.json."""
+        with ZoteroReader(complete_zotero_dir) as reader:
+            with pytest.raises(ZoteroError) as exc_info:
+                reader.get_item("nonexistent")
+
+        assert exc_info.value.code == ErrorCode.ZOTERO_ITEM_NOT_FOUND
+
+    def test_get_item_raises_for_citekey_not_in_bbt(
+        self, complete_zotero_dir: Path
+    ) -> None:
+        """get_item should raise error if citekey in JSON but not BBT database."""
+        # Add citekey to library.json but not to BBT database
+        library_json_path = complete_zotero_dir / "library.json"
+        with open(library_json_path) as f:
+            items = json.load(f)
+        items.append({
+            "id": "orphan2023",
+            "citation-key": "orphan2023",
+            "type": "article",
+            "title": "Orphaned Item",
+        })
+        with open(library_json_path, "w") as f:
+            json.dump(items, f)
+
+        with ZoteroReader(complete_zotero_dir) as reader:
+            # Force reload to pick up new item
+            reader.refresh()
+
+            with pytest.raises(ZoteroError) as exc_info:
+                reader.get_item("orphan2023")
+
+        assert exc_info.value.code == ErrorCode.ZOTERO_CITEKEY_NOT_IN_BBT
+
+    def test_custom_library_json_path(self, complete_zotero_dir: Path) -> None:
+        """ZoteroReader should accept custom library.json path."""
+        # Move library.json to custom location
+        custom_path = complete_zotero_dir / "exports" / "my_library.json"
+        custom_path.parent.mkdir()
+        (complete_zotero_dir / "library.json").rename(custom_path)
+
+        with ZoteroReader(
+            complete_zotero_dir, library_json_path=custom_path
+        ) as reader:
+            assert reader.has_item("smith2023") is True
+
+    def test_refresh_reloads_library_json(
+        self, complete_zotero_dir: Path
+    ) -> None:
+        """refresh should reload library.json from disk."""
+        with ZoteroReader(complete_zotero_dir) as reader:
+            # Initial state
+            assert reader.has_item("new2024") is False
+
+            # Add new item to library.json
+            library_json_path = complete_zotero_dir / "library.json"
+            with open(library_json_path) as f:
+                items = json.load(f)
+            items.append({
+                "id": "new2024",
+                "citation-key": "new2024",
+                "type": "article",
+                "title": "New Item",
+            })
+            with open(library_json_path, "w") as f:
+                json.dump(items, f)
+
+            # Still cached - not visible
+            assert reader.has_item("new2024") is False
+
+            # After refresh - visible
+            reader.refresh()
+            assert reader.has_item("new2024") is True
