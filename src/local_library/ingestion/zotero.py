@@ -257,9 +257,7 @@ class DatabaseManager:
 
         # Create managed temp dir if not provided
         if self._managed_temp_dir is None:
-            self._managed_temp_dir = tempfile.TemporaryDirectory(
-                prefix="zotero_reader_"
-            )
+            self._managed_temp_dir = tempfile.TemporaryDirectory(prefix="zotero_reader_")
         return Path(self._managed_temp_dir.name)
 
     def _copy_to_temp(self, db_path: Path) -> Path:
@@ -511,9 +509,7 @@ class AttachmentResolver:
         self._zotero_dir = zotero_dir
         self._storage_dir = zotero_dir / "storage"
 
-    def _resolve_storage_path(
-        self, path_value: str, attachment_key: str
-    ) -> Path | None:
+    def _resolve_storage_path(self, path_value: str, attachment_key: str) -> Path | None:
         """Resolve a Zotero storage path to filesystem path.
 
         Args:
@@ -527,9 +523,7 @@ class AttachmentResolver:
             # Imported file: storage:filename.pdf
             filename = path_value[len(self.STORAGE_PREFIX) :]
             return self._storage_dir / attachment_key / filename
-        elif path_value.startswith("/") or (
-            len(path_value) > 1 and path_value[1] == ":"
-        ):
+        elif path_value.startswith("/") or (len(path_value) > 1 and path_value[1] == ":"):
             # Absolute path (Unix or Windows)
             return Path(path_value)
         else:

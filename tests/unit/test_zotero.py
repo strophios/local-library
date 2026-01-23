@@ -430,9 +430,7 @@ class TestDatabaseManager:
 
         return zotero_path
 
-    def test_get_connection_returns_readonly_connection(
-        self, zotero_dir: Path
-    ) -> None:
+    def test_get_connection_returns_readonly_connection(self, zotero_dir: Path) -> None:
         """get_connection should return a readable connection."""
         manager = DatabaseManager(zotero_dir)
 
@@ -525,6 +523,7 @@ class TestDatabaseManager:
     def test_copy_if_locked_creates_temp_copy(self, zotero_dir: Path) -> None:
         """Manager should copy database to temp if locked."""
         from unittest.mock import patch
+
         manager = DatabaseManager(zotero_dir)
 
         # Mock _open_readonly to raise LOCKED error on first call (original),
@@ -566,6 +565,7 @@ class TestDatabaseManager:
     def test_custom_temp_dir_is_used(self, zotero_dir: Path, temp_dir: Path) -> None:
         """Manager should use provided temp_dir for copies."""
         from unittest.mock import patch
+
         custom_temp = temp_dir / "custom_temp"
         custom_temp.mkdir()
         manager = DatabaseManager(zotero_dir, temp_dir=custom_temp)
@@ -607,6 +607,7 @@ class TestDatabaseManager:
     def test_close_removes_temp_copies(self, zotero_dir: Path) -> None:
         """close should remove temporary database copies."""
         from unittest.mock import patch
+
         manager = DatabaseManager(zotero_dir)
 
         # Mock _open_readonly to raise LOCKED error on first call
@@ -708,26 +709,20 @@ class TestBbtKeyMapper:
         assert item_id == 200
         assert item_key == "JONES002"
 
-    def test_has_citekey_returns_true_for_existing(
-        self, db_manager: DatabaseManager
-    ) -> None:
+    def test_has_citekey_returns_true_for_existing(self, db_manager: DatabaseManager) -> None:
         """has_citekey should return True for existing citekey."""
         mapper = BbtKeyMapper(db_manager)
 
         assert mapper.has_citekey("smith2023") is True
         assert mapper.has_citekey("jones2022") is True
 
-    def test_has_citekey_returns_false_for_missing(
-        self, db_manager: DatabaseManager
-    ) -> None:
+    def test_has_citekey_returns_false_for_missing(self, db_manager: DatabaseManager) -> None:
         """has_citekey should return False for missing citekey."""
         mapper = BbtKeyMapper(db_manager)
 
         assert mapper.has_citekey("nonexistent") is False
 
-    def test_lookup_raises_for_missing_citekey(
-        self, db_manager: DatabaseManager
-    ) -> None:
+    def test_lookup_raises_for_missing_citekey(self, db_manager: DatabaseManager) -> None:
         """lookup should raise error for citekey not in BBT."""
         mapper = BbtKeyMapper(db_manager)
 
@@ -737,9 +732,7 @@ class TestBbtKeyMapper:
         assert exc_info.value.code == ErrorCode.ZOTERO_CITEKEY_NOT_IN_BBT
         assert "nonexistent" in str(exc_info.value)
 
-    def test_lookup_raises_for_orphaned_bbt_entry(
-        self, temp_dir: Path
-    ) -> None:
+    def test_lookup_raises_for_orphaned_bbt_entry(self, temp_dir: Path) -> None:
         """lookup should raise if BBT entry points to missing Zotero item."""
         # Create Zotero dir with mismatched data
         zotero_path = temp_dir / "ZoteroOrphan"
@@ -865,9 +858,7 @@ class TestAttachmentResolver:
         return zotero_path
 
     @pytest.fixture
-    def db_manager_attachments(
-        self, zotero_dir_with_attachments: Path
-    ) -> DatabaseManager:
+    def db_manager_attachments(self, zotero_dir_with_attachments: Path) -> DatabaseManager:
         """Provide DatabaseManager for attachment tests."""
         manager = DatabaseManager(zotero_dir_with_attachments)
         yield manager
@@ -877,9 +868,7 @@ class TestAttachmentResolver:
         self, db_manager_attachments: DatabaseManager, zotero_dir_with_attachments: Path
     ) -> None:
         """get_attachments should return all attachments for an item."""
-        resolver = AttachmentResolver(
-            db_manager_attachments, zotero_dir_with_attachments
-        )
+        resolver = AttachmentResolver(db_manager_attachments, zotero_dir_with_attachments)
 
         attachments = resolver.get_attachments(100)
 
@@ -889,16 +878,12 @@ class TestAttachmentResolver:
         self, db_manager_attachments: DatabaseManager, zotero_dir_with_attachments: Path
     ) -> None:
         """Attachment paths should be resolved to filesystem paths."""
-        resolver = AttachmentResolver(
-            db_manager_attachments, zotero_dir_with_attachments
-        )
+        resolver = AttachmentResolver(db_manager_attachments, zotero_dir_with_attachments)
 
         attachments = resolver.get_attachments(100)
         pdf_attachment = next(a for a in attachments if a.filename == "paper.pdf")
 
-        expected_path = (
-            zotero_dir_with_attachments / "storage" / "ATTACH01" / "paper.pdf"
-        )
+        expected_path = zotero_dir_with_attachments / "storage" / "ATTACH01" / "paper.pdf"
         assert pdf_attachment.path == expected_path
         assert pdf_attachment.path.exists()
 
@@ -906,9 +891,7 @@ class TestAttachmentResolver:
         self, db_manager_attachments: DatabaseManager, zotero_dir_with_attachments: Path
     ) -> None:
         """Attachment objects should have correct metadata."""
-        resolver = AttachmentResolver(
-            db_manager_attachments, zotero_dir_with_attachments
-        )
+        resolver = AttachmentResolver(db_manager_attachments, zotero_dir_with_attachments)
 
         attachments = resolver.get_attachments(100)
         pdf_attachment = next(a for a in attachments if a.filename == "paper.pdf")
@@ -921,9 +904,7 @@ class TestAttachmentResolver:
         self, db_manager_attachments: DatabaseManager, zotero_dir_with_attachments: Path
     ) -> None:
         """get_attachments should return empty tuple for items without attachments."""
-        resolver = AttachmentResolver(
-            db_manager_attachments, zotero_dir_with_attachments
-        )
+        resolver = AttachmentResolver(db_manager_attachments, zotero_dir_with_attachments)
 
         # Item 999 doesn't exist
         attachments = resolver.get_attachments(999)
@@ -934,9 +915,7 @@ class TestAttachmentResolver:
         self, db_manager_attachments: DatabaseManager, zotero_dir_with_attachments: Path
     ) -> None:
         """get_attachments should return immutable tuple."""
-        resolver = AttachmentResolver(
-            db_manager_attachments, zotero_dir_with_attachments
-        )
+        resolver = AttachmentResolver(db_manager_attachments, zotero_dir_with_attachments)
 
         attachments = resolver.get_attachments(100)
 
@@ -946,9 +925,7 @@ class TestAttachmentResolver:
         self, db_manager_attachments: DatabaseManager, zotero_dir_with_attachments: Path
     ) -> None:
         """get_attachments_with_validation should pass when files exist."""
-        resolver = AttachmentResolver(
-            db_manager_attachments, zotero_dir_with_attachments
-        )
+        resolver = AttachmentResolver(db_manager_attachments, zotero_dir_with_attachments)
 
         # Should not raise
         attachments = resolver.get_attachments_with_validation(100, require_exists=True)
@@ -959,14 +936,10 @@ class TestAttachmentResolver:
         self, db_manager_attachments: DatabaseManager, zotero_dir_with_attachments: Path
     ) -> None:
         """get_attachments_with_validation should raise for missing files."""
-        resolver = AttachmentResolver(
-            db_manager_attachments, zotero_dir_with_attachments
-        )
+        resolver = AttachmentResolver(db_manager_attachments, zotero_dir_with_attachments)
 
         # Delete one attachment file
-        missing_file = (
-            zotero_dir_with_attachments / "storage" / "ATTACH01" / "paper.pdf"
-        )
+        missing_file = zotero_dir_with_attachments / "storage" / "ATTACH01" / "paper.pdf"
         missing_file.unlink()
 
         with pytest.raises(ZoteroError) as exc_info:
@@ -1042,9 +1015,7 @@ class TestAttachmentResolver:
             )
         """)
         # Attachment with NULL path (e.g., embedded note or URL-only)
-        conn.execute(
-            "INSERT INTO itemAttachments VALUES (301, 300, 2, 'text/html', NULL)"
-        )
+        conn.execute("INSERT INTO itemAttachments VALUES (301, 300, 2, 'text/html', NULL)")
         conn.commit()
         conn.close()
 
@@ -1085,14 +1056,10 @@ class TestAttachmentResolver:
         att_dir.mkdir()
         (att_dir / "unknown.dat").write_bytes(b"unknown content")
 
-        resolver = AttachmentResolver(
-            db_manager_attachments, zotero_dir_with_attachments
-        )
+        resolver = AttachmentResolver(db_manager_attachments, zotero_dir_with_attachments)
 
         attachments = resolver.get_attachments(100)
-        unknown_att = next(
-            (a for a in attachments if a.filename == "unknown.dat"), None
-        )
+        unknown_att = next((a for a in attachments if a.filename == "unknown.dat"), None)
 
         assert unknown_att is not None
         assert unknown_att.content_type == "application/octet-stream"
@@ -1164,9 +1131,7 @@ class TestZoteroReader:
 
         return zotero_path
 
-    def test_get_item_returns_complete_item(
-        self, complete_zotero_dir: Path
-    ) -> None:
+    def test_get_item_returns_complete_item(self, complete_zotero_dir: Path) -> None:
         """get_item should return ZoteroItem with metadata and attachments."""
         with ZoteroReader(complete_zotero_dir) as reader:
             item = reader.get_item("smith2023")
@@ -1178,9 +1143,7 @@ class TestZoteroReader:
         assert len(item.attachments) == 1
         assert item.attachments[0].content_type == "application/pdf"
 
-    def test_get_item_without_attachments(
-        self, complete_zotero_dir: Path
-    ) -> None:
+    def test_get_item_without_attachments(self, complete_zotero_dir: Path) -> None:
         """get_item should work for items without attachments."""
         with ZoteroReader(complete_zotero_dir) as reader:
             item = reader.get_item("jones2022")
@@ -1189,33 +1152,25 @@ class TestZoteroReader:
         assert item.csl_json["title"] == "A Sample Book"
         assert len(item.attachments) == 0
 
-    def test_list_citekeys_returns_all(
-        self, complete_zotero_dir: Path
-    ) -> None:
+    def test_list_citekeys_returns_all(self, complete_zotero_dir: Path) -> None:
         """list_citekeys should yield all citekeys from library.json."""
         with ZoteroReader(complete_zotero_dir) as reader:
             keys = set(reader.list_citekeys())
 
         assert keys == {"smith2023", "jones2022"}
 
-    def test_has_item_returns_true_for_existing(
-        self, complete_zotero_dir: Path
-    ) -> None:
+    def test_has_item_returns_true_for_existing(self, complete_zotero_dir: Path) -> None:
         """has_item should return True for existing citekeys."""
         with ZoteroReader(complete_zotero_dir) as reader:
             assert reader.has_item("smith2023") is True
             assert reader.has_item("jones2022") is True
 
-    def test_has_item_returns_false_for_missing(
-        self, complete_zotero_dir: Path
-    ) -> None:
+    def test_has_item_returns_false_for_missing(self, complete_zotero_dir: Path) -> None:
         """has_item should return False for missing citekeys."""
         with ZoteroReader(complete_zotero_dir) as reader:
             assert reader.has_item("nonexistent") is False
 
-    def test_context_manager_cleanup(
-        self, complete_zotero_dir: Path
-    ) -> None:
+    def test_context_manager_cleanup(self, complete_zotero_dir: Path) -> None:
         """Context manager should close connections on exit."""
         reader = ZoteroReader(complete_zotero_dir)
         reader.__enter__()
@@ -1252,9 +1207,7 @@ class TestZoteroReader:
 
         assert exc_info.value.code == ErrorCode.ZOTERO_LIBRARY_JSON_NOT_FOUND
 
-    def test_get_item_raises_for_unknown_citekey(
-        self, complete_zotero_dir: Path
-    ) -> None:
+    def test_get_item_raises_for_unknown_citekey(self, complete_zotero_dir: Path) -> None:
         """get_item should raise error for citekey not in library.json."""
         with ZoteroReader(complete_zotero_dir) as reader:
             with pytest.raises(ZoteroError) as exc_info:
@@ -1262,20 +1215,20 @@ class TestZoteroReader:
 
         assert exc_info.value.code == ErrorCode.ZOTERO_ITEM_NOT_FOUND
 
-    def test_get_item_raises_for_citekey_not_in_bbt(
-        self, complete_zotero_dir: Path
-    ) -> None:
+    def test_get_item_raises_for_citekey_not_in_bbt(self, complete_zotero_dir: Path) -> None:
         """get_item should raise error if citekey in JSON but not BBT database."""
         # Add citekey to library.json but not to BBT database
         library_json_path = complete_zotero_dir / "library.json"
         with open(library_json_path) as f:
             items = json.load(f)
-        items.append({
-            "id": "orphan2023",
-            "citation-key": "orphan2023",
-            "type": "article",
-            "title": "Orphaned Item",
-        })
+        items.append(
+            {
+                "id": "orphan2023",
+                "citation-key": "orphan2023",
+                "type": "article",
+                "title": "Orphaned Item",
+            }
+        )
         with open(library_json_path, "w") as f:
             json.dump(items, f)
 
@@ -1295,14 +1248,10 @@ class TestZoteroReader:
         custom_path.parent.mkdir()
         (complete_zotero_dir / "library.json").rename(custom_path)
 
-        with ZoteroReader(
-            complete_zotero_dir, library_json_path=custom_path
-        ) as reader:
+        with ZoteroReader(complete_zotero_dir, library_json_path=custom_path) as reader:
             assert reader.has_item("smith2023") is True
 
-    def test_refresh_reloads_library_json(
-        self, complete_zotero_dir: Path
-    ) -> None:
+    def test_refresh_reloads_library_json(self, complete_zotero_dir: Path) -> None:
         """refresh should reload library.json from disk."""
         with ZoteroReader(complete_zotero_dir) as reader:
             # Initial state
@@ -1312,12 +1261,14 @@ class TestZoteroReader:
             library_json_path = complete_zotero_dir / "library.json"
             with open(library_json_path) as f:
                 items = json.load(f)
-            items.append({
-                "id": "new2024",
-                "citation-key": "new2024",
-                "type": "article",
-                "title": "New Item",
-            })
+            items.append(
+                {
+                    "id": "new2024",
+                    "citation-key": "new2024",
+                    "type": "article",
+                    "title": "New Item",
+                }
+            )
             with open(library_json_path, "w") as f:
                 json.dump(items, f)
 
