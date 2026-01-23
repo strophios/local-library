@@ -282,3 +282,25 @@ def ground_truth(
         pytest.skip("No ground truth could be loaded from Zotero")
 
     return truth
+
+
+def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
+    """Generate test parameters from golden set PDFs.
+
+    Populates parametrized tests with (pdf_path, citekey) tuples from
+    the golden set directory. This allows individual test reports per PDF.
+    """
+    if "pdf_path" in metafunc.fixturenames and "citekey" in metafunc.fixturenames:
+        # Discover PDFs directly (can't use fixture in hook)
+        if not GOLDEN_SET_DIR.exists():
+            return
+
+        pdfs = sorted(GOLDEN_SET_DIR.glob("*.pdf"))
+        params = [(pdf, _extract_citekey_from_filename(pdf.name)) for pdf in pdfs]
+
+        # Use citekey as test ID for readable output
+        metafunc.parametrize(
+            ("pdf_path", "citekey"),
+            params,
+            ids=[citekey for _, citekey in params],
+        )
