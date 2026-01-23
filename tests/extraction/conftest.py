@@ -530,6 +530,19 @@ def _extract_citekey_from_filename(filename: str) -> str:
 
 
 @pytest.fixture(scope="session")
+def golden_set_manifest() -> dict[str, ManifestEntry]:
+    """Load manifest for golden set enrichment.
+
+    Returns empty dict if manifest doesn't exist. Tests should
+    handle missing manifest entries gracefully.
+
+    Returns:
+        Dict mapping citekey to ManifestEntry
+    """
+    return load_manifest()
+
+
+@pytest.fixture(scope="session")
 def golden_set_pdfs() -> list[tuple[Path, str]]:
     """Discover all PDFs in golden_set directory with their citekeys.
 
