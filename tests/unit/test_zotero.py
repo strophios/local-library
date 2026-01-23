@@ -497,3 +497,128 @@ class TestDatabaseManager:
             assert row["itemID"] == 1
         finally:
             manager.close()
+
+    def test_raises_error_for_missing_directory(self, temp_dir: Path) -> None:
+        """Manager should raise error if Zotero directory doesn't exist."""
+        missing_dir = temp_dir / "nonexistent"
+
+        with pytest.raises(ZoteroError) as exc_info:
+            DatabaseManager(missing_dir)
+
+        assert exc_info.value.code == ErrorCode.ZOTERO_DIR_NOT_FOUND
+
+    def test_raises_error_for_missing_database(self, zotero_dir: Path) -> None:
+        """Manager should raise error if requested database doesn't exist."""
+        manager = DatabaseManager(zotero_dir)
+
+        try:
+            with pytest.raises(ZoteroError) as exc_info:
+                manager.get_connection("nonexistent.sqlite")
+
+            assert exc_info.value.code == ErrorCode.ZOTERO_DATABASE_NOT_FOUND
+        finally:
+            manager.close()
+
+    def test_copy_if_locked_creates_temp_copy(self, zotero_dir: Path) -> None:
+        """Manager should copy database to temp if locked."""
+        from unittest.mock import patch
+        manager = DatabaseManager(zotero_dir)
+
+        # Mock _open_readonly to raise LOCKED error on first call (original),
+        # then succeed on second call (temp copy)
+        call_count = 0
+        original_open_readonly = manager._open_readonly
+
+        def mock_open_readonly(db_path):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1 and "zotero.sqlite" in str(db_path) and "zotero_reader_" not in str(db_path):
+                # First call to original database - simulate locked
+                raise ZoteroError(
+                    message=f"database is locked: {db_path}",
+                    code=ErrorCode.ZOTERO_DATABASE_LOCKED,
+                    details={"path": str(db_path)},
+                )
+            # Second call or other databases - use real implementation
+            return original_open_readonly(db_path)
+
+        with patch.object(manager, "_open_readonly", side_effect=mock_open_readonly):
+            conn = manager.get_connection("zotero.sqlite")
+
+            # Temp copy should have been created
+            assert len(manager._temp_copies) == 1
+
+            # Should be able to read from copy
+            cursor = conn.execute("SELECT itemID FROM items")
+            rows = cursor.fetchall()
+            assert len(rows) == 1
+
+        manager.close()
+
+    def test_custom_temp_dir_is_used(self, zotero_dir: Path, temp_dir: Path) -> None:
+        """Manager should use provided temp_dir for copies."""
+        from unittest.mock import patch
+        custom_temp = temp_dir / "custom_temp"
+        custom_temp.mkdir()
+        manager = DatabaseManager(zotero_dir, temp_dir=custom_temp)
+
+        # Mock _open_readonly to raise LOCKED error on first call
+        call_count = 0
+        original_open_readonly = manager._open_readonly
+
+        def mock_open_readonly(db_path):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1 and "zotero.sqlite" in str(db_path) and str(custom_temp) not in str(db_path):
+                # First call to original database - simulate locked
+                raise ZoteroError(
+                    message=f"database is locked: {db_path}",
+                    code=ErrorCode.ZOTERO_DATABASE_LOCKED,
+                    details={"path": str(db_path)},
+                )
+            # Second call (temp copy) - use real implementation
+            return original_open_readonly(db_path)
+
+        with patch.object(manager, "_open_readonly", side_effect=mock_open_readonly):
+            _ = manager.get_connection("zotero.sqlite")
+
+            # Check copy is in custom temp dir
+            assert len(manager._temp_copies) == 1
+            assert manager._temp_copies[0].parent == custom_temp
+
+            # Verify it's in the custom temp directory
+            assert manager._temp_copies[0].exists()
+
+        manager.close()
+
+    def test_close_removes_temp_copies(self, zotero_dir: Path) -> None:
+        """close should remove temporary database copies."""
+        from unittest.mock import patch
+        manager = DatabaseManager(zotero_dir)
+
+        # Mock _open_readonly to raise LOCKED error on first call
+        call_count = 0
+        original_open_readonly = manager._open_readonly
+
+        def mock_open_readonly(db_path):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1 and "zotero.sqlite" in str(db_path) and "zotero_reader_" not in str(db_path):
+                # First call to original database - simulate locked
+                raise ZoteroError(
+                    message=f"database is locked: {db_path}",
+                    code=ErrorCode.ZOTERO_DATABASE_LOCKED,
+                    details={"path": str(db_path)},
+                )
+            # Second call (temp copy) - use real implementation
+            return original_open_readonly(db_path)
+
+        with patch.object(manager, "_open_readonly", side_effect=mock_open_readonly):
+            _ = manager.get_connection("zotero.sqlite")
+            temp_path = manager._temp_copies[0]
+            assert temp_path.exists()
+
+            manager.close()
+
+            # Temp copy should be removed
+            assert not temp_path.exists()
