@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Optional manifest for golden set enrichment. Tests work without this file.",
+  "documents": {},
+  "categories": {
+    "academic": "Academic papers with standard formatting",
+    "technical": "Technical documentation and reports",
+    "historical": "Older documents that may have OCR challenges",
+    "multilingual": "Documents with non-English content"
+  }
+}
