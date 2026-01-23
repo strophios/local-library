@@ -21,6 +21,12 @@ from typing import Any
 
 from local_library.core.errors import ErrorCode, ZoteroError
 
+__all__ = [
+    "ZoteroAttachment",
+    "ZoteroItem",
+    "ZoteroReader",
+]
+
 
 @dataclass(frozen=True)
 class ZoteroAttachment:
@@ -626,3 +632,148 @@ class AttachmentResolver:
                     )
 
         return attachments
+
+
+class ZoteroReader:
+    """Read-only access to Zotero library data.
+
+    Coordinates three data sources to provide complete item data:
+    - library.json (CSL-JSON export from Better BibTeX) for metadata
+    - better-bibtex.sqlite for citekey-to-itemID mapping
+    - zotero.sqlite for attachment paths
+
+    Usage:
+        with ZoteroReader(zotero_dir) as reader:
+            for citekey in reader.list_citekeys():
+                item = reader.get_item(citekey)
+                print(f"{citekey}: {item.csl_json.get('title')}")
+                for att in item.pdf_attachments():
+                    print(f"  - {att.path}")
+
+    The reader serves as a data source for Library.add() rather than
+    implementing ContentAcquirer. Future batch import will iterate
+    list_citekeys() and call Library.add() for each.
+    """
+
+    def __init__(
+        self,
+        zotero_dir: Path,
+        library_json_path: Path | None = None,
+        temp_dir: Path | None = None,
+    ) -> None:
+        """Initialize Zotero reader.
+
+        Args:
+            zotero_dir: Path to Zotero profile directory containing databases
+                        and storage/ folder
+            library_json_path: Path to Better BibTeX CSL-JSON export.
+                              Defaults to zotero_dir/library.json
+            temp_dir: Directory for temporary database copies when locked.
+                     Uses system temp if None.
+
+        Raises:
+            ZoteroError: If zotero_dir doesn't exist (ZOTERO_DIR_NOT_FOUND)
+            ZoteroError: If library.json doesn't exist (ZOTERO_LIBRARY_JSON_NOT_FOUND)
+        """
+        self._zotero_dir = zotero_dir
+
+        # Determine library.json path
+        if library_json_path is None:
+            library_json_path = zotero_dir / "library.json"
+        self._library_json_path = library_json_path
+
+        # Initialize components
+        self._json_parser = LibraryJsonParser(library_json_path)
+        self._db_manager = DatabaseManager(zotero_dir, temp_dir=temp_dir)
+        self._key_mapper = BbtKeyMapper(self._db_manager)
+        self._attachment_resolver = AttachmentResolver(self._db_manager, zotero_dir)
+
+    def get_item(self, citekey: str) -> ZoteroItem:
+        """Get complete item data for a citekey.
+
+        Combines CSL-JSON metadata with resolved attachment paths.
+
+        Args:
+            citekey: Better BibTeX citation key
+
+        Returns:
+            ZoteroItem with metadata and attachments
+
+        Raises:
+            ZoteroError: If citekey not found in library.json (ZOTERO_ITEM_NOT_FOUND)
+            ZoteroError: If citekey not in BBT database (ZOTERO_CITEKEY_NOT_IN_BBT)
+        """
+        # Get metadata from library.json
+        metadata = self._json_parser.get_metadata(citekey)
+        if metadata is None:
+            raise ZoteroError(
+                message=f"item not found in library.json: {citekey}",
+                code=ErrorCode.ZOTERO_ITEM_NOT_FOUND,
+                details={"citekey": citekey, "source": "library.json"},
+            )
+
+        # Resolve citekey to Zotero IDs
+        item_id, item_key = self._key_mapper.lookup(citekey)
+
+        # Get attachments
+        attachments = self._attachment_resolver.get_attachments(item_id)
+
+        return ZoteroItem(
+            citekey=citekey,
+            csl_json=metadata,
+            attachments=attachments,
+            zotero_key=item_key,
+            item_id=item_id,
+        )
+
+    def list_citekeys(self) -> Iterator[str]:
+        """Iterate over all citekeys in the library.
+
+        Yields citekeys from library.json. Note that some citekeys
+        may not be in the BBT database if the export is newer than
+        the database.
+
+        Yields:
+            Citation keys in arbitrary order
+        """
+        return self._json_parser.list_citekeys()
+
+    def has_item(self, citekey: str) -> bool:
+        """Check if a citekey exists in the library.
+
+        Checks library.json only (fast). Does not verify BBT database
+        or attachments.
+
+        Args:
+            citekey: Better BibTeX citation key
+
+        Returns:
+            True if citekey exists in library.json
+        """
+        return self._json_parser.has_citekey(citekey)
+
+    def refresh(self) -> None:
+        """Reload library.json from disk.
+
+        Call this after Better BibTeX has re-exported the library.
+        Database connections are not affected (they reflect current
+        database state on each query).
+        """
+        self._json_parser.refresh()
+
+    def close(self) -> None:
+        """Close all database connections and clean up resources."""
+        self._db_manager.close()
+
+    def __enter__(self) -> "ZoteroReader":
+        """Enter context manager."""
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> None:
+        """Exit context manager, closing resources."""
+        self.close()
