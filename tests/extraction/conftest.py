@@ -114,6 +114,102 @@ def _extract_year(issued: dict[str, Any] | None) -> str | None:
     return str(year)
 
 
+def title_similarity(extracted: str, expected: str) -> float:
+    """Calculate similarity between extracted and expected titles.
+
+    Uses SequenceMatcher ratio for normalized string comparison.
+    Both strings are normalized (stripped, lowercased) before comparison.
+
+    Args:
+        extracted: Title extracted from document
+        expected: Ground truth title from Zotero
+
+    Returns:
+        Similarity score from 0.0 (no match) to 1.0 (exact match)
+    """
+    from difflib import SequenceMatcher
+
+    # Normalize both for comparison
+    norm_extracted = _normalize_title(extracted)
+    norm_expected = _normalize_title(expected)
+
+    if not norm_expected:
+        # Can't compare against empty ground truth
+        return 0.0
+
+    if not norm_extracted:
+        # No extracted title means no match
+        return 0.0
+
+    return SequenceMatcher(None, norm_extracted, norm_expected).ratio()
+
+
+def author_match_score(
+    extracted: tuple[str, ...],
+    expected: tuple[str, ...],
+) -> float:
+    """Calculate match score between extracted and expected authors.
+
+    Uses set-based Jaccard similarity: |intersection| / |union|.
+    Authors are normalized to "Family, Given" format and compared
+    case-insensitively.
+
+    Args:
+        extracted: Tuple of extracted author names
+        expected: Tuple of ground truth author names
+
+    Returns:
+        Match score from 0.0 (no overlap) to 1.0 (perfect match)
+    """
+    if not expected:
+        # Can't compare against empty ground truth
+        return 0.0 if extracted else 1.0  # Empty expected, empty extracted = match
+
+    if not extracted:
+        # No extracted authors means no match
+        return 0.0
+
+    # Normalize to lowercase for comparison
+    extracted_set = {a.lower() for a in extracted}
+    expected_set = {a.lower() for a in expected}
+
+    intersection = extracted_set & expected_set
+    union = extracted_set | expected_set
+
+    if not union:
+        return 1.0  # Both empty after normalization
+
+    return len(intersection) / len(union)
+
+
+def year_matches(extracted: str | None, expected: str | None) -> bool:
+    """Check if extracted year matches expected year.
+
+    Simple exact string match after normalization. Both values are
+    converted to strings and stripped before comparison.
+
+    Args:
+        extracted: Year extracted from document (or None)
+        expected: Ground truth year from Zotero (or None)
+
+    Returns:
+        True if years match, False otherwise
+    """
+    if expected is None:
+        # No ground truth year - can't verify
+        return True  # Assume match if we have nothing to compare against
+
+    if extracted is None:
+        # Expected a year but didn't extract one
+        return False
+
+    # Normalize to strings and strip
+    extracted_str = str(extracted).strip()
+    expected_str = str(expected).strip()
+
+    return extracted_str == expected_str
+
+
 @dataclass(frozen=True)
 class GroundTruth:
     """Ground truth metadata for a single document.
@@ -158,6 +254,60 @@ class GroundTruth:
             title=title,
             authors=authors,
             issued_year=issued_year,
+        )
+
+
+@dataclass
+class DocumentResult:
+    """Captures extraction and comparison results for a single document.
+
+    Used for diagnostic reporting to show which documents passed/failed
+    and why. Not frozen because results are built incrementally.
+
+    Attributes:
+        citekey: Document identifier
+        extraction_success: Whether extraction completed without error
+        extraction_error: Error message if extraction failed
+        title_similarity: Score from title comparison (0.0-1.0)
+        author_score: Score from author comparison (0.0-1.0)
+        year_match: Whether year matched ground truth
+        extracted_title: Title found in extracted text (if any)
+        extracted_authors: Authors found in extracted text (if any)
+        extracted_year: Year found in extracted text (if any)
+    """
+
+    citekey: str
+    extraction_success: bool = False
+    extraction_error: str | None = None
+    title_similarity: float = 0.0
+    author_score: float = 0.0
+    year_match: bool = False
+    extracted_title: str | None = None
+    extracted_authors: tuple[str, ...] | None = None
+    extracted_year: str | None = None
+
+    def passed_title(self, threshold: float = 0.9) -> bool:
+        """Check if title similarity meets threshold."""
+        return self.extraction_success and self.title_similarity >= threshold
+
+    def passed_authors(self, threshold: float = 0.7) -> bool:
+        """Check if author score meets threshold."""
+        return self.extraction_success and self.author_score >= threshold
+
+    def passed_year(self) -> bool:
+        """Check if year matched."""
+        return self.extraction_success and self.year_match
+
+    def passed_all(
+        self,
+        title_threshold: float = 0.9,
+        author_threshold: float = 0.7,
+    ) -> bool:
+        """Check if all metadata fields passed their thresholds."""
+        return (
+            self.passed_title(title_threshold)
+            and self.passed_authors(author_threshold)
+            and self.passed_year()
         )
 
 
