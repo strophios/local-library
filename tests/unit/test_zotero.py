@@ -532,7 +532,12 @@ class TestDatabaseManager:
         def mock_open_readonly(db_path):
             nonlocal call_count
             call_count += 1
-            if call_count == 1 and "zotero.sqlite" in str(db_path) and "zotero_reader_" not in str(db_path):
+            is_original = (
+                call_count == 1
+                and "zotero.sqlite" in str(db_path)
+                and "zotero_reader_" not in str(db_path)
+            )
+            if is_original:
                 # First call to original database - simulate locked
                 raise ZoteroError(
                     message=f"database is locked: {db_path}",
@@ -569,7 +574,12 @@ class TestDatabaseManager:
         def mock_open_readonly(db_path):
             nonlocal call_count
             call_count += 1
-            if call_count == 1 and "zotero.sqlite" in str(db_path) and str(custom_temp) not in str(db_path):
+            is_original = (
+                call_count == 1
+                and "zotero.sqlite" in str(db_path)
+                and str(custom_temp) not in str(db_path)
+            )
+            if is_original:
                 # First call to original database - simulate locked
                 raise ZoteroError(
                     message=f"database is locked: {db_path}",
@@ -603,7 +613,12 @@ class TestDatabaseManager:
         def mock_open_readonly(db_path):
             nonlocal call_count
             call_count += 1
-            if call_count == 1 and "zotero.sqlite" in str(db_path) and "zotero_reader_" not in str(db_path):
+            is_original = (
+                call_count == 1
+                and "zotero.sqlite" in str(db_path)
+                and "zotero_reader_" not in str(db_path)
+            )
+            if is_original:
                 # First call to original database - simulate locked
                 raise ZoteroError(
                     message=f"database is locked: {db_path}",
