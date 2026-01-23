@@ -36,8 +36,6 @@ class TestExtractionQuality:
     @pytest.fixture(autouse=True)
     def _setup_extraction_cache(
         self,
-        golden_set_pdfs: list[tuple[Path, str]],
-        pdf_extractor: PdfExtractor,
         request: pytest.FixtureRequest,
     ) -> None:
         """Cache extraction results to avoid re-extracting for each test.

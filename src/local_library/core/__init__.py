@@ -1,5 +1,12 @@
 """Core module - models, storage, orchestration."""
 
+# NOTE: Library is lazy-loaded via __getattr__ to prevent circular imports.
+# core.library imports ingestion.pdf.PdfExtractor, which imports core.errors.
+# If core.__init__ eagerly imports Library, the cycle is:
+# core.__init__ -> core.library -> ingestion.pdf -> core.errors
+# But core.errors doesn't depend on Library, so lazy import breaks the cycle.
+
+# Eager imports (safe; no circular dependencies)
 from local_library.core.errors import (
     AcquisitionError,
     ErrorCode,
@@ -10,7 +17,6 @@ from local_library.core.errors import (
     QualityError,
     StorageError,
 )
-from local_library.core.library import Library
 from local_library.core.models import (
     AcquisitionResult,
     AddResult,
@@ -31,6 +37,16 @@ from local_library.core.storage import (
     transaction,
     update_document_status,
 )
+
+
+def __getattr__(name: str) -> object:
+    """Lazy-load core submodules to avoid circular imports."""
+    if name == "Library":
+        from local_library.core.library import Library
+
+        return Library
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     # Errors
