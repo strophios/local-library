@@ -340,3 +340,68 @@ class TestLibraryJsonParser:
         # Access triggers reload
         _ = parser.get_metadata("smith2023")
         assert parser._index is not None
+
+    def test_raises_error_for_missing_file(self, temp_dir: Path) -> None:
+        """Parser should raise error if library.json doesn't exist."""
+        missing_path = temp_dir / "nonexistent.json"
+
+        with pytest.raises(ZoteroError) as exc_info:
+            LibraryJsonParser(missing_path)
+
+        assert exc_info.value.code == ErrorCode.ZOTERO_LIBRARY_JSON_NOT_FOUND
+        assert "nonexistent.json" in str(exc_info.value)
+
+    def test_raises_error_for_invalid_json(self, temp_dir: Path) -> None:
+        """Parser should raise error for malformed JSON."""
+        bad_json = temp_dir / "bad.json"
+        bad_json.write_text("{ not valid json }", encoding="utf-8")
+
+        parser = LibraryJsonParser(bad_json)
+
+        with pytest.raises(ZoteroError) as exc_info:
+            parser.get_metadata("anything")
+
+        assert exc_info.value.code == ErrorCode.ZOTERO_LIBRARY_JSON_PARSE_ERROR
+
+    def test_raises_error_for_non_array_json(self, temp_dir: Path) -> None:
+        """Parser should raise error if JSON is not an array."""
+        object_json = temp_dir / "object.json"
+        object_json.write_text('{"not": "an array"}', encoding="utf-8")
+
+        parser = LibraryJsonParser(object_json)
+
+        with pytest.raises(ZoteroError) as exc_info:
+            parser.get_metadata("anything")
+
+        assert exc_info.value.code == ErrorCode.ZOTERO_LIBRARY_JSON_PARSE_ERROR
+        assert "array" in str(exc_info.value).lower()
+
+    def test_handles_items_without_citation_key(self, temp_dir: Path) -> None:
+        """Parser should use 'id' field if 'citation-key' is missing."""
+        items = [
+            {
+                "id": "fallback-id",
+                "type": "article",
+                "title": "No Citation Key",
+            }
+        ]
+        json_file = temp_dir / "library.json"
+        with open(json_file, "w", encoding="utf-8") as f:
+            json.dump(items, f)
+
+        parser = LibraryJsonParser(json_file)
+
+        # Should find by 'id' field
+        metadata = parser.get_metadata("fallback-id")
+        assert metadata is not None
+        assert metadata["title"] == "No Citation Key"
+
+    def test_handles_empty_library(self, temp_dir: Path) -> None:
+        """Parser should handle empty library array."""
+        empty_json = temp_dir / "empty.json"
+        empty_json.write_text("[]", encoding="utf-8")
+
+        parser = LibraryJsonParser(empty_json)
+
+        assert parser.has_citekey("anything") is False
+        assert list(parser.list_citekeys()) == []
