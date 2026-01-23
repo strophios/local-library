@@ -27,6 +27,94 @@ if TYPE_CHECKING:
 # Golden set directory relative to this file
 GOLDEN_SET_DIR = Path(__file__).parent / "golden_set"
 
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Add --run-extraction flag to pytest CLI.
+
+    Extraction tests are slow (PDF processing with Marker) and resource-intensive.
+    They are skipped by default unless this flag is passed.
+
+    Usage:
+        pytest tests/                      # Skips extraction tests
+        pytest tests/ --run-extraction     # Includes extraction tests
+        pytest tests/extraction/ --run-extraction  # Run only extraction tests
+    """
+    parser.addoption(
+        "--run-extraction",
+        action="store_true",
+        default=False,
+        help="Run extraction tests (slow, resource-intensive PDF processing)",
+    )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Register the extraction marker with description."""
+    config.addinivalue_line(
+        "markers",
+        "extraction: PDF extraction tests (skipped by default, use --run-extraction)",
+    )
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config,
+    items: list[pytest.Item],
+) -> None:
+    """Skip extraction tests unless --run-extraction flag is passed.
+
+    Also applies manifest-based markers (categories, xfail for expected failures).
+    """
+    run_extraction = config.getoption("--run-extraction")
+
+    # Skip extraction tests if flag not set
+    if not run_extraction:
+        skip_extraction = pytest.mark.skip(
+            reason="Extraction tests skipped by default. Use --run-extraction to run."
+        )
+        for item in items:
+            if "extraction" in item.keywords:
+                item.add_marker(skip_extraction)
+
+    # Apply manifest-based markers (categories, xfail)
+    _apply_manifest_markers(items)
+
+
+def _apply_manifest_markers(items: list[pytest.Item]) -> None:
+    """Apply manifest-based markers to test items.
+
+    For each test item:
+    - Adds category marker if document has category in manifest
+    - Adds xfail marker if test field is in expected_failures
+
+    This enables filtering by category: pytest -m "academic"
+    And proper handling of known failures: expected failures show as xfail.
+    """
+    manifest = load_manifest()
+
+    for item in items:
+        # Extract citekey from test parameters if present
+        citekey = None
+        if hasattr(item, "callspec") and "citekey" in item.callspec.params:  # type: ignore[attr-defined]
+            citekey = item.callspec.params["citekey"]  # type: ignore[attr-defined]
+
+        if citekey is None or citekey not in manifest:
+            continue
+
+        entry = manifest[citekey]
+
+        # Add category marker if present
+        if entry.category:
+            item.add_marker(pytest.mark.extraction_category(entry.category))
+
+        # Add xfail marker if this test's field is in expected_failures
+        test_name = item.name.lower()
+        for failure_field in entry.expected_failures:
+            if failure_field in test_name:
+                reason = f"Known failure: {failure_field} extraction for {citekey}"
+                if entry.notes:
+                    reason += f" ({entry.notes})"
+                item.add_marker(pytest.mark.xfail(reason=reason))
+
+
 # Exported for type checking in test files
 __all__ = [
     "AccuracyReport",
@@ -710,46 +798,6 @@ def record_extraction_result(
 
     report.add_result(result)
     return result
-
-
-def pytest_collection_modifyitems(
-    config: pytest.Config,  # noqa: ARG001
-    items: list[pytest.Item],
-) -> None:
-    """Add markers based on manifest categories and expected failures.
-
-    For each test item:
-    - Adds category marker if document has category in manifest
-    - Adds xfail marker if test field is in expected_failures
-
-    This enables filtering by category: pytest -m "academic"
-    And proper handling of known failures: expected failures show as xfail.
-    """
-    manifest = load_manifest()
-
-    for item in items:
-        # Extract citekey from test parameters if present
-        citekey = None
-        if hasattr(item, "callspec") and "citekey" in item.callspec.params:  # type: ignore[attr-defined]
-            citekey = item.callspec.params["citekey"]  # type: ignore[attr-defined]
-
-        if citekey is None or citekey not in manifest:
-            continue
-
-        entry = manifest[citekey]
-
-        # Add category marker if present
-        if entry.category:
-            item.add_marker(pytest.mark.extraction_category(entry.category))
-
-        # Add xfail marker if this test's field is in expected_failures
-        test_name = item.name.lower()
-        for failure_field in entry.expected_failures:
-            if failure_field in test_name:
-                reason = f"Known failure: {failure_field} extraction for {citekey}"
-                if entry.notes:
-                    reason += f" ({entry.notes})"
-                item.add_marker(pytest.mark.xfail(reason=reason))
 
 
 def pytest_terminal_summary(
