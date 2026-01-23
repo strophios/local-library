@@ -55,9 +55,9 @@ class TestExtractionQuality:
         pdf_extractor: PdfExtractor,
     ) -> ExtractionResult:
         """Get cached extraction result or extract if not cached."""
-        if citekey not in self._extraction_cache:
-            self._extraction_cache[citekey] = pdf_extractor.extract(pdf_path)
-        return self._extraction_cache[citekey]
+        if citekey not in self._extraction_cache:  # type: ignore[attr-defined]
+            self._extraction_cache[citekey] = pdf_extractor.extract(pdf_path)  # type: ignore[attr-defined]
+        return self._extraction_cache[citekey]  # type: ignore[attr-defined]
 
     def test_extraction_character_count(
         self,

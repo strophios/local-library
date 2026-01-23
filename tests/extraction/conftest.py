@@ -12,7 +12,7 @@ Provides:
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -344,11 +344,7 @@ class AccuracyReport:
     title_passes: int = 0
     author_passes: int = 0
     year_passes: int = 0
-    results: list[DocumentResult] = None  # type: ignore[assignment]
-
-    def __post_init__(self) -> None:
-        if self.results is None:
-            self.results = []
+    results: list[DocumentResult] = field(default_factory=list)
 
     @property
     def extraction_rate(self) -> float:
@@ -734,8 +730,8 @@ def pytest_collection_modifyitems(
     for item in items:
         # Extract citekey from test parameters if present
         citekey = None
-        if hasattr(item, "callspec") and "citekey" in item.callspec.params:
-            citekey = item.callspec.params["citekey"]
+        if hasattr(item, "callspec") and "citekey" in item.callspec.params:  # type: ignore[attr-defined]
+            citekey = item.callspec.params["citekey"]  # type: ignore[attr-defined]
 
         if citekey is None or citekey not in manifest:
             continue
@@ -748,9 +744,9 @@ def pytest_collection_modifyitems(
 
         # Add xfail marker if this test's field is in expected_failures
         test_name = item.name.lower()
-        for field in entry.expected_failures:
-            if field in test_name:
-                reason = f"Known failure: {field} extraction for {citekey}"
+        for failure_field in entry.expected_failures:
+            if failure_field in test_name:
+                reason = f"Known failure: {failure_field} extraction for {citekey}"
                 if entry.notes:
                     reason += f" ({entry.notes})"
                 item.add_marker(pytest.mark.xfail(reason=reason))
