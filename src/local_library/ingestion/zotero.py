@@ -390,3 +390,90 @@ class DatabaseManager:
             except Exception:
                 pass
             self._managed_temp_dir = None
+
+
+class BbtKeyMapper:
+    """Maps Better BibTeX citekeys to Zotero item identifiers.
+
+    Queries the Better BibTeX SQLite database to resolve citekeys to
+    Zotero's internal itemID and stable itemKey.
+
+    The BBT database schema includes a `citationkey` table that maps
+    itemID to citationKey. We join with Zotero's items table to get
+    the stable itemKey (8-character alphanumeric key).
+    """
+
+    def __init__(self, db_manager: DatabaseManager) -> None:
+        """Initialize with database manager.
+
+        Args:
+            db_manager: DatabaseManager providing access to BBT and Zotero databases
+        """
+        self._db_manager = db_manager
+
+    def lookup(self, citekey: str) -> tuple[int, str]:
+        """Resolve a citekey to Zotero item identifiers.
+
+        Args:
+            citekey: Better BibTeX citation key
+
+        Returns:
+            Tuple of (itemID, itemKey) where:
+            - itemID: Zotero's internal numeric ID (used for database joins)
+            - itemKey: Zotero's 8-character stable key (used for storage paths)
+
+        Raises:
+            ZoteroError: If citekey not found (ZOTERO_CITEKEY_NOT_IN_BBT)
+        """
+        bbt_conn = self._db_manager.get_connection(DatabaseManager.BBT_DB)
+        zotero_conn = self._db_manager.get_connection(DatabaseManager.ZOTERO_DB)
+
+        # Query BBT for itemID
+        cursor = bbt_conn.execute(
+            "SELECT itemID FROM citationkey WHERE citationKey = ?",
+            (citekey,),
+        )
+        row = cursor.fetchone()
+
+        if row is None:
+            raise ZoteroError(
+                message=f"citekey not found in Better BibTeX: {citekey}",
+                code=ErrorCode.ZOTERO_CITEKEY_NOT_IN_BBT,
+                details={"citekey": citekey},
+            )
+
+        item_id = row["itemID"]
+
+        # Query Zotero for itemKey
+        cursor = zotero_conn.execute(
+            "SELECT key FROM items WHERE itemID = ?",
+            (item_id,),
+        )
+        row = cursor.fetchone()
+
+        if row is None:
+            # This shouldn't happen if BBT and Zotero are in sync
+            raise ZoteroError(
+                message=f"itemID {item_id} from BBT not found in Zotero database",
+                code=ErrorCode.ZOTERO_ITEM_NOT_FOUND,
+                details={"citekey": citekey, "item_id": item_id},
+            )
+
+        return (item_id, row["key"])
+
+    def has_citekey(self, citekey: str) -> bool:
+        """Check if a citekey exists in Better BibTeX.
+
+        Args:
+            citekey: Better BibTeX citation key
+
+        Returns:
+            True if citekey exists, False otherwise
+        """
+        bbt_conn = self._db_manager.get_connection(DatabaseManager.BBT_DB)
+
+        cursor = bbt_conn.execute(
+            "SELECT 1 FROM citationkey WHERE citationKey = ? LIMIT 1",
+            (citekey,),
+        )
+        return cursor.fetchone() is not None
