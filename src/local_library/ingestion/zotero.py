@@ -10,10 +10,11 @@ Provides read-only access to Zotero library data by coordinating:
 # Reason: JSON file I/O cannot be separated from parsing logic without
 # introducing unnecessary complexity. The class encapsulates file access.
 
+import json
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterator
-import json
+from typing import Any
 
 from local_library.core.errors import ErrorCode, ZoteroError
 

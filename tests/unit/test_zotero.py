@@ -254,9 +254,7 @@ class TestLibraryJsonParser:
         ]
 
     @pytest.fixture
-    def library_json_file(
-        self, temp_dir: Path, sample_library_json: list[dict]
-    ) -> Path:
+    def library_json_file(self, temp_dir: Path, sample_library_json: list[dict]) -> Path:
         """Create a temporary library.json file."""
         path = temp_dir / "library.json"
         with open(path, "w", encoding="utf-8") as f:
@@ -275,9 +273,7 @@ class TestLibraryJsonParser:
         assert metadata["title"] == "A Sample Paper"
         assert metadata["type"] == "article-journal"
 
-    def test_get_metadata_returns_none_for_unknown(
-        self, library_json_file: Path
-    ) -> None:
+    def test_get_metadata_returns_none_for_unknown(self, library_json_file: Path) -> None:
         """get_metadata should return None for unknown citekey."""
         parser = LibraryJsonParser(library_json_file)
 
@@ -285,26 +281,20 @@ class TestLibraryJsonParser:
 
         assert metadata is None
 
-    def test_has_citekey_returns_true_for_existing(
-        self, library_json_file: Path
-    ) -> None:
+    def test_has_citekey_returns_true_for_existing(self, library_json_file: Path) -> None:
         """has_citekey should return True for existing citekey."""
         parser = LibraryJsonParser(library_json_file)
 
         assert parser.has_citekey("smith2023") is True
         assert parser.has_citekey("jones2022") is True
 
-    def test_has_citekey_returns_false_for_missing(
-        self, library_json_file: Path
-    ) -> None:
+    def test_has_citekey_returns_false_for_missing(self, library_json_file: Path) -> None:
         """has_citekey should return False for missing citekey."""
         parser = LibraryJsonParser(library_json_file)
 
         assert parser.has_citekey("nonexistent") is False
 
-    def test_list_citekeys_yields_all_keys(
-        self, library_json_file: Path
-    ) -> None:
+    def test_list_citekeys_yields_all_keys(self, library_json_file: Path) -> None:
         """list_citekeys should yield all citekeys."""
         parser = LibraryJsonParser(library_json_file)
 
