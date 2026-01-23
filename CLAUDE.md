@@ -52,15 +52,16 @@ Each document record contains:
 
 Development follows a **pipeline-first, layer-complete** approach documented in `build_philosophy.md`. The key insight: pipeline stages (vertical data flow) and architectural layers (horizontal concerns) are orthogonal. Build along the pipeline for rapid feedback; implement layers completely when touched.
 
-### Current Status: M1-M3a Complete (Record Storage + Extraction + Metadata Validation)
+### Current Status: M1-M4 Complete (Record Storage + Extraction + Metadata + Zotero Reader)
 
-Milestones M1 (record storage), M2 (PDF extraction), and M3a (metadata validation) are implemented. The system can:
+Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), and M4 (Zotero read-only access) are implemented. The system can:
 - Ingest local PDF files via CLI (`local-library add <path>`)
 - Accept explicit CSL-JSON metadata (`--metadata <file>`)
 - Extract text to markdown via Marker
 - Validate metadata against CSL-JSON schema and generate citekeys
 - Store documents in content-addressable storage with SQLite metadata
 - Query, list, and delete documents via CLI
+- Read items, attachments, and metadata from Zotero library (via database or BetterBibTeX JSON export)
 
 **Implemented:**
 - PDF ingestion from local filesystem
@@ -69,8 +70,9 @@ Milestones M1 (record storage), M2 (PDF extraction), and M3a (metadata validatio
 - Indexed field extraction (title, authors, issued_date)
 - SQLite storage with content-addressable file layout
 - CLI interface (add, list, show, delete, --metadata flag)
+- Zotero read-only access: ZoteroReader facade with database and JSON export backends, BetterBibTeX citekey mapping, attachment resolution
 
-**Next milestones:** M4 (Zotero read-only access), M3b (text-based metadata extraction), M5 (embedding pipeline). Note: M4 is implemented before M3b because Zotero provides ground-truth metadata for testing extraction accuracy. See `build_plan.md` for full details.
+**Next milestones:** M3b (text-based metadata extraction), M5 (embedding pipeline). See `build_plan.md` for full details.
 
 **Deferred to later phases:** M3c (API metadata enrichment), web content ingestion, Zotero sync, citation tooling, auto-tagging, note management, Neovim plugin. See `future_roadmap.md` for full details.
 
@@ -171,7 +173,8 @@ src/local_library/
 │   ├── base.py          # Protocols: ContentAcquirer, ContentExtractor
 │   ├── file.py          # FileAcquirer implementation
 │   ├── pdf.py           # PdfExtractor (Marker wrapper)
-│   └── metadata.py      # MetadataHandler (CSL-JSON validation, citekey generation)
+│   ├── metadata.py      # MetadataHandler (CSL-JSON validation, citekey generation)
+│   └── zotero.py        # ZoteroReader facade (database + JSON backends, citekey mapping)
 └── cli/                 # CLI interface (Typer/Rich)
     ├── main.py          # Entry point, command registration
     ├── add.py           # Add command
