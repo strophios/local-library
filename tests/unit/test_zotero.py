@@ -940,3 +940,158 @@ class TestAttachmentResolver:
         attachments = resolver.get_attachments(100)
 
         assert isinstance(attachments, tuple)
+
+    def test_validation_passes_when_files_exist(
+        self, db_manager_attachments: DatabaseManager, zotero_dir_with_attachments: Path
+    ) -> None:
+        """get_attachments_with_validation should pass when files exist."""
+        resolver = AttachmentResolver(
+            db_manager_attachments, zotero_dir_with_attachments
+        )
+
+        # Should not raise
+        attachments = resolver.get_attachments_with_validation(100, require_exists=True)
+
+        assert len(attachments) == 3
+
+    def test_validation_raises_for_missing_file(
+        self, db_manager_attachments: DatabaseManager, zotero_dir_with_attachments: Path
+    ) -> None:
+        """get_attachments_with_validation should raise for missing files."""
+        resolver = AttachmentResolver(
+            db_manager_attachments, zotero_dir_with_attachments
+        )
+
+        # Delete one attachment file
+        missing_file = (
+            zotero_dir_with_attachments / "storage" / "ATTACH01" / "paper.pdf"
+        )
+        missing_file.unlink()
+
+        with pytest.raises(ZoteroError) as exc_info:
+            resolver.get_attachments_with_validation(100, require_exists=True)
+
+        assert exc_info.value.code == ErrorCode.ZOTERO_ATTACHMENT_MISSING
+
+    def test_handles_linked_file_paths(self, temp_dir: Path) -> None:
+        """Resolver should handle absolute paths for linked files."""
+        zotero_path = temp_dir / "ZoteroLinked"
+        zotero_path.mkdir()
+        (zotero_path / "storage").mkdir()
+
+        # Create external linked file
+        external_file = temp_dir / "external" / "linked.pdf"
+        external_file.parent.mkdir()
+        external_file.write_bytes(b"%PDF linked")
+
+        # Database with linked file attachment
+        zotero_db = zotero_path / "zotero.sqlite"
+        conn = sqlite3.connect(zotero_db)
+        conn.execute("CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT)")
+        conn.execute("INSERT INTO items VALUES (200, 'PARENT02')")
+        conn.execute("INSERT INTO items VALUES (201, 'LINKED01')")
+        conn.execute("""
+            CREATE TABLE itemAttachments (
+                itemID INTEGER, sourceItemID INTEGER,
+                linkMode INTEGER, contentType TEXT, path TEXT
+            )
+        """)
+        # linkMode=1 for linked file, path is absolute
+        conn.execute(
+            "INSERT INTO itemAttachments VALUES (201, 200, 1, 'application/pdf', ?)",
+            (str(external_file),),
+        )
+        conn.commit()
+        conn.close()
+
+        # Empty BBT database
+        bbt_db = zotero_path / "better-bibtex.sqlite"
+        conn = sqlite3.connect(bbt_db)
+        conn.execute("CREATE TABLE citationkey (itemID INTEGER, citationKey TEXT)")
+        conn.commit()
+        conn.close()
+
+        manager = DatabaseManager(zotero_path)
+        resolver = AttachmentResolver(manager, zotero_path)
+
+        try:
+            attachments = resolver.get_attachments(200)
+
+            assert len(attachments) == 1
+            assert attachments[0].path == external_file
+            assert attachments[0].link_mode == 1
+        finally:
+            manager.close()
+
+    def test_skips_null_paths(self, temp_dir: Path) -> None:
+        """Resolver should skip attachments with NULL paths."""
+        zotero_path = temp_dir / "ZoteroNull"
+        zotero_path.mkdir()
+        (zotero_path / "storage").mkdir()
+
+        zotero_db = zotero_path / "zotero.sqlite"
+        conn = sqlite3.connect(zotero_db)
+        conn.execute("CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT)")
+        conn.execute("INSERT INTO items VALUES (300, 'PARENT03')")
+        conn.execute("INSERT INTO items VALUES (301, 'NULLATT1')")
+        conn.execute("""
+            CREATE TABLE itemAttachments (
+                itemID INTEGER, sourceItemID INTEGER,
+                linkMode INTEGER, contentType TEXT, path TEXT
+            )
+        """)
+        # Attachment with NULL path (e.g., embedded note or URL-only)
+        conn.execute(
+            "INSERT INTO itemAttachments VALUES (301, 300, 2, 'text/html', NULL)"
+        )
+        conn.commit()
+        conn.close()
+
+        bbt_db = zotero_path / "better-bibtex.sqlite"
+        conn = sqlite3.connect(bbt_db)
+        conn.execute("CREATE TABLE citationkey (itemID INTEGER, citationKey TEXT)")
+        conn.commit()
+        conn.close()
+
+        manager = DatabaseManager(zotero_path)
+        resolver = AttachmentResolver(manager, zotero_path)
+
+        try:
+            attachments = resolver.get_attachments(300)
+
+            # NULL path attachment should be skipped
+            assert len(attachments) == 0
+        finally:
+            manager.close()
+
+    def test_handles_null_content_type(
+        self, db_manager_attachments: DatabaseManager, zotero_dir_with_attachments: Path
+    ) -> None:
+        """Resolver should handle NULL contentType with default value."""
+        # Add attachment with NULL contentType
+        zotero_db = zotero_dir_with_attachments / "zotero.sqlite"
+        conn = sqlite3.connect(zotero_db)
+        conn.execute("INSERT INTO items VALUES (104, 'ATTACH04')")
+        conn.execute("""
+            INSERT INTO itemAttachments VALUES
+            (104, 100, 0, NULL, 'storage:unknown.dat')
+        """)
+        conn.commit()
+        conn.close()
+
+        # Create the file
+        att_dir = zotero_dir_with_attachments / "storage" / "ATTACH04"
+        att_dir.mkdir()
+        (att_dir / "unknown.dat").write_bytes(b"unknown content")
+
+        resolver = AttachmentResolver(
+            db_manager_attachments, zotero_dir_with_attachments
+        )
+
+        attachments = resolver.get_attachments(100)
+        unknown_att = next(
+            (a for a in attachments if a.filename == "unknown.dat"), None
+        )
+
+        assert unknown_att is not None
+        assert unknown_att.content_type == "application/octet-stream"
