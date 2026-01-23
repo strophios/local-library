@@ -8,6 +8,7 @@ import pytest
 
 from local_library.core.errors import ErrorCode, ZoteroError
 from local_library.ingestion.zotero import (
+    BbtKeyMapper,
     DatabaseManager,
     LibraryJsonParser,
     ZoteroAttachment,
@@ -637,3 +638,87 @@ class TestDatabaseManager:
 
             # Temp copy should be removed
             assert not temp_path.exists()
+
+
+class TestBbtKeyMapper:
+    """Tests for BbtKeyMapper class."""
+
+    @pytest.fixture
+    def zotero_dir_with_citekeys(self, temp_dir: Path) -> Path:
+        """Create mock Zotero directory with BBT citekey data."""
+        zotero_path = temp_dir / "Zotero"
+        zotero_path.mkdir()
+
+        # Create zotero.sqlite with items table
+        zotero_db = zotero_path / "zotero.sqlite"
+        conn = sqlite3.connect(zotero_db)
+        conn.execute("""
+            CREATE TABLE items (
+                itemID INTEGER PRIMARY KEY,
+                key TEXT NOT NULL
+            )
+        """)
+        conn.execute("INSERT INTO items (itemID, key) VALUES (100, 'SMITH001')")
+        conn.execute("INSERT INTO items (itemID, key) VALUES (200, 'JONES002')")
+        conn.execute("INSERT INTO items (itemID, key) VALUES (300, 'BROWN003')")
+        conn.commit()
+        conn.close()
+
+        # Create better-bibtex.sqlite with citationkey table
+        bbt_db = zotero_path / "better-bibtex.sqlite"
+        conn = sqlite3.connect(bbt_db)
+        conn.execute("""
+            CREATE TABLE citationkey (
+                itemID INTEGER PRIMARY KEY,
+                citationKey TEXT NOT NULL
+            )
+        """)
+        conn.execute("INSERT INTO citationkey VALUES (100, 'smith2023')")
+        conn.execute("INSERT INTO citationkey VALUES (200, 'jones2022')")
+        # Note: itemID 300 has no citekey in BBT
+        conn.commit()
+        conn.close()
+
+        return zotero_path
+
+    @pytest.fixture
+    def db_manager(self, zotero_dir_with_citekeys: Path) -> DatabaseManager:
+        """Provide DatabaseManager for tests."""
+        manager = DatabaseManager(zotero_dir_with_citekeys)
+        yield manager
+        manager.close()
+
+    def test_lookup_returns_item_ids(self, db_manager: DatabaseManager) -> None:
+        """lookup should return (itemID, itemKey) tuple."""
+        mapper = BbtKeyMapper(db_manager)
+
+        item_id, item_key = mapper.lookup("smith2023")
+
+        assert item_id == 100
+        assert item_key == "SMITH001"
+
+    def test_lookup_different_citekey(self, db_manager: DatabaseManager) -> None:
+        """lookup should work for different citekeys."""
+        mapper = BbtKeyMapper(db_manager)
+
+        item_id, item_key = mapper.lookup("jones2022")
+
+        assert item_id == 200
+        assert item_key == "JONES002"
+
+    def test_has_citekey_returns_true_for_existing(
+        self, db_manager: DatabaseManager
+    ) -> None:
+        """has_citekey should return True for existing citekey."""
+        mapper = BbtKeyMapper(db_manager)
+
+        assert mapper.has_citekey("smith2023") is True
+        assert mapper.has_citekey("jones2022") is True
+
+    def test_has_citekey_returns_false_for_missing(
+        self, db_manager: DatabaseManager
+    ) -> None:
+        """has_citekey should return False for missing citekey."""
+        mapper = BbtKeyMapper(db_manager)
+
+        assert mapper.has_citekey("nonexistent") is False
