@@ -1,12 +1,14 @@
-"""Unit tests for Zotero data models and parsers."""
+"""Unit tests for Zotero data models, parsers, and database access."""
 
 import json
+import sqlite3
 from pathlib import Path
 
 import pytest
 
 from local_library.core.errors import ErrorCode, ZoteroError
 from local_library.ingestion.zotero import (
+    DatabaseManager,
     LibraryJsonParser,
     ZoteroAttachment,
     ZoteroItem,
@@ -395,3 +397,103 @@ class TestLibraryJsonParser:
 
         assert parser.has_citekey("anything") is False
         assert list(parser.list_citekeys()) == []
+
+
+class TestDatabaseManager:
+    """Tests for DatabaseManager class."""
+
+    @pytest.fixture
+    def zotero_dir(self, temp_dir: Path) -> Path:
+        """Create a mock Zotero directory with test databases."""
+        # Create directory structure
+        zotero_path = temp_dir / "Zotero"
+        zotero_path.mkdir()
+
+        # Create minimal zotero.sqlite
+        zotero_db = zotero_path / "zotero.sqlite"
+        conn = sqlite3.connect(zotero_db)
+        conn.execute("CREATE TABLE items (itemID INTEGER PRIMARY KEY)")
+        conn.execute("INSERT INTO items (itemID) VALUES (1)")
+        conn.commit()
+        conn.close()
+
+        # Create minimal better-bibtex.sqlite
+        bbt_db = zotero_path / "better-bibtex.sqlite"
+        conn = sqlite3.connect(bbt_db)
+        conn.execute("CREATE TABLE citationkey (itemID INTEGER, citationKey TEXT)")
+        conn.execute("INSERT INTO citationkey VALUES (1, 'smith2023')")
+        conn.commit()
+        conn.close()
+
+        return zotero_path
+
+    def test_get_connection_returns_readonly_connection(
+        self, zotero_dir: Path
+    ) -> None:
+        """get_connection should return a readable connection."""
+        manager = DatabaseManager(zotero_dir)
+
+        try:
+            conn = manager.get_connection("zotero.sqlite")
+
+            # Should be able to read
+            cursor = conn.execute("SELECT itemID FROM items")
+            rows = cursor.fetchall()
+            assert len(rows) == 1
+            assert rows[0]["itemID"] == 1
+        finally:
+            manager.close()
+
+    def test_connection_is_cached(self, zotero_dir: Path) -> None:
+        """get_connection should return cached connection on subsequent calls."""
+        manager = DatabaseManager(zotero_dir)
+
+        try:
+            conn1 = manager.get_connection("zotero.sqlite")
+            conn2 = manager.get_connection("zotero.sqlite")
+
+            assert conn1 is conn2
+        finally:
+            manager.close()
+
+    def test_can_access_both_databases(self, zotero_dir: Path) -> None:
+        """Manager should provide access to both Zotero and BBT databases."""
+        manager = DatabaseManager(zotero_dir)
+
+        try:
+            zotero_conn = manager.get_connection("zotero.sqlite")
+            bbt_conn = manager.get_connection("better-bibtex.sqlite")
+
+            # Verify we can read from both
+            zotero_rows = zotero_conn.execute("SELECT * FROM items").fetchall()
+            bbt_rows = bbt_conn.execute("SELECT * FROM citationkey").fetchall()
+
+            assert len(zotero_rows) == 1
+            assert len(bbt_rows) == 1
+        finally:
+            manager.close()
+
+    def test_close_clears_connections(self, zotero_dir: Path) -> None:
+        """close should clear all cached connections."""
+        manager = DatabaseManager(zotero_dir)
+
+        _ = manager.get_connection("zotero.sqlite")
+        assert len(manager._connections) == 1
+
+        manager.close()
+
+        assert len(manager._connections) == 0
+
+    def test_row_factory_enables_column_access(self, zotero_dir: Path) -> None:
+        """Connections should use Row factory for column name access."""
+        manager = DatabaseManager(zotero_dir)
+
+        try:
+            conn = manager.get_connection("zotero.sqlite")
+            cursor = conn.execute("SELECT itemID FROM items")
+            row = cursor.fetchone()
+
+            # Should be able to access by column name
+            assert row["itemID"] == 1
+        finally:
+            manager.close()
