@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Optional manifest for golden set enrichment. Tests work without this file.",
+  "documents": {
+    "_example_entry": {
+      "category": "academic",
+      "expected_failures": [],
+      "notes": "This is an example entry. Remove underscore prefix for real entries."
+    }
+  },
+  "categories": {
+    "academic": "Academic papers with standard formatting",
+    "technical": "Technical documentation and reports",
+    "historical": "Older documents that may have OCR challenges",
+    "multilingual": "Documents with non-English content",
+    "complex": "Documents with complex layouts (multi-column, tables)"
+  }
+}

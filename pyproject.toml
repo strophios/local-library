@@ -60,4 +60,5 @@ markers = [
     "stage: Full pipeline stage tests",
     "contract: Transition/contract tests",
     "integration: End-to-end integration tests",
+    "extraction: PDF extraction quality and accuracy tests",
 ]

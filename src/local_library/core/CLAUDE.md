@@ -1,6 +1,6 @@
 # Core Domain
 
-Last verified: 2026-01-22
+Last verified: 2026-01-23
 
 ## Purpose
 
@@ -32,6 +32,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 - **Status lifecycle**: PENDING -> READY or FAILED tracks extraction state
 - **Handler injection**: Library accepts `acquirers` and `extractors` lists via constructor (defaults: FileAcquirer, PdfExtractor)
 - **Protocol dispatch**: `_find_acquirer()` and `_find_extractor()` iterate handlers, first `can_handle()` wins
+- **Lazy Library import**: `core.__init__` uses `__getattr__` to defer Library import until first access. Breaks circular dependency: `core.__init__` -> `core.library` -> `ingestion.pdf` -> `core.errors`. Eager imports for models/errors remain since they don't cause cycles.
 - **Citekey collision handling**: `get_unique_citekey()` appends suffixes (a, b, c...) to ensure uniqueness
 
 ## Invariants
@@ -56,3 +57,4 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 - get_documents_by_partial_id() is case-sensitive UUID prefix match
 - storage.py functions require explicit connection parameter (no global state)
 - No matching acquirer raises ACQUISITION_UNSUPPORTED_SOURCE; no matching extractor raises EXTRACTION_UNSUPPORTED_FORMAT
+- `from local_library.core import Library` works but is lazy-loaded; `from local_library.core.library import Library` is direct but may trigger circular import issues if called at module level
