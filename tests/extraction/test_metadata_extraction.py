@@ -68,6 +68,16 @@ def _extraction_implemented() -> bool:
     return bool(result)  # Non-empty dict means implemented
 
 
+# Module-level marker to skip all tests until M3b is implemented.
+# This prevents session-scoped fixtures from being evaluated when extraction
+# is not available, ensuring tests SKIP rather than ERROR.
+pytestmark = pytest.mark.skipif(
+    not _extraction_implemented(),
+    reason="M3b metadata extraction not yet implemented. "
+    "Implement extract_metadata_from_text() to enable these tests.",
+)
+
+
 @pytest.mark.extraction
 class TestMetadataExtraction:
     """Tests for M3b metadata extraction accuracy.
@@ -75,15 +85,6 @@ class TestMetadataExtraction:
     These tests compare extracted metadata against Zotero ground truth.
     Until M3b implements extraction, tests skip with informative messages.
     """
-
-    @pytest.fixture(autouse=True)
-    def _check_extraction_implemented(self) -> None:
-        """Skip all tests if M3b extraction is not yet implemented."""
-        if not _extraction_implemented():
-            pytest.skip(
-                "M3b metadata extraction not yet implemented. "
-                "Implement extract_metadata_from_text() to enable these tests."
-            )
 
     def test_title_accuracy(
         self,
@@ -96,6 +97,10 @@ class TestMetadataExtraction:
 
         Title extraction is the primary metadata signal for identification.
         High accuracy is required for reliable matching.
+
+        Note: Parameters (pdf_path, citekey) are populated by pytest_generate_tests()
+        using the golden set PDFs from tests/extraction/golden_set/.
+        This allows individual test reports for each PDF in the test matrix.
         """
         from tests.extraction.conftest import title_similarity
 
@@ -129,6 +134,10 @@ class TestMetadataExtraction:
 
         Author extraction is more challenging due to varied formats.
         A lower threshold accounts for partial matches and ordering variations.
+
+        Note: Parameters (pdf_path, citekey) are populated by pytest_generate_tests()
+        using the golden set PDFs from tests/extraction/golden_set/.
+        This allows individual test reports for each PDF in the test matrix.
         """
         from tests.extraction.conftest import author_match_score
 
@@ -162,6 +171,10 @@ class TestMetadataExtraction:
 
         Year extraction should be reliable when present in document.
         Missing ground truth years are considered passing.
+
+        Note: Parameters (pdf_path, citekey) are populated by pytest_generate_tests()
+        using the golden set PDFs from tests/extraction/golden_set/.
+        This allows individual test reports for each PDF in the test matrix.
         """
         from tests.extraction.conftest import year_matches
 

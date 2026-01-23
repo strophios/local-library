@@ -28,9 +28,11 @@ GOLDEN_SET_DIR = Path(__file__).parent / "golden_set"
 
 # Exported for type checking in test files
 __all__ = [
+    "AccuracyReport",
     "DocumentResult",
     "GroundTruth",
     "author_match_score",
+    "record_extraction_result",
     "title_similarity",
     "year_matches",
 ]
@@ -320,6 +322,136 @@ class DocumentResult:
         )
 
 
+@dataclass
+class AccuracyReport:
+    """Aggregate accuracy statistics across documents.
+
+    Used for summary reporting at end of test session.
+
+    Attributes:
+        total_documents: Total documents in golden set
+        extraction_successes: Documents that extracted without error
+        title_passes: Documents meeting title threshold
+        author_passes: Documents meeting author threshold
+        year_passes: Documents with matching year
+        results: Individual DocumentResult for each document
+    """
+
+    total_documents: int = 0
+    extraction_successes: int = 0
+    title_passes: int = 0
+    author_passes: int = 0
+    year_passes: int = 0
+    results: list[DocumentResult] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        if self.results is None:
+            self.results = []
+
+    @property
+    def extraction_rate(self) -> float:
+        """Percentage of documents that extracted successfully."""
+        if self.total_documents == 0:
+            return 0.0
+        return self.extraction_successes / self.total_documents
+
+    @property
+    def title_accuracy(self) -> float:
+        """Percentage of documents meeting title threshold."""
+        if self.extraction_successes == 0:
+            return 0.0
+        return self.title_passes / self.extraction_successes
+
+    @property
+    def author_accuracy(self) -> float:
+        """Percentage of documents meeting author threshold."""
+        if self.extraction_successes == 0:
+            return 0.0
+        return self.author_passes / self.extraction_successes
+
+    @property
+    def year_accuracy(self) -> float:
+        """Percentage of documents with matching year."""
+        if self.extraction_successes == 0:
+            return 0.0
+        return self.year_passes / self.extraction_successes
+
+    def add_result(self, result: DocumentResult) -> None:
+        """Add a document result and update counts."""
+        self.results.append(result)
+        self.total_documents += 1
+
+        if result.extraction_success:
+            self.extraction_successes += 1
+            if result.passed_title():
+                self.title_passes += 1
+            if result.passed_authors():
+                self.author_passes += 1
+            if result.passed_year():
+                self.year_passes += 1
+
+    def failed_documents(self) -> list[DocumentResult]:
+        """Return documents that failed any check."""
+        return [r for r in self.results if not r.passed_all()]
+
+    def format_summary(self) -> str:
+        """Format a human-readable summary string."""
+        lines = [
+            "",
+            "=" * 70,
+            "EXTRACTION ACCURACY REPORT",
+            "=" * 70,
+            "",
+            (
+                f"Documents:    {self.extraction_successes}/"
+                f"{self.total_documents} extracted successfully "
+                f"({self.extraction_rate:.0%})"
+            ),
+            "",
+            "Accuracy (of successfully extracted):",
+            (
+                f"  Title:      {self.title_passes}/{self.extraction_successes} "
+                f"({self.title_accuracy:.0%})"
+            ),
+            (
+                f"  Authors:    {self.author_passes}/{self.extraction_successes} "
+                f"({self.author_accuracy:.0%})"
+            ),
+            (
+                f"  Year:       {self.year_passes}/{self.extraction_successes} "
+                f"({self.year_accuracy:.0%})"
+            ),
+        ]
+
+        failures = self.failed_documents()
+        if failures:
+            lines.extend(
+                [
+                    "",
+                    "-" * 70,
+                    f"FAILURES ({len(failures)} documents):",
+                    "-" * 70,
+                ]
+            )
+            for r in failures:
+                lines.append(f"\n  {r.citekey}:")
+                if not r.extraction_success:
+                    lines.append(f"    Extraction failed: {r.extraction_error}")
+                else:
+                    if not r.passed_title():
+                        lines.append(f"    Title: {r.title_similarity:.0%} similarity")
+                        lines.append(f"      Extracted: {r.extracted_title!r}")
+                    if not r.passed_authors():
+                        lines.append(f"    Authors: {r.author_score:.0%} match")
+                        lines.append(f"      Extracted: {r.extracted_authors}")
+                    if not r.passed_year():
+                        lines.append("    Year: mismatch")
+                        lines.append(f"      Extracted: {r.extracted_year!r}")
+
+        lines.extend(["", "=" * 70, ""])
+        return "\n".join(lines)
+
+
 def _extract_citekey_from_filename(filename: str) -> str:
     """Extract citekey from PDF filename.
 
@@ -441,6 +573,91 @@ def ground_truth(
         pytest.skip("No ground truth could be loaded from Zotero")
 
     return truth
+
+
+@pytest.fixture(scope="session")
+def accuracy_report(request: pytest.FixtureRequest) -> AccuracyReport:
+    """Session-scoped accuracy report for collecting results.
+
+    Tests can add DocumentResult instances to this report.
+    The report is printed at end of session via pytest hook.
+
+    Returns:
+        Shared AccuracyReport instance
+    """
+    report = AccuracyReport()
+    # Register with config so hook can access it
+    request.config._accuracy_report = report  # type: ignore[attr-defined]
+    return report
+
+
+def record_extraction_result(
+    report: AccuracyReport,
+    citekey: str,
+    ground_truth: GroundTruth | None,
+    extracted_text: str,
+    extraction_error: str | None = None,
+) -> DocumentResult:
+    """Record extraction result and add to accuracy report.
+
+    Creates a DocumentResult from extraction output and ground truth,
+    computes comparison metrics, and adds to the report.
+
+    Args:
+        report: AccuracyReport to add result to
+        citekey: Document identifier
+        ground_truth: Expected metadata (or None if unavailable)
+        extracted_text: Text extracted from PDF
+        extraction_error: Error message if extraction failed
+
+    Returns:
+        The created DocumentResult
+    """
+    result = DocumentResult(citekey=citekey)
+
+    if extraction_error:
+        result.extraction_success = False
+        result.extraction_error = extraction_error
+        report.add_result(result)
+        return result
+
+    result.extraction_success = True
+
+    # If we have ground truth and M3b extraction is implemented,
+    # we would extract metadata and compare here
+    # For now, just record that extraction succeeded
+
+    if ground_truth is not None:
+        # Placeholder: when M3b implements extract_metadata_from_text,
+        # this will compute actual comparison metrics
+        # For now, just mark as not compared
+        result.title_similarity = 0.0
+        result.author_score = 0.0
+        result.year_match = False
+
+    report.add_result(result)
+    return result
+
+
+def pytest_terminal_summary(
+    terminalreporter: pytest.TerminalReporter,
+    exitstatus: int,  # noqa: ARG001
+    config: pytest.Config,  # noqa: ARG001
+) -> None:
+    """Print accuracy report at end of test session.
+
+    This hook is called after all tests complete. It retrieves the
+    session-scoped accuracy_report and prints the summary.
+    """
+    # Get the accuracy report from the session fixture
+    # This is a bit awkward because hooks don't have direct fixture access
+    # We need to check if any extraction tests ran and collected results
+    if hasattr(terminalreporter.config, "_accuracy_report"):
+        report: AccuracyReport = terminalreporter.config._accuracy_report
+        if report.total_documents > 0:
+            terminalreporter.write_line("")
+            for line in report.format_summary().split("\n"):
+                terminalreporter.write_line(line)
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
