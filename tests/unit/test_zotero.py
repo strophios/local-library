@@ -722,3 +722,59 @@ class TestBbtKeyMapper:
         mapper = BbtKeyMapper(db_manager)
 
         assert mapper.has_citekey("nonexistent") is False
+
+    def test_lookup_raises_for_missing_citekey(
+        self, db_manager: DatabaseManager
+    ) -> None:
+        """lookup should raise error for citekey not in BBT."""
+        mapper = BbtKeyMapper(db_manager)
+
+        with pytest.raises(ZoteroError) as exc_info:
+            mapper.lookup("nonexistent")
+
+        assert exc_info.value.code == ErrorCode.ZOTERO_CITEKEY_NOT_IN_BBT
+        assert "nonexistent" in str(exc_info.value)
+
+    def test_lookup_raises_for_orphaned_bbt_entry(
+        self, temp_dir: Path
+    ) -> None:
+        """lookup should raise if BBT entry points to missing Zotero item."""
+        # Create Zotero dir with mismatched data
+        zotero_path = temp_dir / "ZoteroOrphan"
+        zotero_path.mkdir()
+
+        # Zotero DB without itemID 999
+        zotero_db = zotero_path / "zotero.sqlite"
+        conn = sqlite3.connect(zotero_db)
+        conn.execute("CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT)")
+        conn.execute("INSERT INTO items VALUES (1, 'REAL0001')")
+        conn.commit()
+        conn.close()
+
+        # BBT DB with orphaned reference to itemID 999
+        bbt_db = zotero_path / "better-bibtex.sqlite"
+        conn = sqlite3.connect(bbt_db)
+        conn.execute("CREATE TABLE citationkey (itemID INTEGER, citationKey TEXT)")
+        conn.execute("INSERT INTO citationkey VALUES (999, 'orphan2023')")
+        conn.commit()
+        conn.close()
+
+        manager = DatabaseManager(zotero_path)
+        mapper = BbtKeyMapper(manager)
+
+        try:
+            with pytest.raises(ZoteroError) as exc_info:
+                mapper.lookup("orphan2023")
+
+            assert exc_info.value.code == ErrorCode.ZOTERO_ITEM_NOT_FOUND
+        finally:
+            manager.close()
+
+    def test_lookup_is_case_sensitive(self, db_manager: DatabaseManager) -> None:
+        """Citekey lookup should be case-sensitive."""
+        mapper = BbtKeyMapper(db_manager)
+
+        # smith2023 exists, SMITH2023 does not
+        assert mapper.has_citekey("smith2023") is True
+        assert mapper.has_citekey("SMITH2023") is False
+        assert mapper.has_citekey("Smith2023") is False
