@@ -452,6 +452,71 @@ class AccuracyReport:
         return "\n".join(lines)
 
 
+@dataclass(frozen=True)
+class ManifestEntry:
+    """Enrichment data for a single document from the manifest.
+
+    Attributes:
+        citekey: Document identifier
+        category: Category for filtering (e.g., "academic", "technical")
+        expected_failures: Fields expected to fail (for xfail marking)
+        notes: Human-readable notes about this document
+    """
+
+    citekey: str
+    category: str | None = None
+    expected_failures: tuple[str, ...] = ()
+    notes: str | None = None
+
+    @classmethod
+    def from_dict(cls, citekey: str, data: dict) -> "ManifestEntry":
+        """Create ManifestEntry from manifest dict entry.
+
+        Args:
+            citekey: The document's citation key
+            data: Dict from manifest with category, expected_failures, notes
+
+        Returns:
+            ManifestEntry instance
+        """
+        return cls(
+            citekey=citekey,
+            category=data.get("category"),
+            expected_failures=tuple(data.get("expected_failures", [])),
+            notes=data.get("notes"),
+        )
+
+
+MANIFEST_PATH = Path(__file__).parent / "golden_set_manifest.json"
+
+
+def load_manifest() -> dict[str, ManifestEntry]:
+    """Load optional manifest for golden set enrichment.
+
+    Returns empty dict if manifest doesn't exist or is invalid.
+    Never raises - manifest is optional enrichment.
+
+    Returns:
+        Dict mapping citekey to ManifestEntry
+    """
+    import json
+
+    if not MANIFEST_PATH.exists():
+        return {}
+
+    try:
+        with open(MANIFEST_PATH) as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+    documents = data.get("documents", {})
+    return {
+        citekey: ManifestEntry.from_dict(citekey, entry)
+        for citekey, entry in documents.items()
+    }
+
+
 def _extract_citekey_from_filename(filename: str) -> str:
     """Extract citekey from PDF filename.
 
