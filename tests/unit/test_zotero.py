@@ -1,10 +1,16 @@
-"""Unit tests for Zotero data models."""
+"""Unit tests for Zotero data models and parsers."""
 
+import json
 from pathlib import Path
 
 import pytest
 
-from local_library.ingestion.zotero import ZoteroAttachment, ZoteroItem
+from local_library.core.errors import ErrorCode, ZoteroError
+from local_library.ingestion.zotero import (
+    LibraryJsonParser,
+    ZoteroAttachment,
+    ZoteroItem,
+)
 
 
 class TestZoteroAttachment:
@@ -220,3 +226,117 @@ class TestZoteroItem:
         )
 
         assert item.has_pdf() is False
+
+
+class TestLibraryJsonParser:
+    """Tests for LibraryJsonParser class."""
+
+    @pytest.fixture
+    def sample_library_json(self) -> list[dict]:
+        """Provide sample CSL-JSON library data."""
+        return [
+            {
+                "id": "smith2023",
+                "citation-key": "smith2023",
+                "type": "article-journal",
+                "title": "A Sample Paper",
+                "author": [{"family": "Smith", "given": "John"}],
+                "issued": {"date-parts": [[2023]]},
+            },
+            {
+                "id": "jones2022",
+                "citation-key": "jones2022",
+                "type": "book",
+                "title": "A Sample Book",
+                "author": [{"family": "Jones", "given": "Jane"}],
+                "issued": {"date-parts": [[2022]]},
+            },
+        ]
+
+    @pytest.fixture
+    def library_json_file(
+        self, temp_dir: Path, sample_library_json: list[dict]
+    ) -> Path:
+        """Create a temporary library.json file."""
+        path = temp_dir / "library.json"
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(sample_library_json, f)
+        return path
+
+    def test_get_metadata_returns_csl_json(
+        self, library_json_file: Path, sample_library_json: list[dict]
+    ) -> None:
+        """get_metadata should return CSL-JSON for valid citekey."""
+        parser = LibraryJsonParser(library_json_file)
+
+        metadata = parser.get_metadata("smith2023")
+
+        assert metadata is not None
+        assert metadata["title"] == "A Sample Paper"
+        assert metadata["type"] == "article-journal"
+
+    def test_get_metadata_returns_none_for_unknown(
+        self, library_json_file: Path
+    ) -> None:
+        """get_metadata should return None for unknown citekey."""
+        parser = LibraryJsonParser(library_json_file)
+
+        metadata = parser.get_metadata("nonexistent")
+
+        assert metadata is None
+
+    def test_has_citekey_returns_true_for_existing(
+        self, library_json_file: Path
+    ) -> None:
+        """has_citekey should return True for existing citekey."""
+        parser = LibraryJsonParser(library_json_file)
+
+        assert parser.has_citekey("smith2023") is True
+        assert parser.has_citekey("jones2022") is True
+
+    def test_has_citekey_returns_false_for_missing(
+        self, library_json_file: Path
+    ) -> None:
+        """has_citekey should return False for missing citekey."""
+        parser = LibraryJsonParser(library_json_file)
+
+        assert parser.has_citekey("nonexistent") is False
+
+    def test_list_citekeys_yields_all_keys(
+        self, library_json_file: Path
+    ) -> None:
+        """list_citekeys should yield all citekeys."""
+        parser = LibraryJsonParser(library_json_file)
+
+        keys = set(parser.list_citekeys())
+
+        assert keys == {"smith2023", "jones2022"}
+
+    def test_lazy_loading(self, library_json_file: Path) -> None:
+        """Parser should not load until first access."""
+        parser = LibraryJsonParser(library_json_file)
+
+        # Not loaded yet
+        assert parser._index is None
+
+        # Triggers load
+        _ = parser.get_metadata("smith2023")
+
+        # Now loaded
+        assert parser._index is not None
+
+    def test_refresh_clears_cache(self, library_json_file: Path) -> None:
+        """refresh should clear the cache for reload on next access."""
+        parser = LibraryJsonParser(library_json_file)
+
+        # Load data
+        _ = parser.get_metadata("smith2023")
+        assert parser._index is not None
+
+        # Refresh
+        parser.refresh()
+        assert parser._index is None
+
+        # Access triggers reload
+        _ = parser.get_metadata("smith2023")
+        assert parser._index is not None
