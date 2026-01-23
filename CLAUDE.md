@@ -89,7 +89,7 @@ Four horizontal concerns cut across the system:
 ## Key Libraries and Tools
 
 - **Web extraction**: trafilatura, readability-lxml
-- **PDF extraction**: Marker (primary), olmOCR (for scanned historical documents on remote GPU)
+- **PDF extraction**: Marker 1.8.0 (pinned due to MPS bug in v1.9.0+; see `future_roadmap.md` for upgrade plan), olmOCR (for scanned historical documents on remote GPU)
 - **Embeddings**: nomic-embed-text-v1.5 (local, 1024 dims, 8192 context)
 - **Metadata**: CrossRef API, GROBID (for academic PDFs), Open Graph tags (for web)
 - **Vector storage**: sqlite-vec (v0.1.6+), SQLite FTS5 for hybrid search

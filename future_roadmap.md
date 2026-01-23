@@ -44,6 +44,33 @@ The goal is to preserve enough information that future work can pick up these fe
 
 ---
 
+### Upgrade Marker to v1.9.0+
+
+**What:** Upgrade marker-pdf from 1.8.0 to latest version when MPS acceleration is fixed.
+
+**Why deferred:** Marker v1.9.0+ has a bug causing broken MPS (Metal Performance Shaders) acceleration on Apple Silicon, resulting in ~20x slowdown. See [GitHub issue #960](https://github.com/datalab-to/marker/issues/960).
+
+**Dependencies:** Upstream fix in Marker
+
+**What we're missing by staying on 1.8.0:**
+- **Block-mode OCR** (v1.9.0): Processes text at block level rather than line-by-line, improving accuracy for complex layouts
+- **LLM-based table extraction** (v1.9.2): Iterative table cell extraction improvements
+- **New layout detection model** (v1.10.0): Claimed "major performance boost" (via surya-ocr upgrade)
+- **HTML table rendering** (v1.10.0): `--html_tables_in_markdown` flag (not currently used)
+
+**When to revisit:**
+- Monitor the GitHub issue for upstream fix
+- Before production use with complex academic layouts (multi-column, heavy tables)
+- If extraction quality issues emerge with current corpus
+
+**How to upgrade:**
+1. Change `pyproject.toml`: `marker-pdf==1.8.0` → `marker-pdf>=1.10.0` (or latest)
+2. Run `uv sync`
+3. Run extraction tests: `uv run pytest --run-extraction`
+4. Verify MPS acceleration is working (extraction should be ~4s/page, not minutes)
+
+---
+
 ### Selective olmOCR for Scanned Documents
 
 **What:** Use olmOCR on remote GPU for scanned historical documents that Marker handles poorly.
