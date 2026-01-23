@@ -11,6 +11,7 @@ Provides:
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -31,6 +32,7 @@ __all__ = [
     "AccuracyReport",
     "DocumentResult",
     "GroundTruth",
+    "ManifestEntry",
     "author_match_score",
     "record_extraction_result",
     "title_similarity",
@@ -469,7 +471,7 @@ class ManifestEntry:
     notes: str | None = None
 
     @classmethod
-    def from_dict(cls, citekey: str, data: dict) -> ManifestEntry:
+    def from_dict(cls, citekey: str, data: dict[str, Any]) -> ManifestEntry:
         """Create ManifestEntry from manifest dict entry.
 
         Args:
@@ -499,8 +501,6 @@ def load_manifest() -> dict[str, ManifestEntry]:
     Returns:
         Dict mapping citekey to ManifestEntry
     """
-    import json
-
     if not MANIFEST_PATH.exists():
         return {}
 
