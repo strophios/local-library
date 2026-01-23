@@ -8,6 +8,7 @@ import pytest
 
 from local_library.core.errors import ErrorCode, ZoteroError
 from local_library.ingestion.zotero import (
+    AttachmentResolver,
     BbtKeyMapper,
     DatabaseManager,
     LibraryJsonParser,
@@ -778,3 +779,164 @@ class TestBbtKeyMapper:
         assert mapper.has_citekey("smith2023") is True
         assert mapper.has_citekey("SMITH2023") is False
         assert mapper.has_citekey("Smith2023") is False
+
+
+class TestAttachmentResolver:
+    """Tests for AttachmentResolver class."""
+
+    @pytest.fixture
+    def zotero_dir_with_attachments(self, temp_dir: Path) -> Path:
+        """Create mock Zotero directory with attachment data."""
+        zotero_path = temp_dir / "Zotero"
+        zotero_path.mkdir()
+
+        # Create storage directory with attachment files
+        storage_dir = zotero_path / "storage"
+        storage_dir.mkdir()
+
+        # Attachment 1: PDF in storage
+        att1_dir = storage_dir / "ATTACH01"
+        att1_dir.mkdir()
+        (att1_dir / "paper.pdf").write_bytes(b"%PDF-1.4 fake pdf content")
+
+        # Attachment 2: Another PDF
+        att2_dir = storage_dir / "ATTACH02"
+        att2_dir.mkdir()
+        (att2_dir / "supplement.pdf").write_bytes(b"%PDF-1.4 supplement")
+
+        # Attachment 3: Image file
+        att3_dir = storage_dir / "ATTACH03"
+        att3_dir.mkdir()
+        (att3_dir / "figure.png").write_bytes(b"PNG fake image")
+
+        # Create zotero.sqlite with items and attachments
+        zotero_db = zotero_path / "zotero.sqlite"
+        conn = sqlite3.connect(zotero_db)
+
+        # Items table (both parent items and attachment items)
+        conn.execute("""
+            CREATE TABLE items (
+                itemID INTEGER PRIMARY KEY,
+                key TEXT NOT NULL
+            )
+        """)
+        # Parent item
+        conn.execute("INSERT INTO items VALUES (100, 'PARENT01')")
+        # Attachment items (each has its own itemID and key)
+        conn.execute("INSERT INTO items VALUES (101, 'ATTACH01')")
+        conn.execute("INSERT INTO items VALUES (102, 'ATTACH02')")
+        conn.execute("INSERT INTO items VALUES (103, 'ATTACH03')")
+
+        # itemAttachments table
+        conn.execute("""
+            CREATE TABLE itemAttachments (
+                itemID INTEGER PRIMARY KEY,
+                sourceItemID INTEGER,
+                linkMode INTEGER,
+                contentType TEXT,
+                path TEXT
+            )
+        """)
+        # Attachments linked to parent item 100
+        conn.execute("""
+            INSERT INTO itemAttachments VALUES
+            (101, 100, 0, 'application/pdf', 'storage:paper.pdf')
+        """)
+        conn.execute("""
+            INSERT INTO itemAttachments VALUES
+            (102, 100, 0, 'application/pdf', 'storage:supplement.pdf')
+        """)
+        conn.execute("""
+            INSERT INTO itemAttachments VALUES
+            (103, 100, 0, 'image/png', 'storage:figure.png')
+        """)
+
+        conn.commit()
+        conn.close()
+
+        # Create empty BBT database (required by DatabaseManager)
+        bbt_db = zotero_path / "better-bibtex.sqlite"
+        conn = sqlite3.connect(bbt_db)
+        conn.execute("CREATE TABLE citationkey (itemID INTEGER, citationKey TEXT)")
+        conn.commit()
+        conn.close()
+
+        return zotero_path
+
+    @pytest.fixture
+    def db_manager_attachments(
+        self, zotero_dir_with_attachments: Path
+    ) -> DatabaseManager:
+        """Provide DatabaseManager for attachment tests."""
+        manager = DatabaseManager(zotero_dir_with_attachments)
+        yield manager
+        manager.close()
+
+    def test_get_attachments_returns_all(
+        self, db_manager_attachments: DatabaseManager, zotero_dir_with_attachments: Path
+    ) -> None:
+        """get_attachments should return all attachments for an item."""
+        resolver = AttachmentResolver(
+            db_manager_attachments, zotero_dir_with_attachments
+        )
+
+        attachments = resolver.get_attachments(100)
+
+        assert len(attachments) == 3
+
+    def test_attachment_paths_resolved_correctly(
+        self, db_manager_attachments: DatabaseManager, zotero_dir_with_attachments: Path
+    ) -> None:
+        """Attachment paths should be resolved to filesystem paths."""
+        resolver = AttachmentResolver(
+            db_manager_attachments, zotero_dir_with_attachments
+        )
+
+        attachments = resolver.get_attachments(100)
+        pdf_attachment = next(a for a in attachments if a.filename == "paper.pdf")
+
+        expected_path = (
+            zotero_dir_with_attachments / "storage" / "ATTACH01" / "paper.pdf"
+        )
+        assert pdf_attachment.path == expected_path
+        assert pdf_attachment.path.exists()
+
+    def test_attachment_metadata_populated(
+        self, db_manager_attachments: DatabaseManager, zotero_dir_with_attachments: Path
+    ) -> None:
+        """Attachment objects should have correct metadata."""
+        resolver = AttachmentResolver(
+            db_manager_attachments, zotero_dir_with_attachments
+        )
+
+        attachments = resolver.get_attachments(100)
+        pdf_attachment = next(a for a in attachments if a.filename == "paper.pdf")
+
+        assert pdf_attachment.content_type == "application/pdf"
+        assert pdf_attachment.attachment_key == "ATTACH01"
+        assert pdf_attachment.link_mode == 0
+
+    def test_returns_empty_tuple_for_no_attachments(
+        self, db_manager_attachments: DatabaseManager, zotero_dir_with_attachments: Path
+    ) -> None:
+        """get_attachments should return empty tuple for items without attachments."""
+        resolver = AttachmentResolver(
+            db_manager_attachments, zotero_dir_with_attachments
+        )
+
+        # Item 999 doesn't exist
+        attachments = resolver.get_attachments(999)
+
+        assert attachments == ()
+
+    def test_attachments_are_immutable_tuple(
+        self, db_manager_attachments: DatabaseManager, zotero_dir_with_attachments: Path
+    ) -> None:
+        """get_attachments should return immutable tuple."""
+        resolver = AttachmentResolver(
+            db_manager_attachments, zotero_dir_with_attachments
+        )
+
+        attachments = resolver.get_attachments(100)
+
+        assert isinstance(attachments, tuple)
