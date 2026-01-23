@@ -18,6 +18,7 @@ import pytest
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from local_library.ingestion.pdf import PdfExtractor
     from local_library.ingestion.zotero import ZoteroReader
 
 # Golden set directory relative to this file
@@ -89,3 +90,19 @@ def zotero_reader() -> Iterator[ZoteroReader]:
 
     with ZoteroReader(zotero_dir=DEFAULT_ZOTERO_DIR) as reader:
         yield reader
+
+
+@pytest.fixture(scope="session")
+def pdf_extractor() -> PdfExtractor:
+    """Session-scoped PdfExtractor with lazy model loading.
+
+    Uses lazy_load=True to defer loading Marker's ML models until
+    the first extraction. This speeds up test collection and allows
+    tests to skip if models aren't available.
+
+    Returns:
+        Configured PdfExtractor instance.
+    """
+    from local_library.ingestion.pdf import PdfExtractor
+
+    return PdfExtractor(lazy_load=True)
