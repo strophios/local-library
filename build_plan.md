@@ -278,7 +278,7 @@ Each milestone extends the pipeline and delivers testable functionality.
 
 ---
 
-### M4: Zotero Import (Reordered)
+### M4: Zotero Import (Reordered) ✓
 
 > **Note:** M4 is implemented before M3b because Zotero read-only access provides
 > ground-truth metadata for testing the extraction quality and metadata extraction
@@ -293,12 +293,14 @@ Each milestone extends the pipeline and delivers testable functionality.
 - Ground-truth metadata access for extraction testing
 
 **Done when:**
-- Can read items and attachments from Zotero database
-- Metadata correctly mapped to CSL-JSON
-- Can access PDF paths and associated metadata for any item
-- Tests pass for Zotero schema mapping
+- Can read items and attachments from Zotero database ✓
+- Metadata correctly mapped to CSL-JSON ✓
+- Can access PDF paths and associated metadata for any item ✓
+- Tests pass for Zotero schema mapping ✓
 
 **Layers touched:** Ingestion (Zotero reader)
+
+**Status:** Complete
 
 **Deferred to later:** Full batch import CLI command (depends on M3b for complete pipeline)
 
@@ -468,7 +470,12 @@ Tests live in `tests/extraction/` with:
 - `test_extraction_quality.py` - Marker output quality validation
 - `test_metadata_extraction.py` - Title/author/date extraction accuracy
 - `golden_set/` - Golden set PDFs (git-lfs or symlinks to Zotero storage)
-- `smoke_set_manifest.json` - List of Zotero item keys for smoke testing
+- `golden_set_manifest.json` - Optional manifest for categorization and expected failures
+- `smoke_set_manifest.json` - List of Zotero item keys for smoke testing (deferred)
+
+**Status:** Golden set infrastructure complete. Smoke set deferred until M3b is further along.
+
+**Note:** Extraction tests are slow (~4s/page via Marker). By default, tests marked `@pytest.mark.extraction` are skipped. Run with `--run-extraction` flag to execute them.
 
 ---
 
@@ -540,9 +547,7 @@ Decisions to make during implementation:
 
 ## Next Steps
 
-Current status: M1 ✓, M2 ✓, M3a ✓
+Current status: M1 ✓, M2 ✓, M3a ✓, M4 ✓
 
-1. **M4: Zotero read-only access** — Implement Zotero SQLite reader for ground-truth testing
-2. **Extraction test corpus** — Curate golden set PDFs, create smoke set manifest
-3. **M3b: Text-based metadata extraction** — Implement heuristics with confidence scoring
-4. Continue to M5 (embeddings) once metadata pipeline is complete
+1. **M3b: Text-based metadata extraction** — Implement heuristics with confidence scoring, validated against Zotero ground truth via extraction testing infrastructure
+2. Continue to M5 (embeddings) once metadata pipeline is complete

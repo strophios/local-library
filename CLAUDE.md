@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-01-22
+Last verified: 2026-01-23
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -71,6 +71,7 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - SQLite storage with content-addressable file layout
 - CLI interface (add, list, show, delete, --metadata flag)
 - Zotero read-only access: ZoteroReader facade with database and JSON export backends, BetterBibTeX citekey mapping, attachment resolution
+- Extraction testing infrastructure: golden set tests with Zotero ground truth, accuracy metrics (title similarity, author Jaccard, year match), diagnostic reporting
 
 **Next milestones:** M3b (text-based metadata extraction), M5 (embedding pipeline). See `build_plan.md` for full details.
 
@@ -154,7 +155,8 @@ A detailed evaluation framework with quality targets, test set design, and evalu
 - `uv run local-library list` - List all documents
 - `uv run local-library show <id>` - Show document details
 - `uv run local-library delete <id>` - Delete a document
-- `uv run pytest` - Run tests
+- `uv run pytest` - Run tests (excludes extraction tests by default)
+- `uv run pytest --run-extraction` - Run tests including slow extraction tests
 - `uv run ruff check` - Lint code
 - `uv run ruff format` - Format code
 
