@@ -477,3 +477,152 @@ class BbtKeyMapper:
             (citekey,),
         )
         return cursor.fetchone() is not None
+
+
+class AttachmentResolver:
+    """Resolves Zotero item attachments to file system paths.
+
+    Queries the Zotero SQLite database to find all attachments for a given
+    item, then resolves the storage paths to actual filesystem locations.
+
+    Zotero stores attachment paths in formats like:
+    - "storage:filename.pdf" -> {zotero_dir}/storage/{attachment_key}/filename.pdf
+    - Absolute paths for linked files (linkMode=1)
+    - URLs for linked URLs (linkMode=2) - not resolved to filesystem
+    """
+
+    # Path prefix for imported files in Zotero storage
+    STORAGE_PREFIX = "storage:"
+
+    def __init__(self, db_manager: DatabaseManager, zotero_dir: Path) -> None:
+        """Initialize attachment resolver.
+
+        Args:
+            db_manager: DatabaseManager providing database access
+            zotero_dir: Path to Zotero profile directory (contains storage/ folder)
+        """
+        self._db_manager = db_manager
+        self._zotero_dir = zotero_dir
+        self._storage_dir = zotero_dir / "storage"
+
+    def _resolve_storage_path(
+        self, path_value: str, attachment_key: str
+    ) -> Path | None:
+        """Resolve a Zotero storage path to filesystem path.
+
+        Args:
+            path_value: Path value from database (e.g., "storage:file.pdf")
+            attachment_key: The attachment's 8-character key
+
+        Returns:
+            Resolved Path, or None if path format not recognized
+        """
+        if path_value.startswith(self.STORAGE_PREFIX):
+            # Imported file: storage:filename.pdf
+            filename = path_value[len(self.STORAGE_PREFIX) :]
+            return self._storage_dir / attachment_key / filename
+        elif path_value.startswith("/") or (
+            len(path_value) > 1 and path_value[1] == ":"
+        ):
+            # Absolute path (Unix or Windows)
+            return Path(path_value)
+        else:
+            # Unknown format (possibly URL or other)
+            return None
+
+    def get_attachments(self, item_id: int) -> tuple[ZoteroAttachment, ...]:
+        """Get all attachments for a Zotero item.
+
+        Args:
+            item_id: Zotero's internal itemID for the parent item
+
+        Returns:
+            Tuple of ZoteroAttachment objects (may be empty)
+        """
+        conn = self._db_manager.get_connection(DatabaseManager.ZOTERO_DB)
+
+        # Query attachments with their keys
+        # sourceItemID links attachment to parent item
+        # itemID is the attachment's own ID (for its key lookup)
+        cursor = conn.execute(
+            """
+            SELECT
+                ia.itemID as attachment_item_id,
+                i.key as attachment_key,
+                ia.path,
+                ia.contentType,
+                ia.linkMode
+            FROM itemAttachments ia
+            JOIN items i ON ia.itemID = i.itemID
+            WHERE ia.sourceItemID = ?
+            """,
+            (item_id,),
+        )
+
+        attachments = []
+        for row in cursor:
+            path_value = row["path"]
+            attachment_key = row["attachment_key"]
+            content_type = row["contentType"] or "application/octet-stream"
+            link_mode = row["linkMode"] or 0
+
+            # Skip if no path (e.g., linked URLs may have no local path)
+            if not path_value:
+                continue
+
+            resolved_path = self._resolve_storage_path(path_value, attachment_key)
+
+            # Skip if path couldn't be resolved (e.g., URL attachments)
+            if resolved_path is None:
+                continue
+
+            # Extract filename from path
+            if path_value.startswith(self.STORAGE_PREFIX):
+                filename = path_value[len(self.STORAGE_PREFIX) :]
+            else:
+                filename = resolved_path.name
+
+            attachments.append(
+                ZoteroAttachment(
+                    path=resolved_path,
+                    filename=filename,
+                    content_type=content_type,
+                    attachment_key=attachment_key,
+                    link_mode=link_mode,
+                )
+            )
+
+        return tuple(attachments)
+
+    def get_attachments_with_validation(
+        self, item_id: int, require_exists: bool = False
+    ) -> tuple[ZoteroAttachment, ...]:
+        """Get attachments with optional existence validation.
+
+        Args:
+            item_id: Zotero's internal itemID
+            require_exists: If True, raise error if any attachment file is missing
+
+        Returns:
+            Tuple of ZoteroAttachment objects
+
+        Raises:
+            ZoteroError: If require_exists=True and any file is missing
+                        (ZOTERO_ATTACHMENT_MISSING)
+        """
+        attachments = self.get_attachments(item_id)
+
+        if require_exists:
+            for attachment in attachments:
+                if not attachment.path.exists():
+                    raise ZoteroError(
+                        message=f"attachment file not found: {attachment.path}",
+                        code=ErrorCode.ZOTERO_ATTACHMENT_MISSING,
+                        details={
+                            "path": str(attachment.path),
+                            "attachment_key": attachment.attachment_key,
+                            "item_id": item_id,
+                        },
+                    )
+
+        return attachments
