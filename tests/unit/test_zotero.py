@@ -71,6 +71,30 @@ class TestZoteroAttachment:
 
         assert attachment.is_linked_file() is True
 
+    def test_is_imported_returns_false_for_link_mode_1(self) -> None:
+        """is_imported should return False for link_mode 1."""
+        attachment = ZoteroAttachment(
+            path=Path("/external/doc.pdf"),
+            filename="doc.pdf",
+            content_type="application/pdf",
+            attachment_key="KEY12345",
+            link_mode=1,
+        )
+
+        assert attachment.is_imported() is False
+
+    def test_is_linked_file_returns_false_for_link_mode_0(self) -> None:
+        """is_linked_file should return False for link_mode 0."""
+        attachment = ZoteroAttachment(
+            path=Path("/storage/doc.pdf"),
+            filename="doc.pdf",
+            content_type="application/pdf",
+            attachment_key="KEY12345",
+            link_mode=0,
+        )
+
+        assert attachment.is_linked_file() is False
+
 
 class TestZoteroItem:
     """Tests for ZoteroItem dataclass."""
