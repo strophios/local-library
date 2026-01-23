@@ -54,7 +54,9 @@
       "Bash(git merge:*)",
       "Bash(git branch:*)",
       "Bash(python -c:*)",
-      "Bash(dependencies\" and \"Functional Core only, no I/O\", but LibraryJsonParser now\nperforms file I/O for parsing CSL-JSON metadata from Better BibTeX exports.\n\nUpdated Key Decisions to document the Mixed pattern used by LibraryJsonParser\n\\(I/O is necessary and cannot be separated without complexity\\) and updated\nKey Files to accurately list LibraryJsonParser''s purpose.\n\nThis ensures documentation accurately reflects current implementation and won''t\nmislead future developers about what the module contains.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(dependencies\" and \"Functional Core only, no I/O\", but LibraryJsonParser now\nperforms file I/O for parsing CSL-JSON metadata from Better BibTeX exports.\n\nUpdated Key Decisions to document the Mixed pattern used by LibraryJsonParser\n\\(I/O is necessary and cannot be separated without complexity\\) and updated\nKey Files to accurately list LibraryJsonParser''s purpose.\n\nThis ensures documentation accurately reflects current implementation and won''t\nmislead future developers about what the module contains.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(python3:*)",
+      "Bash(pkill:*)"
     ]
   },
   "outputStyle": "Explanatory"

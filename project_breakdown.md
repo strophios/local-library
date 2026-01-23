@@ -152,7 +152,40 @@ We're taking the first steps to actually implement the local-library system desc
 4. Probably option (A) since that's where we construct the archetype of what we're trying to extract. That said, I might actually bundle it slightly differently: metadata *handling* as one step, i.e., when provided with some metadata in some specified format, how do we handle it (so CSL-JSON validation, citekey generation, indexed field extraction, etc.) and then metadata *extraction* as a separate step, i.e., how we get metadata out of PDFs and their extracted markdown when it isn't provided. And we'd build the testing infrastructure as part of this step.  
 
 
-Note: currently, the metadata handler requires a "type" from the input JSON, which is fine for now, but I want to flag that we may not want to leave type assignment to metadata extraction and have the option (or require) that it be passed in by the user from the start
+1. I've already selected a first run at a golden set and placed them in `pdf_test_set/`. With only 20 PDFs, I've simply moved them over. The larger smoke set is most likely best handled via symlinks, although I'm ultimately agnostic here. 
+2. The BetterBibTex JSON export. Unless I've missed something, that's where we're getting our Zotero metadata from, we only access the database in order to locate attachments. If we wanted to start using the database for anything else, that'd be an entire additional layer we'd need to build. 
+3. Obviously some general testing goals and approaches are discussed in the build plan and build philosophy, but for specific patterns you'll need to investigate yourself. However, you should keep in mind that the testing we're doing here is in many ways quite different from the software testing we're otherwise doing, and the testing patterns may need to differ accordingly. 
+4. As mentioned above, I've already selected a first run test set, stored in `pdf_test_set/`.
+
+
+There are definitely some documents in my Zotero library where it would be easy to find the complete actual text to use as a ground truth for checking extraction quality. I haven't specifically found any yet, but at the very least things like, e.g., the Communist Manifesto would pretty straightforwardly work. See also things that I have (or can access) ebook copies of that are in the library as PDFs.
+
+Potential options: 
+
+- Ökonomisch-philosophische Manuskripte aus dem Jahre 1844: already in Zotero
+    - https://www.marxists.org/deutsch/archiv/marx-engels/1844/oek-phil/index.htm
+- Manifest der Kommunistischen Partei: appears to not already be in Zotero (in German), but I suspect I could find an ugly/requires OCR pdf version online pretty easily. Also, I do have a (pretty clean) PDF version on my hard drive (easily searchable via Spotlight). Below are options for the clean full text: 
+    - https://de.wikisource.org/wiki/Manifest_der_Kommunistischen_Partei_(1848)
+    - https://www.marxists.org/deutsch/archiv/marx-engels/1848/manifest/index.htm
+- The Gadamer book, which I'm pretty sure I had in German + English?
+- Pretty sure there are journal articles that show up in both JSTOR and elsewhere where one version has the text as machine readable and one doesn't?
+
+
+To-do: 
+
+- Improve extraction, including updating/improving testing for these things: 
+    - Dealing with boilerplate (page numbers, copyright info, etc.) and annotations (footnotes, bibliographic references, etc.)
+    - Testing: evaluating extraction quality for a subset of cases where I have an ugly/requires-OCR PDF and also the raw text as plain text (this can also help with evaluating how we deal with boilerplate and annotations).
+    - This may actually be more (or as much) a chunking issue, but making sure that we're not just only getting meaningful chunks, but that we're only feeding meaningful text into the chunks, and that we're not splitting the text such that we're feeding it in in a non-meaningful way. Some of this is realted to the "dealing with boilerplate" issue and should (maybe?) be handled purely on the ingestion + extraction end (e.g., making sure that we're not providing chunks that are like "meaningful words \[page break + header\] meaningful words" or "meaningful words \[meaningful words but from an unrelated footnote\]", etc.), but some of it could be addressed partly by the chunking process itself (either the chunking algorithm or by specific pre-processing). This is particularly the case because there are probably cases where we want to keep the text (i.e., have it in the extracted markdown doc) but not include it in the chunks for embedding (we might filter out tables, or bibliographic references, reference sections, etc. even though we probably want to keep those in the extracted text). 
+
+
+Generally yes, though I've realized we have an issue: we're currently testing accuracy on three of the most substantively important pieces of metadata (for the user), which is good; however, we're not currently checking document *type*, which is a required field in CSL-JSON and thus required for our schema. That said, it's possible that the appropriate approach for item type is either to 1) have a default/fallback option; or, 2) require that it always be supplied (or selected) by the user at input, rather than extracting it from the document. Given those options, maybe we don't want to change anything now, but what do you think?
+
+
+I agree with keeping type out of M3b extraction scope, and I think your suggestion of a default generic type with optional user input is a good place to start. Ultimately, having some level of heuristic inference with a flag for review (even, potentially an immediate flag, i.e., the add command has a step where (if the user doesn't provide a type) it heuristically assigns one and then asks the user "this appears to be a journal article/blog post/book/etc. is that right?") would probably be the ideal version, but we should defer for the moment.Note: currently, the metadata handler requires a "type" from the input JSON, which is fine for now, but I want to flag that we may not want to leave type assignment to metadata extraction and have the option (or require) that it be passed in by the user from the start
+
+
+Just upgraded to Zotero 8, will need to go back and make sure M4 (Zotero import) still works and make changes as necessary. Also make sure BetterBibTex still works. 
 
 
 is Marker using MPS acceleration?
