@@ -33,6 +33,8 @@ Handles content acquisition (getting files into the system), extraction (convert
 - **Quality validation**: ExtractionResult.validate() checks min length and printable ratio
 - **compute_storage_path**: Git-style `ab/cd/hash.ext` layout for content-addressable storage
 - **MetadataHandler**: Stateless CSL-JSON validation with citekey generation (internal, used by Library)
+- **Lazy imports via `__getattr__`**: Ingestion package uses module-level `__getattr__` to defer imports until needed. Breaks circular dependency: ingestion → core.models → core.library → ingestion.base. Zotero module not exposed here to remain isolated.
+- **Zotero module isolation**: `zotero.py` uses Mixed pattern for LibraryJsonParser (I/O necessary to parse CSL-JSON; cannot be separated without complexity). Frozen dataclasses remain pure. Tests import directly via `from local_library.ingestion.zotero import ...` to avoid circular import chain.
 
 ## Invariants
 
@@ -47,6 +49,7 @@ Handles content acquisition (getting files into the system), extraction (convert
 - `file.py` - FileAcquirer (any local file), compute_file_hash, dynamic MIME detection
 - `pdf.py` - PdfExtractor (Marker wrapper with quality validation)
 - `metadata.py` - MetadataHandler (CSL-JSON validation, citekey generation, field extraction)
+- `zotero.py` - ZoteroAttachment, ZoteroItem frozen dataclasses; LibraryJsonParser for CSL-JSON metadata access
 
 ## Gotchas
 
@@ -54,3 +57,5 @@ Handles content acquisition (getting files into the system), extraction (convert
 - FileAcquirer.acquire() returns resolved absolute path in original_path
 - Quality thresholds are configurable but default to min_length=100, min_printable_ratio=0.8
 - FileAcquirer returns detected MIME type (not hardcoded); callers should not assume PDF
+- Importing `from local_library.ingestion.zotero import ...` does NOT trigger eager evaluation of ingestion module imports (uses lazy `__getattr__`)
+- Do NOT add zotero imports to ingestion `__init__.py` - keep it isolated to preserve the lazy import pattern

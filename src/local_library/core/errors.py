@@ -40,6 +40,17 @@ class ErrorCode(str, Enum):
     METADATA_INVALID_TYPE = "METADATA_INVALID_TYPE"
     METADATA_CITEKEY_INVALID = "METADATA_CITEKEY_INVALID"
 
+    # Zotero integration errors
+    ZOTERO_DIR_NOT_FOUND = "ZOTERO_DIR_NOT_FOUND"
+    ZOTERO_DATABASE_NOT_FOUND = "ZOTERO_DATABASE_NOT_FOUND"
+    ZOTERO_DATABASE_LOCKED = "ZOTERO_DATABASE_LOCKED"
+    ZOTERO_DATABASE_ERROR = "ZOTERO_DATABASE_ERROR"
+    ZOTERO_LIBRARY_JSON_NOT_FOUND = "ZOTERO_LIBRARY_JSON_NOT_FOUND"
+    ZOTERO_LIBRARY_JSON_PARSE_ERROR = "ZOTERO_LIBRARY_JSON_PARSE_ERROR"
+    ZOTERO_ITEM_NOT_FOUND = "ZOTERO_ITEM_NOT_FOUND"
+    ZOTERO_CITEKEY_NOT_IN_BBT = "ZOTERO_CITEKEY_NOT_IN_BBT"
+    ZOTERO_ATTACHMENT_MISSING = "ZOTERO_ATTACHMENT_MISSING"
+
 
 class LocalLibraryError(Exception):
     """Base exception for all local-library errors."""
@@ -91,5 +102,11 @@ class LookupError(LocalLibraryError):
 
 class MetadataError(LocalLibraryError):
     """Error during metadata validation or processing."""
+
+    pass
+
+
+class ZoteroError(LocalLibraryError):
+    """Error during Zotero data access."""
 
     pass

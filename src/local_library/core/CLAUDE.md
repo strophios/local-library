@@ -8,7 +8,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 
 ## Contracts
 
-- **Exposes**: Document, DocumentStatus, AddResult, ErrorCode hierarchy (including MetadataError), Library class, storage functions
+- **Exposes**: Document, DocumentStatus, AddResult, ErrorCode hierarchy (including MetadataError, ZoteroError), Library class, storage functions
 - **Guarantees**:
   - Document.id is UUID, globally unique
   - Document.content_hash is SHA-256, content-addressable
@@ -45,7 +45,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 ## Key Files
 
 - `models.py` - Document, AcquisitionResult, ExtractionResult, AddResult
-- `errors.py` - ErrorCode enum, exception hierarchy (includes ACQUISITION_UNSUPPORTED_SOURCE, EXTRACTION_UNSUPPORTED_FORMAT)
+- `errors.py` - ErrorCode enum, exception hierarchy (includes ACQUISITION_*, EXTRACTION_*, METADATA_*, ZOTERO_* codes)
 - `storage.py` - SQLite CRUD (get_connection, init_schema, create/get/update/delete)
 - `library.py` - Library orchestrator (add, get, list, delete) with handler dispatch
 
