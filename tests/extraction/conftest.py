@@ -469,7 +469,7 @@ class ManifestEntry:
     notes: str | None = None
 
     @classmethod
-    def from_dict(cls, citekey: str, data: dict) -> "ManifestEntry":
+    def from_dict(cls, citekey: str, data: dict) -> ManifestEntry:
         """Create ManifestEntry from manifest dict entry.
 
         Args:
@@ -512,8 +512,7 @@ def load_manifest() -> dict[str, ManifestEntry]:
 
     documents = data.get("documents", {})
     return {
-        citekey: ManifestEntry.from_dict(citekey, entry)
-        for citekey, entry in documents.items()
+        citekey: ManifestEntry.from_dict(citekey, entry) for citekey, entry in documents.items()
     }
 
 
