@@ -717,6 +717,46 @@ def record_extraction_result(
     return result
 
 
+def pytest_collection_modifyitems(
+    config: pytest.Config,  # noqa: ARG001
+    items: list[pytest.Item],
+) -> None:
+    """Add markers based on manifest categories and expected failures.
+
+    For each test item:
+    - Adds category marker if document has category in manifest
+    - Adds xfail marker if test field is in expected_failures
+
+    This enables filtering by category: pytest -m "academic"
+    And proper handling of known failures: expected failures show as xfail.
+    """
+    manifest = load_manifest()
+
+    for item in items:
+        # Extract citekey from test parameters if present
+        citekey = None
+        if hasattr(item, "callspec") and "citekey" in item.callspec.params:
+            citekey = item.callspec.params["citekey"]
+
+        if citekey is None or citekey not in manifest:
+            continue
+
+        entry = manifest[citekey]
+
+        # Add category marker if present
+        if entry.category:
+            item.add_marker(pytest.mark.extraction_category(entry.category))
+
+        # Add xfail marker if this test's field is in expected_failures
+        test_name = item.name.lower()
+        for field in entry.expected_failures:
+            if field in test_name:
+                reason = f"Known failure: {field} extraction for {citekey}"
+                if entry.notes:
+                    reason += f" ({entry.notes})"
+                item.add_marker(pytest.mark.xfail(reason=reason))
+
+
 def pytest_terminal_summary(
     terminalreporter: pytest.TerminalReporter,
     exitstatus: int,  # noqa: ARG001
