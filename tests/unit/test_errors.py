@@ -11,6 +11,7 @@ from local_library.core.errors import (
     MetadataError,
     QualityError,
     StorageError,
+    ZoteroError,
 )
 
 
@@ -162,3 +163,32 @@ class TestMetadataError:
         """Should be able to catch MetadataError as LocalLibraryError."""
         with pytest.raises(LocalLibraryError):
             raise MetadataError("test", ErrorCode.METADATA_INVALID_SCHEMA)
+
+
+class TestZoteroErrorCodes:
+    """Tests for Zotero-specific error codes."""
+
+    def test_zotero_error_codes_exist(self) -> None:
+        """All Zotero error codes should be defined in ErrorCode enum."""
+        assert ErrorCode.ZOTERO_DIR_NOT_FOUND.value == "ZOTERO_DIR_NOT_FOUND"
+        assert ErrorCode.ZOTERO_DATABASE_NOT_FOUND.value == "ZOTERO_DATABASE_NOT_FOUND"
+        assert ErrorCode.ZOTERO_DATABASE_LOCKED.value == "ZOTERO_DATABASE_LOCKED"
+        assert ErrorCode.ZOTERO_DATABASE_ERROR.value == "ZOTERO_DATABASE_ERROR"
+        assert ErrorCode.ZOTERO_LIBRARY_JSON_NOT_FOUND.value == "ZOTERO_LIBRARY_JSON_NOT_FOUND"
+        assert ErrorCode.ZOTERO_LIBRARY_JSON_PARSE_ERROR.value == "ZOTERO_LIBRARY_JSON_PARSE_ERROR"
+        assert ErrorCode.ZOTERO_ITEM_NOT_FOUND.value == "ZOTERO_ITEM_NOT_FOUND"
+        assert ErrorCode.ZOTERO_CITEKEY_NOT_IN_BBT.value == "ZOTERO_CITEKEY_NOT_IN_BBT"
+        assert ErrorCode.ZOTERO_ATTACHMENT_MISSING.value == "ZOTERO_ATTACHMENT_MISSING"
+
+    def test_zotero_error_inherits_from_base(self) -> None:
+        """ZoteroError should inherit from LocalLibraryError."""
+        error = ZoteroError(
+            message="zotero directory not found",
+            code=ErrorCode.ZOTERO_DIR_NOT_FOUND,
+            details={"path": "/nonexistent"},
+        )
+
+        assert isinstance(error, LocalLibraryError)
+        assert error.code == ErrorCode.ZOTERO_DIR_NOT_FOUND
+        assert error.details == {"path": "/nonexistent"}
+        assert str(error) == "[ZOTERO_DIR_NOT_FOUND] zotero directory not found"
