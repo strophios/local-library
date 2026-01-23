@@ -26,6 +26,15 @@ if TYPE_CHECKING:
 # Golden set directory relative to this file
 GOLDEN_SET_DIR = Path(__file__).parent / "golden_set"
 
+# Exported for type checking in test files
+__all__ = [
+    "DocumentResult",
+    "GroundTruth",
+    "author_match_score",
+    "title_similarity",
+    "year_matches",
+]
+
 
 def _normalize_title(title: str) -> str:
     """Normalize title for comparison.
