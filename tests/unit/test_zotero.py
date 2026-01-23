@@ -14,6 +14,7 @@ from local_library.ingestion.zotero import (
     LibraryJsonParser,
     ZoteroAttachment,
     ZoteroItem,
+    ZoteroReader,
 )
 
 
@@ -1095,3 +1096,135 @@ class TestAttachmentResolver:
 
         assert unknown_att is not None
         assert unknown_att.content_type == "application/octet-stream"
+
+
+class TestZoteroReader:
+    """Tests for ZoteroReader public API."""
+
+    @pytest.fixture
+    def complete_zotero_dir(self, temp_dir: Path) -> Path:
+        """Create a complete mock Zotero directory with all required data."""
+        zotero_path = temp_dir / "Zotero"
+        zotero_path.mkdir()
+
+        # Create library.json (CSL-JSON export)
+        library_json = [
+            {
+                "id": "smith2023",
+                "citation-key": "smith2023",
+                "type": "article-journal",
+                "title": "A Sample Paper",
+                "author": [{"family": "Smith", "given": "John"}],
+                "issued": {"date-parts": [[2023]]},
+            },
+            {
+                "id": "jones2022",
+                "citation-key": "jones2022",
+                "type": "book",
+                "title": "A Sample Book",
+                "author": [{"family": "Jones", "given": "Jane"}],
+            },
+        ]
+        with open(zotero_path / "library.json", "w") as f:
+            json.dump(library_json, f)
+
+        # Create zotero.sqlite
+        zotero_db = zotero_path / "zotero.sqlite"
+        conn = sqlite3.connect(zotero_db)
+        conn.execute("CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT)")
+        conn.execute("INSERT INTO items VALUES (100, 'SMITH001')")  # Parent
+        conn.execute("INSERT INTO items VALUES (101, 'ATTACH01')")  # Attachment
+        conn.execute("INSERT INTO items VALUES (200, 'JONES001')")  # Parent (no att)
+        conn.execute("""
+            CREATE TABLE itemAttachments (
+                itemID INTEGER, sourceItemID INTEGER,
+                linkMode INTEGER, contentType TEXT, path TEXT
+            )
+        """)
+        conn.execute("""
+            INSERT INTO itemAttachments VALUES
+            (101, 100, 0, 'application/pdf', 'storage:paper.pdf')
+        """)
+        conn.commit()
+        conn.close()
+
+        # Create better-bibtex.sqlite
+        bbt_db = zotero_path / "better-bibtex.sqlite"
+        conn = sqlite3.connect(bbt_db)
+        conn.execute("CREATE TABLE citationkey (itemID INTEGER, citationKey TEXT)")
+        conn.execute("INSERT INTO citationkey VALUES (100, 'smith2023')")
+        conn.execute("INSERT INTO citationkey VALUES (200, 'jones2022')")
+        conn.commit()
+        conn.close()
+
+        # Create storage with attachment file
+        storage_dir = zotero_path / "storage" / "ATTACH01"
+        storage_dir.mkdir(parents=True)
+        (storage_dir / "paper.pdf").write_bytes(b"%PDF-1.4 test content")
+
+        return zotero_path
+
+    def test_get_item_returns_complete_item(
+        self, complete_zotero_dir: Path
+    ) -> None:
+        """get_item should return ZoteroItem with metadata and attachments."""
+        with ZoteroReader(complete_zotero_dir) as reader:
+            item = reader.get_item("smith2023")
+
+        assert item.citekey == "smith2023"
+        assert item.csl_json["title"] == "A Sample Paper"
+        assert item.zotero_key == "SMITH001"
+        assert item.item_id == 100
+        assert len(item.attachments) == 1
+        assert item.attachments[0].content_type == "application/pdf"
+
+    def test_get_item_without_attachments(
+        self, complete_zotero_dir: Path
+    ) -> None:
+        """get_item should work for items without attachments."""
+        with ZoteroReader(complete_zotero_dir) as reader:
+            item = reader.get_item("jones2022")
+
+        assert item.citekey == "jones2022"
+        assert item.csl_json["title"] == "A Sample Book"
+        assert len(item.attachments) == 0
+
+    def test_list_citekeys_returns_all(
+        self, complete_zotero_dir: Path
+    ) -> None:
+        """list_citekeys should yield all citekeys from library.json."""
+        with ZoteroReader(complete_zotero_dir) as reader:
+            keys = set(reader.list_citekeys())
+
+        assert keys == {"smith2023", "jones2022"}
+
+    def test_has_item_returns_true_for_existing(
+        self, complete_zotero_dir: Path
+    ) -> None:
+        """has_item should return True for existing citekeys."""
+        with ZoteroReader(complete_zotero_dir) as reader:
+            assert reader.has_item("smith2023") is True
+            assert reader.has_item("jones2022") is True
+
+    def test_has_item_returns_false_for_missing(
+        self, complete_zotero_dir: Path
+    ) -> None:
+        """has_item should return False for missing citekeys."""
+        with ZoteroReader(complete_zotero_dir) as reader:
+            assert reader.has_item("nonexistent") is False
+
+    def test_context_manager_cleanup(
+        self, complete_zotero_dir: Path
+    ) -> None:
+        """Context manager should close connections on exit."""
+        reader = ZoteroReader(complete_zotero_dir)
+        reader.__enter__()
+
+        # Access something to open connections
+        _ = reader.get_item("smith2023")
+        assert len(reader._db_manager._connections) > 0
+
+        reader.__exit__(None, None, None)
+
+        # Connections should be closed
+        assert len(reader._db_manager._connections) == 0
