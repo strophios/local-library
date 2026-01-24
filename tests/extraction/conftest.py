@@ -375,6 +375,10 @@ class DocumentResult:
         extracted_title: Title found in extracted text (if any)
         extracted_authors: Authors found in extracted text (if any)
         extracted_year: Year found in extracted text (if any)
+        title_confidence: Confidence score for title extraction
+        author_confidence: Confidence score for author extraction
+        date_confidence: Confidence score for date extraction
+        overall_confidence: Overall confidence across all fields
     """
 
     citekey: str
@@ -386,6 +390,11 @@ class DocumentResult:
     extracted_title: str | None = None
     extracted_authors: tuple[str, ...] | None = None
     extracted_year: str | None = None
+    # Confidence scores for calibration
+    title_confidence: float = 0.0
+    author_confidence: float = 0.0
+    date_confidence: float = 0.0
+    overall_confidence: float = 0.0
 
     def passed_title(self, threshold: float = 0.9) -> bool:
         """Check if title similarity meets threshold."""
@@ -480,6 +489,49 @@ class AccuracyReport:
         """Return documents that failed any check."""
         return [r for r in self.results if not r.passed_all()]
 
+    def format_calibration_summary(self) -> str:
+        """Format calibration analysis showing confidence vs accuracy correlation."""
+        lines = [
+            "",
+            "-" * 70,
+            "CONFIDENCE CALIBRATION",
+            "-" * 70,
+        ]
+
+        # Bin documents by confidence
+        bins = [
+            ("0.0-0.3", 0.0, 0.3),
+            ("0.3-0.5", 0.3, 0.5),
+            ("0.5-0.7", 0.5, 0.7),
+            ("0.7-0.9", 0.7, 0.9),
+            ("0.9-1.0", 0.9, 1.0),
+        ]
+
+        for label, low, high in bins:
+            # Filter documents in this confidence bin
+            bin_docs = [
+                r
+                for r in self.results
+                if r.extraction_success and low <= r.title_confidence < high
+            ]
+
+            if not bin_docs:
+                lines.append(f"  {label}: No documents")
+                continue
+
+            # Calculate average accuracy in bin
+            avg_accuracy = sum(r.title_similarity for r in bin_docs) / len(bin_docs)
+            lines.append(
+                f"  {label}: {len(bin_docs):3d} docs, "
+                f"avg accuracy {avg_accuracy:.2%}"
+            )
+
+        lines.append("")
+        lines.append("Calibration is good when higher confidence bins have higher accuracy.")
+        lines.append("")
+
+        return "\n".join(lines)
+
     def format_summary(self) -> str:
         """Format a human-readable summary string."""
         lines = [
@@ -534,7 +586,10 @@ class AccuracyReport:
                         lines.append("    Year: mismatch")
                         lines.append(f"      Extracted: {r.extracted_year!r}")
 
-        lines.extend(["", "=" * 70, ""])
+        # Add calibration summary
+        lines.append(self.format_calibration_summary())
+
+        lines.extend(["=" * 70, ""])
         return "\n".join(lines)
 
 
