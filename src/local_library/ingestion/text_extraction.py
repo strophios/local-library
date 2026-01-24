@@ -603,6 +603,220 @@ def extract_authors(markdown_text: str) -> tuple[FieldExtraction, ...]:
     return tuple(authors)
 
 
+# Date extraction constants
+_DATE_SEARCH_LINES = 30  # Search first N lines for dates
+_CURRENT_YEAR = 2025  # Update as needed
+_MIN_VALID_YEAR = 1900
+_MAX_VALID_YEAR = _CURRENT_YEAR + 2  # Allow slight future for pre-prints
+
+
+@dataclass(frozen=True)
+class _DateCandidate:
+    """Internal candidate for date extraction."""
+
+    year: str
+    score: float
+    reasoning: str
+
+
+def _extract_year_from_text(text: str) -> str | None:
+    """Extract a 4-digit year from text.
+
+    Handles various formats:
+    - ISO: 2023-05-15, 2023-05
+    - US: January 15, 2023 / Jan 2023 / 01/15/2023
+    - Standalone: 2023
+
+    Returns:
+        4-digit year string or None
+    """
+    # ISO format: 2023-05-15 or 2023-05
+    iso_match = re.search(r"\b((?:19|20)\d{2})-\d{1,2}(?:-\d{1,2})?\b", text)
+    if iso_match:
+        return iso_match.group(1)
+
+    # Month name + year: January 2023, Jan. 2023, Jan 2023
+    month_year = re.search(
+        r"\b(?:January|February|March|April|May|June|July|August|September|"
+        r"October|November|December|Jan\.?|Feb\.?|Mar\.?|Apr\.?|May\.?|Jun\.?|"
+        r"Jul\.?|Aug\.?|Sep(?:t)?\.?|Oct\.?|Nov\.?|Dec\.?)\s+\d{1,2}?,?\s*((?:19|20)\d{2})\b",
+        text,
+        re.IGNORECASE,
+    )
+    if month_year:
+        return month_year.group(1)
+
+    # Month year without day: January 2023
+    month_year_simple = re.search(
+        r"\b(?:January|February|March|April|May|June|July|August|September|"
+        r"October|November|December|Jan\.?|Feb\.?|Mar\.?|Apr\.?|May\.?|Jun\.?|"
+        r"Jul\.?|Aug\.?|Sep(?:t)?\.?|Oct\.?|Nov\.?|Dec\.?)\s+((?:19|20)\d{2})\b",
+        text,
+        re.IGNORECASE,
+    )
+    if month_year_simple:
+        return month_year_simple.group(1)
+
+    # US format: 01/15/2023 or 01/2023
+    us_match = re.search(r"\b\d{1,2}/(?:\d{1,2}/)?((?:19|20)\d{2})\b", text)
+    if us_match:
+        return us_match.group(1)
+
+    # Standalone year
+    standalone = re.search(r"\b((?:19|20)\d{2})\b", text)
+    if standalone:
+        return standalone.group(1)
+
+    return None
+
+
+def _is_valid_publication_year(year_str: str) -> bool:
+    """Check if a year is plausible as a publication date."""
+    try:
+        year = int(year_str)
+        return _MIN_VALID_YEAR <= year <= _MAX_VALID_YEAR
+    except ValueError:
+        return False
+
+
+def _find_date_candidates(text: str) -> list[_DateCandidate]:
+    """Find publication date candidates in text.
+
+    Priority order:
+    1. Explicit labels (Published:, Date:)
+    2. Copyright notices (© 2023, Copyright 2023)
+    3. ISO dates in header area
+    4. Standalone years in header area
+
+    Returns:
+        List of candidates sorted by score (highest first)
+    """
+    candidates: list[_DateCandidate] = []
+    lines = text.split("\n")[:_DATE_SEARCH_LINES]
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        # Priority 1: Explicit date labels
+        explicit_patterns = [
+            (r"(?:published|date|dated)[\s:]+(.+)", 0.9, "explicit label"),
+            (r"(?:received|accepted)[\s:]+(.+)", 0.85, "received/accepted date"),
+        ]
+
+        for pattern, base_score, reason in explicit_patterns:
+            match = re.search(pattern, stripped, re.IGNORECASE)
+            if match:
+                year = _extract_year_from_text(match.group(1))
+                if year and _is_valid_publication_year(year):
+                    candidates.append(_DateCandidate(year, base_score, reason))
+
+        # Priority 2: Copyright notices
+        copyright_patterns = [
+            (r"[©®]\s*((?:19|20)\d{2})", 0.85, "copyright symbol"),
+            (r"copyright\s+((?:19|20)\d{2})", 0.8, "copyright text"),
+        ]
+
+        for pattern, base_score, reason in copyright_patterns:
+            match = re.search(pattern, stripped, re.IGNORECASE)
+            if match:
+                year = match.group(1)
+                if _is_valid_publication_year(year):
+                    candidates.append(_DateCandidate(year, base_score, reason))
+
+        # Priority 3: ISO dates in header area (first 15 lines)
+        if i < 15:
+            iso_match = re.search(r"\b((?:19|20)\d{2})-\d{1,2}(?:-\d{1,2})?\b", stripped)
+            if iso_match:
+                year = iso_match.group(1)
+                if _is_valid_publication_year(year):
+                    score = 0.7 if i < 10 else 0.5
+                    candidates.append(_DateCandidate(year, score, "ISO date"))
+
+        # Priority 4: Standalone years in header area (first 10 lines)
+        if i < 10:
+            # Only match standalone years (not part of larger numbers)
+            standalone = re.search(r"(?<!\d)((?:19|20)\d{2})(?!\d)", stripped)
+            if standalone:
+                year = standalone.group(1)
+                if _is_valid_publication_year(year):
+                    # Lower score for standalone years
+                    score = 0.55 - (i * 0.03)  # Decrease with position
+                    candidates.append(_DateCandidate(year, max(0.35, score), "standalone year"))
+
+    # Sort by score descending
+    candidates.sort(key=lambda c: c.score, reverse=True)
+
+    return candidates
+
+
+def extract_date(markdown_text: str) -> FieldExtraction:
+    """Extract publication year from markdown text.
+
+    Uses priority-based search:
+    1. Explicit markers (Published:, Date:)
+    2. Copyright notices (© year, Copyright year)
+    3. ISO dates in header area
+    4. Standalone years in header area
+
+    Args:
+        markdown_text: Marker-produced markdown content
+
+    Returns:
+        FieldExtraction with extracted year (as string), confidence, and reasoning
+    """
+    # Handle empty input
+    if not markdown_text or not markdown_text.strip():
+        return FieldExtraction(
+            value=None,
+            confidence=0.0,
+            source="heuristic",
+            alternatives=(),
+            reasoning="no text content",
+        )
+
+    # Find candidates
+    candidates = _find_date_candidates(markdown_text)
+
+    if not candidates:
+        return FieldExtraction(
+            value=None,
+            confidence=0.0,
+            source="heuristic",
+            alternatives=(),
+            reasoning="no date patterns found",
+        )
+
+    # Select best candidate
+    best = candidates[0]
+
+    # Calculate confidence with margin bonus
+    if len(candidates) >= 2:
+        margin = best.score - candidates[1].score
+        confidence = best.score * (0.8 + 0.2 * min(margin * 2, 1.0))
+    else:
+        confidence = best.score * 0.9
+
+    # Alternatives (different years only)
+    seen_years = {best.year}
+    alternatives = []
+    for c in candidates[1:]:
+        if c.year not in seen_years:
+            alternatives.append(c.year)
+            seen_years.add(c.year)
+        if len(alternatives) >= 3:
+            break
+
+    return FieldExtraction(
+        value=best.year,
+        confidence=round(confidence, 2),
+        source="heuristic",
+        alternatives=tuple(alternatives),
+        reasoning=best.reasoning,
+    )
+
+
 def extract_title(markdown_text: str) -> FieldExtraction:
     """Extract document title from markdown text.
 
