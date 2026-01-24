@@ -1084,7 +1084,11 @@ class LLMExtractor:
             content = response.choices[0].message.content
             return self._parse_response(content)
 
+        except json.JSONDecodeError as e:
+            logger.warning(f"LLM extraction failed: invalid JSON response: {e}")
+            return None
         except Exception as e:
+            # Catch litellm API errors and other exceptions
             logger.warning(f"LLM extraction failed: {e}")
             return None
 
@@ -1276,7 +1280,20 @@ class TextMetadataExtractor:
         date: FieldExtraction,
         doc_type: FieldExtraction,
     ) -> bool:
-        """Check if LLM fallback should be triggered."""
+        """Check if LLM fallback should be triggered.
+
+        Args:
+            title: Extracted title
+            authors: Extracted authors
+            date: Extracted publication date
+            doc_type: Extracted document type (not used in decision)
+                     Doc type is less critical than other fields and rarely
+                     benefits from LLM re-extraction, so it's excluded from
+                     the fallback trigger decision.
+
+        Returns:
+            True if any major field is below confidence threshold
+        """
         threshold = self.confidence_threshold
 
         # Trigger if any major field is below threshold
@@ -1308,13 +1325,15 @@ class TextMetadataExtractor:
         """
         # Update title if LLM provided one
         if llm_result.get("title"):
-            title = FieldExtraction(
-                value=llm_result["title"],
-                confidence=title.confidence,  # Preserve heuristic confidence
-                source="llm",
-                alternatives=title.alternatives,
-                reasoning=f"LLM extraction (heuristic: {title.value})",
-            )
+            title_value = llm_result["title"]
+            if isinstance(title_value, str):
+                title = FieldExtraction(
+                    value=title_value,
+                    confidence=title.confidence,  # Preserve heuristic confidence
+                    source="llm",
+                    alternatives=title.alternatives,
+                    reasoning=f"LLM extraction (heuristic: {title.value})",
+                )
 
         # Update authors if LLM provided them
         llm_authors = llm_result.get("authors", [])
@@ -1338,23 +1357,27 @@ class TextMetadataExtractor:
 
         # Update date if LLM provided one
         if llm_result.get("year"):
-            date = FieldExtraction(
-                value=llm_result["year"],
-                confidence=date.confidence,  # Preserve heuristic confidence
-                source="llm",
-                alternatives=date.alternatives,
-                reasoning=f"LLM extraction (heuristic: {date.value})",
-            )
+            year_value = llm_result["year"]
+            if isinstance(year_value, str):
+                date = FieldExtraction(
+                    value=year_value,
+                    confidence=date.confidence,  # Preserve heuristic confidence
+                    source="llm",
+                    alternatives=date.alternatives,
+                    reasoning=f"LLM extraction (heuristic: {date.value})",
+                )
 
         # Update type if LLM provided one
         if llm_result.get("type"):
-            doc_type = FieldExtraction(
-                value=llm_result["type"],
-                confidence=doc_type.confidence,  # Preserve heuristic confidence
-                source="llm",
-                alternatives=doc_type.alternatives,
-                reasoning=f"LLM extraction (heuristic: {doc_type.value})",
-            )
+            type_value = llm_result["type"]
+            if isinstance(type_value, str):
+                doc_type = FieldExtraction(
+                    value=type_value,
+                    confidence=doc_type.confidence,  # Preserve heuristic confidence
+                    source="llm",
+                    alternatives=doc_type.alternatives,
+                    reasoning=f"LLM extraction (heuristic: {doc_type.value})",
+                )
 
         return title, authors, date, doc_type
 

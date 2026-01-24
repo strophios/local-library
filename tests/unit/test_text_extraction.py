@@ -922,7 +922,10 @@ class TestLLMExtraction:
         mock_response.choices = [
             MagicMock(
                 message=MagicMock(
-                    content='{"title": "Test Title", "authors": ["John Smith"], "year": "2023", "type": "article-journal"}'
+                    content=(
+                        '{"title": "Test Title", "authors": ["John Smith"], '
+                        '"year": "2023", "type": "article-journal"}'
+                    )
                 )
             )
         ]
@@ -989,7 +992,13 @@ class TestLLMExtraction:
 
         mock_response = MagicMock()
         mock_response.choices = [
-            MagicMock(message=MagicMock(content='{"title": "Test", "authors": [], "year": null, "type": "article-journal"}'))
+            MagicMock(
+                message=MagicMock(
+                    content=(
+                        '{"title": "Test", "authors": [], "year": null, "type": "article-journal"}'
+                    )
+                )
+            )
         ]
 
         with patch("litellm.completion", return_value=mock_response) as mock_call:
@@ -1020,7 +1029,11 @@ class TestLLMExtraction:
         mock_response.choices = [
             MagicMock(
                 message=MagicMock(
-                    content='{"title": "Better Title", "authors": ["Smith, John"], "year": "2023", "type": "article-journal"}'
+                    content=(
+                        '{"title": "Better Title", '
+                        '"authors": ["Smith, John"], '
+                        '"year": "2023", "type": "article-journal"}'
+                    )
                 )
             )
         ]
@@ -1054,7 +1067,11 @@ class TestTextMetadataExtractorWithLLM:
         mock_llm_response.choices = [
             MagicMock(
                 message=MagicMock(
-                    content='{"title": "LLM Title", "authors": ["LLM Author"], "year": "2023", "type": "article-journal"}'
+                    content=(
+                        '{"title": "LLM Title", '
+                        '"authors": ["LLM Author"], '
+                        '"year": "2023", "type": "article-journal"}'
+                    )
                 )
             )
         ]
@@ -1138,7 +1155,11 @@ class TestTextMetadataExtractorWithLLM:
         mock_llm_response.choices = [
             MagicMock(
                 message=MagicMock(
-                    content='{"title": "Actual Title", "authors": ["Real Author"], "year": "2023", "type": "article-journal"}'
+                    content=(
+                        '{"title": "Actual Title", '
+                        '"authors": ["Real Author"], '
+                        '"year": "2023", "type": "article-journal"}'
+                    )
                 )
             )
         ]
