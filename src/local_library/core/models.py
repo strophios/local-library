@@ -16,6 +16,7 @@ class DocumentStatus(str, Enum):
     PENDING = "pending"  # Created, not yet processed
     READY = "ready"  # Extraction complete, searchable
     FAILED = "failed"  # Extraction failed, needs retry or manual intervention
+    NEEDS_REVIEW = "needs_review"  # Extraction succeeded but confidence is low
 
 
 @dataclass(frozen=True)
