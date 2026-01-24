@@ -357,7 +357,8 @@ class TestTextExtractionIntegration:
         """Adding without --metadata should extract metadata from text."""
         # Mock extraction to return text with metadata
         mock_result = MagicMock()
-        mock_result.text = """# Machine Learning Fundamentals
+        mock_result.text = (
+            """# Machine Learning Fundamentals
 
         John Smith, Jane Doe
 
@@ -366,7 +367,9 @@ class TestTextExtractionIntegration:
         Journal of Computer Science
 
         Abstract: This paper discusses machine learning...
-        """ + " additional content" * 100
+        """
+            + " additional content" * 100
+        )
 
         with patch.object(
             integration_library_with_text_extraction._extractors[0],
@@ -388,8 +391,11 @@ class TestTextExtractionIntegration:
         """Low confidence extraction should set NEEDS_REVIEW status."""
         # Mock extraction to return minimal text (low confidence)
         mock_result = MagicMock()
-        mock_result.text = """Some vague content without clear metadata.
-        """ + " filler" * 50
+        mock_result.text = (
+            """Some vague content without clear metadata.
+        """
+            + " filler" * 50
+        )
 
         with patch.object(
             integration_library_with_text_extraction._extractors[0],
@@ -440,14 +446,17 @@ class TestTextExtractionIntegration:
     ) -> None:
         """Citekey should be generated from extracted metadata."""
         mock_result = MagicMock()
-        mock_result.text = """# Deep Learning Theory
+        mock_result.text = (
+            """# Deep Learning Theory
 
         Alice Smith
 
         Published: 2023
 
         Abstract...
-        """ + " content" * 100
+        """
+            + " content" * 100
+        )
 
         with patch.object(
             integration_library_with_text_extraction._extractors[0],

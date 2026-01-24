@@ -510,9 +510,7 @@ class AccuracyReport:
         for label, low, high in bins:
             # Filter documents in this confidence bin
             bin_docs = [
-                r
-                for r in self.results
-                if r.extraction_success and low <= r.title_confidence < high
+                r for r in self.results if r.extraction_success and low <= r.title_confidence < high
             ]
 
             if not bin_docs:
@@ -521,10 +519,7 @@ class AccuracyReport:
 
             # Calculate average accuracy in bin
             avg_accuracy = sum(r.title_similarity for r in bin_docs) / len(bin_docs)
-            lines.append(
-                f"  {label}: {len(bin_docs):3d} docs, "
-                f"avg accuracy {avg_accuracy:.2%}"
-            )
+            lines.append(f"  {label}: {len(bin_docs):3d} docs, avg accuracy {avg_accuracy:.2%}")
 
         lines.append("")
         lines.append("Calibration is good when higher confidence bins have higher accuracy.")

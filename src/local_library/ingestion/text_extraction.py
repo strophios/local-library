@@ -5,7 +5,14 @@ from PDF text content. Each field has an independent extractor that
 produces a FieldExtraction result with confidence scoring.
 """
 
-# pattern: Functional Core
+# pattern: Mixed (unavoidable)
+# Reason: File contains both pure extraction functions (Functional Core)
+# and LLMExtractor class which requires HTTP calls for LLM fallback.
+# The mixing is justified because: (1) pure extraction functions
+# (extract_title, extract_authors, extract_date, extract_doc_type)
+# are the majority of the file; (2) LLMExtractor is isolated in a class
+# and only called optionally; (3) splitting would add complexity without
+# significant testability benefit (LLM tests already use mocks).
 
 from __future__ import annotations
 

@@ -303,8 +303,7 @@ class TestConfidenceCalibration:
 
         # High confidence (>0.8) should correlate with good accuracy (>0.7)
         assert similarity >= 0.7, (
-            f"High confidence ({title_conf:.2f}) but low accuracy ({similarity:.2f}) "
-            f"for {citekey}"
+            f"High confidence ({title_conf:.2f}) but low accuracy ({similarity:.2f}) for {citekey}"
         )
 
     def test_low_confidence_triggers_needs_review(

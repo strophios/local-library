@@ -1189,22 +1189,30 @@ class TestBuildCslJson:
 
         result = TextExtractionResult(
             title=FieldExtraction(
-                value="Test Title", confidence=0.9, source="heuristic",
-                alternatives=(), reasoning=""
+                value="Test Title",
+                confidence=0.9,
+                source="heuristic",
+                alternatives=(),
+                reasoning="",
             ),
             authors=(
                 FieldExtraction(
-                    value="Smith, John", confidence=0.8, source="heuristic",
-                    alternatives=(), reasoning=""
+                    value="Smith, John",
+                    confidence=0.8,
+                    source="heuristic",
+                    alternatives=(),
+                    reasoning="",
                 ),
             ),
             date=FieldExtraction(
-                value="2023", confidence=0.85, source="heuristic",
-                alternatives=(), reasoning=""
+                value="2023", confidence=0.85, source="heuristic", alternatives=(), reasoning=""
             ),
             doc_type=FieldExtraction(
-                value="article-journal", confidence=0.7, source="heuristic",
-                alternatives=(), reasoning=""
+                value="article-journal",
+                confidence=0.7,
+                source="heuristic",
+                alternatives=(),
+                reasoning="",
             ),
             overall_confidence=0.7,
             needs_review=False,
@@ -1227,26 +1235,33 @@ class TestBuildCslJson:
 
         result = TextExtractionResult(
             title=FieldExtraction(
-                value="Title", confidence=0.9, source="heuristic",
-                alternatives=(), reasoning=""
+                value="Title", confidence=0.9, source="heuristic", alternatives=(), reasoning=""
             ),
             authors=(
                 FieldExtraction(
-                    value="Smith, John", confidence=0.8, source="heuristic",
-                    alternatives=(), reasoning=""
+                    value="Smith, John",
+                    confidence=0.8,
+                    source="heuristic",
+                    alternatives=(),
+                    reasoning="",
                 ),
                 FieldExtraction(
-                    value="Doe, Jane", confidence=0.8, source="heuristic",
-                    alternatives=(), reasoning=""
+                    value="Doe, Jane",
+                    confidence=0.8,
+                    source="heuristic",
+                    alternatives=(),
+                    reasoning="",
                 ),
             ),
             date=FieldExtraction(
-                value="2023", confidence=0.85, source="heuristic",
-                alternatives=(), reasoning=""
+                value="2023", confidence=0.85, source="heuristic", alternatives=(), reasoning=""
             ),
             doc_type=FieldExtraction(
-                value="article-journal", confidence=0.7, source="heuristic",
-                alternatives=(), reasoning=""
+                value="article-journal",
+                confidence=0.7,
+                source="heuristic",
+                alternatives=(),
+                reasoning="",
             ),
             overall_confidence=0.7,
             needs_review=False,
@@ -1264,17 +1279,18 @@ class TestBuildCslJson:
 
         result = TextExtractionResult(
             title=FieldExtraction(
-                value=None, confidence=0.0, source="heuristic",
-                alternatives=(), reasoning=""
+                value=None, confidence=0.0, source="heuristic", alternatives=(), reasoning=""
             ),
             authors=(),
             date=FieldExtraction(
-                value=None, confidence=0.0, source="heuristic",
-                alternatives=(), reasoning=""
+                value=None, confidence=0.0, source="heuristic", alternatives=(), reasoning=""
             ),
             doc_type=FieldExtraction(
-                value="article-journal", confidence=0.4, source="heuristic",
-                alternatives=(), reasoning=""
+                value="article-journal",
+                confidence=0.4,
+                source="heuristic",
+                alternatives=(),
+                reasoning="",
             ),
             overall_confidence=0.0,
             needs_review=True,
