@@ -1,14 +1,14 @@
 # Ingestion Domain
 
-Last verified: 2026-01-22
+Last verified: 2026-01-24
 
 ## Purpose
 
-Handles content acquisition (getting files into the system), extraction (converting to searchable text), and metadata processing (CSL-JSON validation). Defines protocols for extensibility; implementations handle specific source types.
+Handles content acquisition (getting files into the system), extraction (converting to searchable text), and metadata processing (CSL-JSON validation, text-based extraction). Defines protocols for extensibility; implementations handle specific source types.
 
 ## Contracts
 
-- **Exposes**: ContentAcquirer protocol, ContentExtractor protocol, FileAcquirer, PdfExtractor
+- **Exposes**: ContentAcquirer protocol, ContentExtractor protocol, FileAcquirer, PdfExtractor, TextMetadataExtractor
 - **Guarantees**:
   - `can_handle()` returns True only for sources/files the handler can process
   - Acquirers copy to temp location (never modify source)
@@ -16,12 +16,15 @@ Handles content acquisition (getting files into the system), extraction (convert
   - ContentExtractor.extract() produces ExtractionResult with quality metrics
   - ContentExtractor.extract_and_validate() combines extraction + validation in one call
   - FileAcquirer handles any local file path (content-agnostic); detects MIME type dynamically
-- **Expects**: Source paths exist and are readable; temp directories provided by caller
+  - TextMetadataExtractor.extract() returns TextExtractionResult with per-field confidence scores
+  - Extraction confidence threshold (default 0.7) determines needs_review status
+  - LLM fallback (when enabled) uses heuristic values as context hints
+- **Expects**: Source paths exist and are readable; temp directories provided by caller; markdown text for TextMetadataExtractor
 
 ## Dependencies
 
-- **Uses**: `core.models` (AcquisitionResult, ExtractionResult), `core.errors` (exception types)
-- **Used by**: `core.library` (Library orchestrator dispatches via `can_handle()`)
+- **Uses**: `core.models` (AcquisitionResult, ExtractionResult, FieldExtraction, TextExtractionResult), `core.errors` (exception types)
+- **Used by**: `core.library` (Library orchestrator dispatches via `can_handle()` and uses TextMetadataExtractor)
 - **Boundary**: Ingestion MUST NOT import from cli or storage
 
 ## Key Decisions
@@ -33,6 +36,9 @@ Handles content acquisition (getting files into the system), extraction (convert
 - **Quality validation**: ExtractionResult.validate() checks min length and printable ratio
 - **compute_storage_path**: Git-style `ab/cd/hash.ext` layout for content-addressable storage
 - **MetadataHandler**: Stateless CSL-JSON validation with citekey generation (internal, used by Library)
+- **TextMetadataExtractor**: Heuristic extraction of title, authors, date, doc_type from Marker-produced markdown. Optional LLM fallback via LiteLLM when confidence is low. Returns TextExtractionResult with per-field FieldExtraction objects.
+- **Mixed pattern for text_extraction.py**: File contains pure extraction functions (Functional Core) and LLMExtractor class (requires HTTP calls). Separation adds complexity without testability benefit since LLM tests use mocks.
+- **Confidence-based workflow**: Fields below confidence threshold (default 0.7) trigger needs_review. LLM fallback (if enabled) uses heuristic candidates as context hints but preserves heuristic confidence scores.
 - **Lazy imports via `__getattr__`**: Ingestion package uses module-level `__getattr__` to defer imports until needed. Breaks circular dependency: ingestion → core.models → core.library → ingestion.base. Zotero module not exposed here to remain isolated.
 - **Zotero module isolation**: `zotero.py` uses Mixed pattern for LibraryJsonParser (I/O necessary to parse CSL-JSON; cannot be separated without complexity). Frozen dataclasses remain pure. Tests import directly via `from local_library.ingestion.zotero import ...` to avoid circular import chain.
 
@@ -49,6 +55,7 @@ Handles content acquisition (getting files into the system), extraction (convert
 - `file.py` - FileAcquirer (any local file), compute_file_hash, dynamic MIME detection
 - `pdf.py` - PdfExtractor (Marker wrapper with quality validation)
 - `metadata.py` - MetadataHandler (CSL-JSON validation, citekey generation, field extraction)
+- `text_extraction.py` - TextMetadataExtractor, LLMExtractor, field extractors (extract_title, extract_authors, extract_date, extract_doc_type), build_csl_json converter
 - `zotero.py` - ZoteroAttachment, ZoteroItem frozen dataclasses; LibraryJsonParser for CSL-JSON metadata access
 
 ## Gotchas
@@ -59,3 +66,6 @@ Handles content acquisition (getting files into the system), extraction (convert
 - FileAcquirer returns detected MIME type (not hardcoded); callers should not assume PDF
 - Importing `from local_library.ingestion.zotero import ...` does NOT trigger eager evaluation of ingestion module imports (uses lazy `__getattr__`)
 - Do NOT add zotero imports to ingestion `__init__.py` - keep it isolated to preserve the lazy import pattern
+- TextMetadataExtractor preserves heuristic confidence even when LLM provides the value (for consistent needs_review determination)
+- Field extractors return FieldExtraction with value=None when extraction fails (not exceptions)
+- The `nameparser` library is used for robust author name parsing

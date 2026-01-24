@@ -20,6 +20,7 @@ from local_library.core.errors import (
     ErrorCode,
     ExtractionError,
     LookupError,
+    MetadataError,
     QualityError,
 )
 from local_library.core.models import AddResult, Document, DocumentStatus
@@ -41,6 +42,10 @@ from local_library.ingestion.base import ContentAcquirer, ContentExtractor, comp
 from local_library.ingestion.file import FileAcquirer
 from local_library.ingestion.metadata import MetadataHandler
 from local_library.ingestion.pdf import PdfExtractor
+from local_library.ingestion.text_extraction import (
+    TextMetadataExtractor,
+    build_csl_json,
+)
 
 
 class Library:
@@ -57,6 +62,10 @@ class Library:
         extracted_dir: Path | None = None,
         acquirers: list[ContentAcquirer] | None = None,
         extractors: list[ContentExtractor] | None = None,
+        text_extraction_enabled: bool = True,
+        text_extraction_llm_enabled: bool = False,
+        text_extraction_llm_model: str = "gpt-4o-mini",
+        text_extraction_confidence_threshold: float = 0.7,
     ) -> None:
         """Initialize the library.
 
@@ -66,6 +75,10 @@ class Library:
             extracted_dir: Directory for extracted markdown (default: platformdirs)
             acquirers: List of content acquirers (default: [FileAcquirer()])
             extractors: List of content extractors (default: [PdfExtractor(lazy_load=True)])
+            text_extraction_enabled: Whether to extract metadata from text (default: True)
+            text_extraction_llm_enabled: Whether to use LLM fallback (default: False)
+            text_extraction_llm_model: LLM model for fallback (default: "gpt-4o-mini")
+            text_extraction_confidence_threshold: Confidence threshold (default: 0.7)
         """
         # Use defaults from config if not specified
         self._db_path = db_path or get_database_path()
@@ -82,6 +95,17 @@ class Library:
 
         # Initialize metadata handler
         self._metadata_handler = MetadataHandler()
+
+        # Initialize text metadata extractor
+        self._text_extractor = (
+            TextMetadataExtractor(
+                confidence_threshold=text_extraction_confidence_threshold,
+                llm_enabled=text_extraction_llm_enabled,
+                llm_model=text_extraction_llm_model,
+            )
+            if text_extraction_enabled
+            else None
+        )
 
         # Ensure directories exist
         ensure_directories()
@@ -262,7 +286,7 @@ class Library:
             extracted_path.parent.mkdir(parents=True, exist_ok=True)
             extracted_path.write_text(result.text, encoding="utf-8")
 
-            # Update record to ready
+            # Update record to ready (temporarily - may change to NEEDS_REVIEW)
             doc = update_document_status(
                 self._conn,
                 doc.id,
@@ -270,9 +294,13 @@ class Library:
                 extracted_path=str(extracted_path),
             )
 
-            # Process metadata if provided
+            # Process metadata
             if metadata:
+                # Explicit metadata provided
                 doc = self._process_metadata(doc, metadata)
+            elif self._text_extractor:
+                # Extract metadata from text
+                doc = self._process_text_extraction(doc, result.text)
 
         except (ExtractionError, QualityError) as e:
             # Update record to failed
@@ -368,6 +396,75 @@ class Library:
             authors=result.authors,
             issued_date=result.issued_date,
         )
+
+    def _process_text_extraction(self, doc: Document, text: str) -> Document:
+        """Extract and process metadata from document text.
+
+        Args:
+            doc: The document to update
+            text: Extracted text content
+
+        Returns:
+            Updated document with extracted metadata
+        """
+        # Extract metadata from text
+        extraction = self._text_extractor.extract(text)
+
+        # Convert to CSL-JSON
+        csl_json = build_csl_json(extraction)
+
+        # Only process if we have enough metadata
+        if "title" not in csl_json and "author" not in csl_json:
+            # Nothing useful extracted - update status to NEEDS_REVIEW
+            return update_document_status(
+                self._conn,
+                doc.id,
+                DocumentStatus.NEEDS_REVIEW,
+                error_message="No metadata could be extracted from document text",
+            )
+
+        try:
+            # Process through MetadataHandler for validation and citekey
+            result = self._metadata_handler.process(csl_json)
+
+            # Get unique citekey
+            unique_citekey = get_unique_citekey(self._conn, result.citekey)
+
+            # Determine final status
+            final_status = (
+                DocumentStatus.NEEDS_REVIEW if extraction.needs_review else DocumentStatus.READY
+            )
+
+            # Update document
+            doc = update_document_metadata(
+                self._conn,
+                doc.id,
+                citekey=unique_citekey,
+                csl_json=result.csl_json,
+                title=result.title,
+                authors=result.authors,
+                issued_date=result.issued_date,
+            )
+
+            # Update status if needed
+            if final_status == DocumentStatus.NEEDS_REVIEW:
+                doc = update_document_status(
+                    self._conn,
+                    doc.id,
+                    DocumentStatus.NEEDS_REVIEW,
+                    error_message="; ".join(extraction.review_reasons),
+                )
+
+            return doc
+
+        except MetadataError:
+            # Extracted metadata failed validation - still set what we can
+            return update_document_status(
+                self._conn,
+                doc.id,
+                DocumentStatus.NEEDS_REVIEW,
+                error_message="Extracted metadata failed validation",
+            )
 
     # --- Query Operations ---
 

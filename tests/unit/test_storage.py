@@ -319,6 +319,31 @@ class TestUpdateDocumentStatus:
 
         assert exc_info.value.code == ErrorCode.NOT_FOUND
 
+    def test_document_status_needs_review_round_trip(self, db_conn: sqlite3.Connection) -> None:
+        """NEEDS_REVIEW status should persist and retrieve correctly."""
+        # Create a document
+        doc = create_document(
+            db_conn,
+            original_path="/test/file.pdf",
+            content_hash="abc123",
+            storage_path="/storage/ab/c1/abc123.pdf",
+        )
+
+        # Update to NEEDS_REVIEW status
+        updated = update_document_status(
+            db_conn,
+            doc.id,
+            DocumentStatus.NEEDS_REVIEW,
+            extracted_path="/extracted/ab/c1/abc123.md",
+        )
+
+        assert updated.status == DocumentStatus.NEEDS_REVIEW
+
+        # Verify retrieval
+        retrieved = get_document_by_id(db_conn, doc.id)
+        assert retrieved is not None
+        assert retrieved.status == DocumentStatus.NEEDS_REVIEW
+
 
 class TestDeleteDocument:
     """Tests for delete_document function."""

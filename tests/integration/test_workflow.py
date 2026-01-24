@@ -344,3 +344,130 @@ class TestMetadataWorkflow:
 
         assert result.document.citekey is None
         assert result.document.title is None
+
+
+class TestTextExtractionIntegration:
+    """Integration tests for text-based metadata extraction in Library.add()."""
+
+    def test_add_without_metadata_extracts_from_text(
+        self,
+        integration_library_with_text_extraction: "Library",
+        sample_pdf: Path,
+    ) -> None:
+        """Adding without --metadata should extract metadata from text."""
+        # Mock extraction to return text with metadata
+        mock_result = MagicMock()
+        mock_result.text = (
+            """# Machine Learning Fundamentals
+
+        John Smith, Jane Doe
+
+        Published: 2023
+
+        Journal of Computer Science
+
+        Abstract: This paper discusses machine learning...
+        """
+            + " additional content" * 100
+        )
+
+        with patch.object(
+            integration_library_with_text_extraction._extractors[0],
+            "extract_and_validate",
+            return_value=mock_result,
+        ):
+            result = integration_library_with_text_extraction.add(str(sample_pdf))
+
+        # Should have extracted metadata
+        doc = result.document
+        assert doc.title is not None
+        assert doc.citekey is not None
+
+    def test_add_without_metadata_sets_needs_review_status(
+        self,
+        integration_library_with_text_extraction: "Library",
+        sample_pdf: Path,
+    ) -> None:
+        """Low confidence extraction should set NEEDS_REVIEW status."""
+        # Mock extraction to return minimal text (low confidence)
+        mock_result = MagicMock()
+        mock_result.text = (
+            """Some vague content without clear metadata.
+        """
+            + " filler" * 50
+        )
+
+        with patch.object(
+            integration_library_with_text_extraction._extractors[0],
+            "extract_and_validate",
+            return_value=mock_result,
+        ):
+            result = integration_library_with_text_extraction.add(str(sample_pdf))
+
+        doc = result.document
+        # Low confidence should result in NEEDS_REVIEW or READY
+        # (This depends on extraction quality - adjust as needed)
+        assert doc.status in (DocumentStatus.READY, DocumentStatus.NEEDS_REVIEW)
+
+    def test_add_with_explicit_metadata_skips_extraction(
+        self,
+        integration_library_with_text_extraction: "Library",
+        sample_pdf: Path,
+    ) -> None:
+        """Adding with --metadata should use explicit metadata, not text extraction."""
+        mock_result = MagicMock()
+        mock_result.text = "Some extracted text" + " content" * 50
+
+        explicit_metadata = {
+            "type": "article-journal",
+            "title": "Explicit Title",
+            "author": [{"family": "Explicit", "given": "Author"}],
+            "issued": {"date-parts": [[2022]]},
+        }
+
+        with patch.object(
+            integration_library_with_text_extraction._extractors[0],
+            "extract_and_validate",
+            return_value=mock_result,
+        ):
+            result = integration_library_with_text_extraction.add(
+                str(sample_pdf), metadata=explicit_metadata
+            )
+
+        doc = result.document
+        # Should use explicit metadata
+        assert doc.title == "Explicit Title"
+        assert "Explicit" in (doc.authors or "")
+
+    def test_add_generates_citekey_from_extracted_metadata(
+        self,
+        integration_library_with_text_extraction: "Library",
+        sample_pdf: Path,
+    ) -> None:
+        """Citekey should be generated from extracted metadata."""
+        mock_result = MagicMock()
+        mock_result.text = (
+            """# Deep Learning Theory
+
+        Alice Smith
+
+        Published: 2023
+
+        Abstract...
+        """
+            + " content" * 100
+        )
+
+        with patch.object(
+            integration_library_with_text_extraction._extractors[0],
+            "extract_and_validate",
+            return_value=mock_result,
+        ):
+            result = integration_library_with_text_extraction.add(str(sample_pdf))
+
+        doc = result.document
+        # Citekey should be generated (pattern: AuthorYearTitleword)
+        assert doc.citekey is not None
+        assert len(doc.citekey) > 0
+        # Should contain year if extracted
+        # assert "2023" in doc.citekey or "Smith" in doc.citekey

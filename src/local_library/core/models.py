@@ -16,6 +16,7 @@ class DocumentStatus(str, Enum):
     PENDING = "pending"  # Created, not yet processed
     READY = "ready"  # Extraction complete, searchable
     FAILED = "failed"  # Extraction failed, needs retry or manual intervention
+    NEEDS_REVIEW = "needs_review"  # Extraction succeeded but confidence is low
 
 
 @dataclass(frozen=True)
@@ -183,3 +184,52 @@ class MetadataResult:
             validation_warnings=tuple(validation_warnings or []),
             author_list=tuple(author_list or []),
         )
+
+
+@dataclass(frozen=True)
+class FieldExtraction:
+    """Result of extracting a single metadata field.
+
+    Captures the extracted value along with confidence scoring and provenance
+    information. Used by TextMetadataExtractor for per-field extraction results.
+
+    Attributes:
+        value: Extracted value, or None if field could not be extracted
+        confidence: Confidence score from 0.0 to 1.0 (heuristic confidence,
+                   preserved even if LLM provided the value)
+        source: Origin of the value - "heuristic" or "llm"
+        alternatives: Other candidates that were considered
+        reasoning: Explanation of why this value was chosen
+    """
+
+    value: str | None
+    confidence: float
+    source: str  # "heuristic" | "llm"
+    alternatives: tuple[str, ...]
+    reasoning: str
+
+
+@dataclass(frozen=True)
+class TextExtractionResult:
+    """Complete metadata extraction result from document text.
+
+    Aggregates per-field extractions with overall confidence and review status.
+    Used by TextMetadataExtractor as the return type for extract().
+
+    Attributes:
+        title: Extracted title field
+        authors: Tuple of extracted author fields (one per author)
+        date: Extracted publication date field
+        doc_type: Extracted document type field
+        overall_confidence: Minimum of all field confidences
+        needs_review: True if any field confidence is below threshold
+        review_reasons: Explanations for why review is needed
+    """
+
+    title: FieldExtraction
+    authors: tuple[FieldExtraction, ...]
+    date: FieldExtraction
+    doc_type: FieldExtraction
+    overall_confidence: float
+    needs_review: bool
+    review_reasons: tuple[str, ...]

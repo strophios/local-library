@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-01-23
+Last verified: 2026-01-24
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -52,13 +52,16 @@ Each document record contains:
 
 Development follows a **pipeline-first, layer-complete** approach documented in `build_philosophy.md`. The key insight: pipeline stages (vertical data flow) and architectural layers (horizontal concerns) are orthogonal. Build along the pipeline for rapid feedback; implement layers completely when touched.
 
-### Current Status: M1-M4 Complete (Record Storage + Extraction + Metadata + Zotero Reader)
+### Current Status: M1-M4 + M3b Complete (Record Storage + Extraction + Metadata + Zotero Reader + Text Extraction)
 
-Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), and M4 (Zotero read-only access) are implemented. The system can:
+Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), M3b (text-based metadata extraction), and M4 (Zotero read-only access) are implemented. The system can:
 - Ingest local PDF files via CLI (`local-library add <path>`)
 - Accept explicit CSL-JSON metadata (`--metadata <file>`)
 - Extract text to markdown via Marker
 - Validate metadata against CSL-JSON schema and generate citekeys
+- **Extract metadata from PDF text** when no explicit metadata provided
+- Set documents to NEEDS_REVIEW status when extraction confidence is low
+- Optionally use LLM fallback (via LiteLLM) for low-confidence extractions
 - Store documents in content-addressable storage with SQLite metadata
 - Query, list, and delete documents via CLI
 - Read items, attachments, and metadata from Zotero library (via database or BetterBibTeX JSON export)
@@ -68,12 +71,14 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - Text extraction via Marker with quality validation
 - CSL-JSON metadata validation with BetterBibTeX-style citekey generation
 - Indexed field extraction (title, authors, issued_date)
+- **Text-based metadata extraction**: heuristic extractors for title, authors, date, and document type with confidence scoring
+- **NEEDS_REVIEW workflow**: documents with low-confidence extraction flagged for human review
+- **Optional LLM fallback**: LiteLLM integration for re-extracting low-confidence fields
 - SQLite storage with content-addressable file layout
 - CLI interface (add, list, show, delete, --metadata flag)
 - Zotero read-only access: ZoteroReader facade with database and JSON export backends, BetterBibTeX citekey mapping, attachment resolution
-- Extraction testing infrastructure: golden set tests with Zotero ground truth, accuracy metrics (title similarity, author Jaccard, year match), diagnostic reporting
 
-**Next milestones:** M3b (text-based metadata extraction), M5 (embedding pipeline). See `build_plan.md` for full details.
+**Next milestones:** M5 (embedding pipeline). See `build_plan.md` for full details.
 
 **Deferred to later phases:** M3c (API metadata enrichment), web content ingestion, Zotero sync, citation tooling, auto-tagging, note management, Neovim plugin. See `future_roadmap.md` for full details.
 
@@ -89,7 +94,7 @@ Four horizontal concerns cut across the system:
 ## Key Libraries and Tools
 
 - **Web extraction**: trafilatura, readability-lxml
-- **PDF extraction**: Marker 1.8.0 (pinned due to MPS bug in v1.9.0+; see `future_roadmap.md` for upgrade plan), olmOCR (for scanned historical documents on remote GPU)
+- **PDF extraction**: Marker (primary), olmOCR (for scanned historical documents on remote GPU)
 - **Embeddings**: nomic-embed-text-v1.5 (local, 1024 dims, 8192 context)
 - **Metadata**: CrossRef API, GROBID (for academic PDFs), Open Graph tags (for web)
 - **Vector storage**: sqlite-vec (v0.1.6+), SQLite FTS5 for hybrid search
@@ -155,8 +160,7 @@ A detailed evaluation framework with quality targets, test set design, and evalu
 - `uv run local-library list` - List all documents
 - `uv run local-library show <id>` - Show document details
 - `uv run local-library delete <id>` - Delete a document
-- `uv run pytest` - Run tests (excludes extraction tests by default)
-- `uv run pytest --run-extraction` - Run tests including slow extraction tests
+- `uv run pytest` - Run tests
 - `uv run ruff check` - Lint code
 - `uv run ruff format` - Format code
 
@@ -176,6 +180,7 @@ src/local_library/
 │   ├── file.py          # FileAcquirer implementation
 │   ├── pdf.py           # PdfExtractor (Marker wrapper)
 │   ├── metadata.py      # MetadataHandler (CSL-JSON validation, citekey generation)
+│   ├── text_extraction.py  # TextMetadataExtractor (heuristic + LLM metadata extraction)
 │   └── zotero.py        # ZoteroReader facade (database + JSON backends, citekey mapping)
 └── cli/                 # CLI interface (Typer/Rich)
     ├── main.py          # Entry point, command registration
