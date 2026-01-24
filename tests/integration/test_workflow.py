@@ -456,7 +456,7 @@ class TestTextExtractionIntegration:
 
         doc = result.document
         # Citekey should be generated (pattern: AuthorYearTitleword)
-        if doc.citekey:
-            assert len(doc.citekey) > 0
-            # Should contain year if extracted
-            # assert "2023" in doc.citekey or "Smith" in doc.citekey
+        assert doc.citekey is not None
+        assert len(doc.citekey) > 0
+        # Should contain year if extracted
+        # assert "2023" in doc.citekey or "Smith" in doc.citekey

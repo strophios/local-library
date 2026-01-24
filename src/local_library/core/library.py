@@ -430,11 +430,6 @@ class Library:
             # Get unique citekey
             unique_citekey = get_unique_citekey(self._conn, result.citekey)
 
-            # Merge extraction warnings with metadata warnings
-            all_warnings = list(result.validation_warnings)
-            if extraction.needs_review:
-                all_warnings.extend(extraction.review_reasons)
-
             # Determine final status
             final_status = (
                 DocumentStatus.NEEDS_REVIEW if extraction.needs_review else DocumentStatus.READY

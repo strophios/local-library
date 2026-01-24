@@ -1288,3 +1288,60 @@ class TestBuildCslJson:
         assert "title" not in csl
         assert "author" not in csl
         assert "issued" not in csl
+
+    def test_convert_author_family_given_format(self) -> None:
+        """Should convert 'Family, Given' format correctly."""
+        from local_library.ingestion.text_extraction import _convert_author_to_csl
+
+        result = _convert_author_to_csl("Smith, John")
+
+        assert result is not None
+        assert result["family"] == "Smith"
+        assert result["given"] == "John"
+
+    def test_convert_author_given_family_format(self) -> None:
+        """Should convert 'Given Family' format correctly."""
+        from local_library.ingestion.text_extraction import _convert_author_to_csl
+
+        result = _convert_author_to_csl("John Smith")
+
+        assert result is not None
+        assert result["family"] == "Smith"
+        assert result["given"] == "John"
+
+    def test_convert_author_multiple_given_names(self) -> None:
+        """Should handle multiple given names correctly."""
+        from local_library.ingestion.text_extraction import _convert_author_to_csl
+
+        result = _convert_author_to_csl("John Michael Smith")
+
+        assert result is not None
+        assert result["family"] == "Smith"
+        assert result["given"] == "John Michael"
+
+    def test_convert_author_single_word_literal(self) -> None:
+        """Should use 'literal' format for single-word names."""
+        from local_library.ingestion.text_extraction import _convert_author_to_csl
+
+        result = _convert_author_to_csl("Plato")
+
+        assert result is not None
+        assert result == {"literal": "Plato"}
+        assert "family" not in result
+        assert "given" not in result
+
+    def test_convert_author_empty_string(self) -> None:
+        """Should return None for empty strings."""
+        from local_library.ingestion.text_extraction import _convert_author_to_csl
+
+        result = _convert_author_to_csl("")
+
+        assert result is None
+
+    def test_convert_author_whitespace_only(self) -> None:
+        """Should return None for whitespace-only strings."""
+        from local_library.ingestion.text_extraction import _convert_author_to_csl
+
+        result = _convert_author_to_csl("   ")
+
+        assert result is None
