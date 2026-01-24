@@ -12,6 +12,7 @@ from local_library.core.models import (
     Document,
     DocumentStatus,
     ExtractionResult,
+    FieldExtraction,
     MetadataResult,
 )
 
@@ -162,6 +163,49 @@ class TestExtractionResult:
         result = ExtractionResult.from_text("Content", metadata=metadata)
 
         assert result.metadata == metadata
+
+
+class TestFieldExtraction:
+    """Tests for FieldExtraction dataclass."""
+
+    def test_field_extraction_is_frozen(self) -> None:
+        """FieldExtraction should be immutable."""
+        field = FieldExtraction(
+            value="Test Title",
+            confidence=0.85,
+            source="heuristic",
+            alternatives=("Alt Title",),
+            reasoning="First line of document",
+        )
+
+        with pytest.raises(AttributeError):
+            field.value = "Changed"  # type: ignore[misc]
+
+    def test_field_extraction_with_none_value(self) -> None:
+        """FieldExtraction should allow None value for missing fields."""
+        field = FieldExtraction(
+            value=None,
+            confidence=0.0,
+            source="heuristic",
+            alternatives=(),
+            reasoning="No candidates found",
+        )
+
+        assert field.value is None
+        assert field.confidence == 0.0
+
+    def test_field_extraction_confidence_bounds(self) -> None:
+        """FieldExtraction confidence should be between 0.0 and 1.0."""
+        # Valid bounds
+        low = FieldExtraction(
+            value="x", confidence=0.0, source="heuristic", alternatives=(), reasoning=""
+        )
+        high = FieldExtraction(
+            value="x", confidence=1.0, source="heuristic", alternatives=(), reasoning=""
+        )
+
+        assert low.confidence == 0.0
+        assert high.confidence == 1.0
 
 
 class TestAddResult:

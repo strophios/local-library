@@ -184,3 +184,26 @@ class MetadataResult:
             validation_warnings=tuple(validation_warnings or []),
             author_list=tuple(author_list or []),
         )
+
+
+@dataclass(frozen=True)
+class FieldExtraction:
+    """Result of extracting a single metadata field.
+
+    Captures the extracted value along with confidence scoring and provenance
+    information. Used by TextMetadataExtractor for per-field extraction results.
+
+    Attributes:
+        value: Extracted value, or None if field could not be extracted
+        confidence: Confidence score from 0.0 to 1.0 (heuristic confidence,
+                   preserved even if LLM provided the value)
+        source: Origin of the value - "heuristic" or "llm"
+        alternatives: Other candidates that were considered
+        reasoning: Explanation of why this value was chosen
+    """
+
+    value: str | None
+    confidence: float
+    source: str  # "heuristic" | "llm"
+    alternatives: tuple[str, ...]
+    reasoning: str
