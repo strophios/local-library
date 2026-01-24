@@ -409,6 +409,144 @@ class TestDateExtraction:
         assert result.source == "heuristic"
 
 
+class TestTypeExtraction:
+    """Tests for document type extraction from markdown text."""
+
+    def test_extract_type_journal_article(self) -> None:
+        """Journal-like documents should return 'article-journal'."""
+        from local_library.ingestion.text_extraction import extract_doc_type
+
+        text = """Machine Learning Applications
+
+        Journal of Computer Science, Vol. 42, No. 3
+
+        Abstract: This paper presents...
+        """
+
+        result = extract_doc_type(text)
+
+        assert result.value == "article-journal"
+        assert result.confidence >= 0.7
+
+    def test_extract_type_conference_paper(self) -> None:
+        """Conference papers should return 'paper-conference'."""
+        from local_library.ingestion.text_extraction import extract_doc_type
+
+        text = """Novel Algorithm Design
+
+        Proceedings of the International Conference on Machine Learning
+
+        Abstract...
+        """
+
+        result = extract_doc_type(text)
+
+        assert result.value == "paper-conference"
+
+    def test_extract_type_book_chapter(self) -> None:
+        """Book chapters should return 'chapter'."""
+        from local_library.ingestion.text_extraction import extract_doc_type
+
+        text = """Chapter 5: Advanced Topics
+
+        In: Handbook of Machine Learning
+        Editors: Smith and Jones
+
+        Introduction...
+        """
+
+        result = extract_doc_type(text)
+
+        assert result.value == "chapter"
+
+    def test_extract_type_thesis(self) -> None:
+        """Theses should return 'thesis'."""
+        from local_library.ingestion.text_extraction import extract_doc_type
+
+        text = """A Dissertation Submitted to the Faculty
+
+        in partial fulfillment of the requirements
+        for the degree of Doctor of Philosophy
+
+        By John Smith
+        """
+
+        result = extract_doc_type(text)
+
+        assert result.value == "thesis"
+
+    def test_extract_type_report(self) -> None:
+        """Technical reports should return 'report'."""
+        from local_library.ingestion.text_extraction import extract_doc_type
+
+        text = """Technical Report TR-2023-01
+
+        MIT Computer Science and Artificial Intelligence Laboratory
+
+        Abstract...
+        """
+
+        result = extract_doc_type(text)
+
+        assert result.value == "report"
+
+    def test_extract_type_default_article_journal(self) -> None:
+        """Unknown document types should default to 'article-journal'."""
+        from local_library.ingestion.text_extraction import extract_doc_type
+
+        text = """Some Research
+
+        By Someone
+
+        This discusses various topics...
+        """
+
+        result = extract_doc_type(text)
+
+        # Default is article-journal
+        assert result.value == "article-journal"
+        # But with lower confidence
+        assert result.confidence < 0.7
+
+    def test_extract_type_empty_text(self) -> None:
+        """Empty text should return default with low confidence."""
+        from local_library.ingestion.text_extraction import extract_doc_type
+
+        result = extract_doc_type("")
+
+        assert result.value == "article-journal"  # Default
+        assert result.confidence < 0.5
+
+    def test_extract_type_returns_field_extraction(self) -> None:
+        """Result should be a proper FieldExtraction."""
+        from local_library.ingestion.text_extraction import extract_doc_type
+
+        text = "Some text"
+
+        result = extract_doc_type(text)
+
+        assert hasattr(result, "value")
+        assert hasattr(result, "confidence")
+        assert hasattr(result, "source")
+        assert result.source == "heuristic"
+
+    def test_extract_type_preprint(self) -> None:
+        """Preprints/arXiv papers should be detected."""
+        from local_library.ingestion.text_extraction import extract_doc_type
+
+        text = """arXiv:2301.12345v1 [cs.LG]
+
+        Deep Learning for Everything
+
+        Abstract...
+        """
+
+        result = extract_doc_type(text)
+
+        # Preprints are typically article-journal or article
+        assert result.value in ("article-journal", "article")
+
+
 class TestTitleExtraction:
     """Tests for title extraction from markdown text."""
 

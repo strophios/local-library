@@ -817,6 +817,128 @@ def extract_date(markdown_text: str) -> FieldExtraction:
     )
 
 
+# Type extraction patterns (pattern, type, confidence)
+_TYPE_PATTERNS: list[tuple[str, str, float]] = [
+    # Thesis patterns
+    (r"\bdissertation\b", "thesis", 0.9),
+    (r"\bthesis\b", "thesis", 0.9),
+    (r"\bphd\b.*\b(?:candidate|student)\b", "thesis", 0.8),
+    (r"in partial fulfillment", "thesis", 0.85),
+    (r"\bmaster'?s?\s+(?:thesis|degree)\b", "thesis", 0.85),
+    # Conference patterns
+    (r"\bproceedings\b", "paper-conference", 0.85),
+    (r"\bconference\b.*\bpaper\b", "paper-conference", 0.8),
+    (r"\bworkshop\b.*\bpaper\b", "paper-conference", 0.75),
+    (r"\baccepted\s+(?:at|to)\s+\w+\s+\d{4}\b", "paper-conference", 0.7),
+    # Chapter patterns
+    (r"^chapter\s+\d+", "chapter", 0.9),
+    (r"\bin:\s+\w+", "chapter", 0.6),
+    (r"\beditors?:\s+", "chapter", 0.5),
+    # Report patterns
+    (r"\btechnical\s+report\b", "report", 0.9),
+    (r"\btr-\d+", "report", 0.8),
+    (r"\bworking\s+paper\b", "report", 0.75),
+    (r"\bwhite\s+paper\b", "report", 0.7),
+    # Book patterns
+    (r"\bisbn\b", "book", 0.8),
+    (r"\bpublisher:\s+", "book", 0.6),
+    # Journal patterns
+    (r"\bjournal\s+of\b", "article-journal", 0.8),
+    (r"\bvol(?:ume)?\.?\s*\d+", "article-journal", 0.6),
+    (r"\bissue\s*\d+", "article-journal", 0.5),
+    (r"\bpp\.?\s*\d+", "article-journal", 0.5),
+]
+
+# Default type when no patterns match
+_DEFAULT_DOC_TYPE = "article-journal"
+_DEFAULT_TYPE_CONFIDENCE = 0.4
+
+
+def extract_doc_type(markdown_text: str) -> FieldExtraction:
+    """Extract document type from markdown text.
+
+    Uses keyword and pattern matching to identify document type.
+    Defaults to 'article-journal' if no clear signals.
+
+    Valid CSL types returned:
+    - article-journal (default)
+    - paper-conference
+    - chapter
+    - thesis
+    - report
+    - book
+
+    Args:
+        markdown_text: Marker-produced markdown content
+
+    Returns:
+        FieldExtraction with CSL document type
+    """
+    # Handle empty input
+    if not markdown_text or not markdown_text.strip():
+        return FieldExtraction(
+            value=_DEFAULT_DOC_TYPE,
+            confidence=_DEFAULT_TYPE_CONFIDENCE * 0.5,
+            source="heuristic",
+            alternatives=(),
+            reasoning="no text content, using default",
+        )
+
+    # Search first part of document
+    search_text = markdown_text[:3000].lower()
+
+    # Find matching patterns
+    matches: list[tuple[str, float, str]] = []
+
+    for pattern, doc_type, confidence in _TYPE_PATTERNS:
+        if re.search(pattern, search_text, re.IGNORECASE | re.MULTILINE):
+            matches.append((doc_type, confidence, pattern))
+
+    if not matches:
+        return FieldExtraction(
+            value=_DEFAULT_DOC_TYPE,
+            confidence=_DEFAULT_TYPE_CONFIDENCE,
+            source="heuristic",
+            alternatives=(),
+            reasoning="no type patterns matched, using default",
+        )
+
+    # Sort by confidence and aggregate by type
+    matches.sort(key=lambda m: m[1], reverse=True)
+
+    # Group matches by type and sum confidence (with diminishing returns)
+    type_scores: dict[str, float] = {}
+    type_reasons: dict[str, list[str]] = {}
+
+    for doc_type, conf, pattern in matches:
+        if doc_type not in type_scores:
+            type_scores[doc_type] = conf
+            type_reasons[doc_type] = [pattern]
+        else:
+            # Diminishing returns for multiple matches of same type
+            type_scores[doc_type] = min(0.95, type_scores[doc_type] + conf * 0.2)
+            type_reasons[doc_type].append(pattern)
+
+    # Select best type
+    best_type = max(type_scores.keys(), key=lambda t: type_scores[t])
+    best_score = type_scores[best_type]
+
+    # Build alternatives
+    alternatives = [t for t in type_scores.keys() if t != best_type][:3]
+
+    # Build reasoning
+    patterns = type_reasons[best_type][:2]  # First two patterns
+    reasoning = f"matched: {', '.join(patterns)}"
+
+    return FieldExtraction(
+        value=best_type,
+        confidence=round(best_score, 2),
+        source="heuristic",
+        alternatives=tuple(alternatives),
+        reasoning=reasoning,
+    )
+
+
 def extract_title(markdown_text: str) -> FieldExtraction:
     """Extract document title from markdown text.
 
