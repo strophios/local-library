@@ -1000,3 +1000,126 @@ def extract_title(markdown_text: str) -> FieldExtraction:
         alternatives=alternatives,
         reasoning=reasoning,
     )
+
+
+# Default confidence threshold for triggering needs_review
+_DEFAULT_CONFIDENCE_THRESHOLD = 0.7
+
+
+class TextMetadataExtractor:
+    """Orchestrates extraction of all metadata fields from document text.
+
+    Combines individual field extractors (title, authors, date, type) and
+    aggregates confidence scores to determine if human review is needed.
+
+    Usage:
+        extractor = TextMetadataExtractor()
+        result = extractor.extract(markdown_text)
+        if result.needs_review:
+            print(f"Review needed: {result.review_reasons}")
+
+    Attributes:
+        confidence_threshold: Minimum confidence for a field to be considered
+                             reliable. Fields below this trigger needs_review.
+    """
+
+    def __init__(
+        self, confidence_threshold: float = _DEFAULT_CONFIDENCE_THRESHOLD
+    ) -> None:
+        """Initialize the extractor.
+
+        Args:
+            confidence_threshold: Minimum confidence (0.0-1.0) for fields.
+                                 Default is 0.7 (70%).
+        """
+        self.confidence_threshold = confidence_threshold
+
+    def extract(self, markdown_text: str) -> "TextExtractionResult":
+        """Extract all metadata fields from markdown text.
+
+        Runs each field extractor independently, then aggregates results
+        into a TextExtractionResult with overall confidence and review status.
+
+        Args:
+            markdown_text: Marker-produced markdown content
+
+        Returns:
+            TextExtractionResult with all extracted fields and aggregated metadata
+        """
+        from local_library.core.models import TextExtractionResult
+
+        # Extract each field
+        title = extract_title(markdown_text)
+        authors = extract_authors(markdown_text)
+        date = extract_date(markdown_text)
+        doc_type = extract_doc_type(markdown_text)
+
+        # Calculate overall confidence (minimum of all fields)
+        all_confidences = [title.confidence, date.confidence, doc_type.confidence]
+        if authors:
+            all_confidences.extend(a.confidence for a in authors)
+
+        overall_confidence = min(all_confidences) if all_confidences else 0.0
+
+        # Determine needs_review and reasons
+        review_reasons = self._check_review_needed(title, authors, date, doc_type)
+        needs_review = len(review_reasons) > 0
+
+        return TextExtractionResult(
+            title=title,
+            authors=authors,
+            date=date,
+            doc_type=doc_type,
+            overall_confidence=round(overall_confidence, 2),
+            needs_review=needs_review,
+            review_reasons=tuple(review_reasons),
+        )
+
+    def _check_review_needed(
+        self,
+        title: FieldExtraction,
+        authors: tuple[FieldExtraction, ...],
+        date: FieldExtraction,
+        doc_type: FieldExtraction,
+    ) -> list[str]:
+        """Check if any field needs human review.
+
+        Returns:
+            List of review reasons (empty if no review needed)
+        """
+        reasons: list[str] = []
+        threshold = self.confidence_threshold
+
+        # Check title
+        if title.value is None:
+            reasons.append("title could not be extracted")
+        elif title.confidence < threshold:
+            reasons.append(
+                f"title confidence {title.confidence:.2f} below threshold {threshold:.2f}"
+            )
+
+        # Check authors
+        if not authors:
+            reasons.append("no authors could be extracted")
+        else:
+            low_conf_authors = [a for a in authors if a.confidence < threshold]
+            if len(low_conf_authors) == len(authors):
+                # All authors have low confidence
+                avg_conf = sum(a.confidence for a in authors) / len(authors)
+                reasons.append(
+                    f"authors average confidence {avg_conf:.2f} below threshold {threshold:.2f}"
+                )
+
+        # Check date
+        if date.value is None:
+            reasons.append("date could not be extracted")
+        elif date.confidence < threshold:
+            reasons.append(
+                f"date confidence {date.confidence:.2f} below threshold {threshold:.2f}"
+            )
+
+        # Check doc_type (less critical, only flag if very low)
+        if doc_type.confidence < threshold * 0.7:  # Lower bar for type
+            reasons.append(f"document type confidence {doc_type.confidence:.2f} is low")
+
+        return reasons
