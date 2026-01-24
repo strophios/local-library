@@ -14,11 +14,29 @@ def integration_library(temp_dir: Path) -> Library:
     """Provide a Library instance for integration testing.
 
     Uses temporary directories for all storage to ensure test isolation.
+    Text extraction is disabled by default for compatibility with existing tests
+    that use minimal mock text. Tests that want text extraction can pass
+    text_extraction_enabled=True when creating a Library.
     """
     return Library(
         db_path=temp_dir / "test.db",
         storage_dir=temp_dir / "storage",
         extracted_dir=temp_dir / "extracted",
+        text_extraction_enabled=False,
+    )
+
+
+@pytest.fixture
+def integration_library_with_text_extraction(temp_dir: Path) -> Library:
+    """Provide a Library instance with text extraction enabled.
+
+    Used for tests that specifically test text extraction functionality.
+    """
+    return Library(
+        db_path=temp_dir / "test.db",
+        storage_dir=temp_dir / "storage",
+        extracted_dir=temp_dir / "extracted",
+        text_extraction_enabled=True,
     )
 
 

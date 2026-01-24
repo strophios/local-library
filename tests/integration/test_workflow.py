@@ -351,7 +351,7 @@ class TestTextExtractionIntegration:
 
     def test_add_without_metadata_extracts_from_text(
         self,
-        integration_library: "Library",
+        integration_library_with_text_extraction: "Library",
         sample_pdf: Path,
     ) -> None:
         """Adding without --metadata should extract metadata from text."""
@@ -369,11 +369,11 @@ class TestTextExtractionIntegration:
         """ + " additional content" * 100
 
         with patch.object(
-            integration_library._extractors[0],
+            integration_library_with_text_extraction._extractors[0],
             "extract_and_validate",
             return_value=mock_result,
         ):
-            result = integration_library.add(str(sample_pdf))
+            result = integration_library_with_text_extraction.add(str(sample_pdf))
 
         # Should have extracted metadata
         doc = result.document
@@ -382,7 +382,7 @@ class TestTextExtractionIntegration:
 
     def test_add_without_metadata_sets_needs_review_status(
         self,
-        integration_library: "Library",
+        integration_library_with_text_extraction: "Library",
         sample_pdf: Path,
     ) -> None:
         """Low confidence extraction should set NEEDS_REVIEW status."""
@@ -392,11 +392,11 @@ class TestTextExtractionIntegration:
         """ + " filler" * 50
 
         with patch.object(
-            integration_library._extractors[0],
+            integration_library_with_text_extraction._extractors[0],
             "extract_and_validate",
             return_value=mock_result,
         ):
-            result = integration_library.add(str(sample_pdf))
+            result = integration_library_with_text_extraction.add(str(sample_pdf))
 
         doc = result.document
         # Low confidence should result in NEEDS_REVIEW or READY
@@ -405,7 +405,7 @@ class TestTextExtractionIntegration:
 
     def test_add_with_explicit_metadata_skips_extraction(
         self,
-        integration_library: "Library",
+        integration_library_with_text_extraction: "Library",
         sample_pdf: Path,
     ) -> None:
         """Adding with --metadata should use explicit metadata, not text extraction."""
@@ -420,11 +420,11 @@ class TestTextExtractionIntegration:
         }
 
         with patch.object(
-            integration_library._extractors[0],
+            integration_library_with_text_extraction._extractors[0],
             "extract_and_validate",
             return_value=mock_result,
         ):
-            result = integration_library.add(str(sample_pdf), metadata=explicit_metadata)
+            result = integration_library_with_text_extraction.add(str(sample_pdf), metadata=explicit_metadata)
 
         doc = result.document
         # Should use explicit metadata
@@ -433,7 +433,7 @@ class TestTextExtractionIntegration:
 
     def test_add_generates_citekey_from_extracted_metadata(
         self,
-        integration_library: "Library",
+        integration_library_with_text_extraction: "Library",
         sample_pdf: Path,
     ) -> None:
         """Citekey should be generated from extracted metadata."""
@@ -448,11 +448,11 @@ class TestTextExtractionIntegration:
         """ + " content" * 100
 
         with patch.object(
-            integration_library._extractors[0],
+            integration_library_with_text_extraction._extractors[0],
             "extract_and_validate",
             return_value=mock_result,
         ):
-            result = integration_library.add(str(sample_pdf))
+            result = integration_library_with_text_extraction.add(str(sample_pdf))
 
         doc = result.document
         # Citekey should be generated (pattern: AuthorYearTitleword)
