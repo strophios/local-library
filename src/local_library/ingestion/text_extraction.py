@@ -276,16 +276,15 @@ def _generate_title_candidates(text: str) -> list[_TitleCandidate]:
 
 # Author extraction constants
 _AUTHOR_SEARCH_LINES = 50  # Search first N lines for author block
-_AUTHOR_MIN_CONFIDENCE = 0.3
-
-
-@dataclass(frozen=True)
-class _AuthorCandidate:
-    """Internal candidate for author extraction."""
-
-    name: str
-    score: float
-    reasoning: str
+_COMMON_INSTITUTION_NAMES = {
+    "mit",
+    "stanford",
+    "harvard",
+    "yale",
+    "princeton",
+    "berkeley",
+    "cornell",
+}
 
 
 def _clean_author_name(name: str) -> str:
@@ -337,13 +336,12 @@ def _split_author_string(text: str) -> list[str]:
 
     # Filter out empty parts and clean each name
     names = []
-    common_institutions = {"mit", "stanford", "harvard", "yale", "princeton", "berkeley", "cornell"}
     for part in parts:
         cleaned = _clean_author_name(part)
         # Skip if too short to be a name or if it looks like a number/date
         if len(cleaned) >= 3 and not cleaned.isdigit():
             # Skip common institution names
-            if cleaned.lower() not in common_institutions:
+            if cleaned.lower() not in _COMMON_INSTITUTION_NAMES:
                 names.append(cleaned)
 
     return names
@@ -473,9 +471,7 @@ def _find_author_block(text: str) -> tuple[list[str], float, str]:
                 ("Abstract", "Introduction", "#")
             ):
                 next_line = lines[i + 1].strip()
-                if next_line and not _is_likely_author_line(next_line)[0]:
-                    pass  # Don't extend
-                elif next_line:
+                if next_line and _is_likely_author_line(next_line)[0]:
                     author_text += ", " + next_line
             return [author_text], 0.8, "'by' prefix detected"
 
