@@ -1177,3 +1177,114 @@ class TestTextMetadataExtractorWithLLM:
             if result.title.source == "llm":
                 # Confidence preserved from heuristics
                 assert result.needs_review is True  # Still needs review
+
+
+class TestBuildCslJson:
+    """Tests for CSL-JSON conversion from extraction results."""
+
+    def test_build_csl_json_basic(self) -> None:
+        """Should convert extraction result to CSL-JSON."""
+        from local_library.core.models import FieldExtraction, TextExtractionResult
+        from local_library.ingestion.text_extraction import build_csl_json
+
+        result = TextExtractionResult(
+            title=FieldExtraction(
+                value="Test Title", confidence=0.9, source="heuristic",
+                alternatives=(), reasoning=""
+            ),
+            authors=(
+                FieldExtraction(
+                    value="Smith, John", confidence=0.8, source="heuristic",
+                    alternatives=(), reasoning=""
+                ),
+            ),
+            date=FieldExtraction(
+                value="2023", confidence=0.85, source="heuristic",
+                alternatives=(), reasoning=""
+            ),
+            doc_type=FieldExtraction(
+                value="article-journal", confidence=0.7, source="heuristic",
+                alternatives=(), reasoning=""
+            ),
+            overall_confidence=0.7,
+            needs_review=False,
+            review_reasons=(),
+        )
+
+        csl = build_csl_json(result)
+
+        assert csl["type"] == "article-journal"
+        assert csl["title"] == "Test Title"
+        assert len(csl["author"]) == 1
+        assert csl["author"][0]["family"] == "Smith"
+        assert csl["author"][0]["given"] == "John"
+        assert csl["issued"]["date-parts"] == [[2023]]
+
+    def test_build_csl_json_multiple_authors(self) -> None:
+        """Should handle multiple authors."""
+        from local_library.core.models import FieldExtraction, TextExtractionResult
+        from local_library.ingestion.text_extraction import build_csl_json
+
+        result = TextExtractionResult(
+            title=FieldExtraction(
+                value="Title", confidence=0.9, source="heuristic",
+                alternatives=(), reasoning=""
+            ),
+            authors=(
+                FieldExtraction(
+                    value="Smith, John", confidence=0.8, source="heuristic",
+                    alternatives=(), reasoning=""
+                ),
+                FieldExtraction(
+                    value="Doe, Jane", confidence=0.8, source="heuristic",
+                    alternatives=(), reasoning=""
+                ),
+            ),
+            date=FieldExtraction(
+                value="2023", confidence=0.85, source="heuristic",
+                alternatives=(), reasoning=""
+            ),
+            doc_type=FieldExtraction(
+                value="article-journal", confidence=0.7, source="heuristic",
+                alternatives=(), reasoning=""
+            ),
+            overall_confidence=0.7,
+            needs_review=False,
+            review_reasons=(),
+        )
+
+        csl = build_csl_json(result)
+
+        assert len(csl["author"]) == 2
+
+    def test_build_csl_json_missing_fields(self) -> None:
+        """Should handle None values gracefully."""
+        from local_library.core.models import FieldExtraction, TextExtractionResult
+        from local_library.ingestion.text_extraction import build_csl_json
+
+        result = TextExtractionResult(
+            title=FieldExtraction(
+                value=None, confidence=0.0, source="heuristic",
+                alternatives=(), reasoning=""
+            ),
+            authors=(),
+            date=FieldExtraction(
+                value=None, confidence=0.0, source="heuristic",
+                alternatives=(), reasoning=""
+            ),
+            doc_type=FieldExtraction(
+                value="article-journal", confidence=0.4, source="heuristic",
+                alternatives=(), reasoning=""
+            ),
+            overall_confidence=0.0,
+            needs_review=True,
+            review_reasons=("title could not be extracted",),
+        )
+
+        csl = build_csl_json(result)
+
+        # Should have type, but no title, author, or issued
+        assert csl["type"] == "article-journal"
+        assert "title" not in csl
+        assert "author" not in csl
+        assert "issued" not in csl

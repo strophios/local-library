@@ -943,6 +943,89 @@ def extract_doc_type(markdown_text: str) -> FieldExtraction:
     )
 
 
+def build_csl_json(extraction_result: "TextExtractionResult") -> dict[str, any]:
+    """Convert TextExtractionResult to CSL-JSON format.
+
+    Builds a CSL-JSON dictionary suitable for MetadataHandler processing.
+    Handles author name conversion to CSL format.
+
+    Args:
+        extraction_result: Result from TextMetadataExtractor.extract()
+
+    Returns:
+        CSL-JSON dictionary with type, title, author, and issued fields
+    """
+    from typing import Any
+
+    csl: dict[str, Any] = {
+        "type": extraction_result.doc_type.value or "article-journal",
+    }
+
+    # Add title
+    if extraction_result.title.value:
+        csl["title"] = extraction_result.title.value
+
+    # Convert authors to CSL format
+    if extraction_result.authors:
+        csl_authors = []
+        for author in extraction_result.authors:
+            if author.value:
+                csl_author = _convert_author_to_csl(author.value)
+                if csl_author:
+                    csl_authors.append(csl_author)
+        if csl_authors:
+            csl["author"] = csl_authors
+
+    # Convert date to CSL format
+    if extraction_result.date.value:
+        try:
+            year = int(extraction_result.date.value)
+            csl["issued"] = {"date-parts": [[year]]}
+        except ValueError:
+            pass  # Skip invalid year
+
+    return csl
+
+
+def _convert_author_to_csl(author_str: str) -> dict[str, str] | None:
+    """Convert author string to CSL author format.
+
+    Handles:
+    - "Family, Given" format -> {"family": "Family", "given": "Given"}
+    - "Given Family" format -> {"family": "Family", "given": "Given"}
+    - Single name -> {"literal": "Name"}
+
+    Args:
+        author_str: Author name string
+
+    Returns:
+        CSL author dict or None if invalid
+    """
+    if not author_str:
+        return None
+
+    author_str = author_str.strip()
+
+    # "Family, Given" format (preferred)
+    if "," in author_str:
+        parts = [p.strip() for p in author_str.split(",", 1)]
+        if len(parts) == 2 and parts[0] and parts[1]:
+            return {"family": parts[0], "given": parts[1]}
+        elif parts[0]:
+            return {"literal": parts[0]}
+
+    # "Given Family" format - try to split
+    parts = author_str.split()
+    if len(parts) >= 2:
+        # Last part is family name
+        return {"family": parts[-1], "given": " ".join(parts[:-1])}
+    elif len(parts) == 1:
+        # Single name - use literal
+        return {"literal": author_str}
+
+    return None
+
+
 def extract_title(markdown_text: str) -> FieldExtraction:
     """Extract document title from markdown text.
 
