@@ -274,6 +274,339 @@ def _generate_title_candidates(text: str) -> list[_TitleCandidate]:
     return candidates
 
 
+# Author extraction constants
+_AUTHOR_SEARCH_LINES = 50  # Search first N lines for author block
+_AUTHOR_MIN_CONFIDENCE = 0.3
+
+
+@dataclass(frozen=True)
+class _AuthorCandidate:
+    """Internal candidate for author extraction."""
+
+    name: str
+    score: float
+    reasoning: str
+
+
+def _clean_author_name(name: str) -> str:
+    """Clean a raw author name string.
+
+    Removes:
+    - Superscript affiliation markers (¹²³ etc)
+    - Email addresses
+    - Parenthetical affiliations
+    - Leading/trailing punctuation
+    """
+    # Remove superscript numbers and symbols
+    name = re.sub(r"[¹²³⁴⁵⁶⁷⁸⁹⁰*†‡§]", "", name)
+
+    # Remove email addresses
+    name = re.sub(r"<[^>]+>", "", name)
+    name = re.sub(r"\S+@\S+\.\S+", "", name)
+
+    # Remove parenthetical content (affiliations)
+    name = re.sub(r"\([^)]*\)", "", name)
+
+    # Remove common affiliation patterns
+    name = re.sub(r"\b(?:PhD|MD|Prof\.?|Dr\.?)\b", "", name, flags=re.IGNORECASE)
+
+    # Clean up whitespace and punctuation
+    name = re.sub(r"\s+", " ", name)
+    name = name.strip(" ,;:")
+
+    return name
+
+
+def _split_author_string(text: str) -> list[str]:
+    """Split a string containing multiple authors into individual names.
+
+    Handles:
+    - Comma separation: "John Smith, Jane Doe"
+    - 'and' separation: "John Smith and Jane Doe"
+    - Semicolon separation: "Smith, John; Doe, Jane"
+    - Oxford comma: "John, Jane, and Bob"
+    """
+    # Normalize 'and' to comma (but not when part of name like "Anderson")
+    text = re.sub(r"\s+and\s+", ", ", text, flags=re.IGNORECASE)
+
+    # Try semicolon first (often indicates "Last, First" format)
+    if ";" in text:
+        parts = [p.strip() for p in text.split(";")]
+    else:
+        parts = [p.strip() for p in text.split(",")]
+
+    # Filter out empty parts and clean each name
+    names = []
+    common_institutions = {"mit", "stanford", "harvard", "yale", "princeton", "berkeley", "cornell"}
+    for part in parts:
+        cleaned = _clean_author_name(part)
+        # Skip if too short to be a name or if it looks like a number/date
+        if len(cleaned) >= 3 and not cleaned.isdigit():
+            # Skip common institution names
+            if cleaned.lower() not in common_institutions:
+                names.append(cleaned)
+
+    return names
+
+
+def _is_likely_author_line(line: str) -> tuple[bool, float, str]:
+    """Check if a line likely contains author names.
+
+    Returns:
+        Tuple of (is_likely, confidence, reasoning)
+    """
+    line_lower = line.lower().strip()
+
+    # Skip empty lines
+    if not line_lower:
+        return False, 0.0, "empty line"
+
+    # Skip if too long (likely paragraph)
+    if len(line) > 200:
+        return False, 0.0, "too long for author line"
+
+    # Skip if starts with common non-author patterns
+    skip_patterns = [
+        r"^abstract[\s:.]",
+        r"^introduction",
+        r"^keywords?[\s:.]",
+        r"^\d+\.",  # Numbered list
+        r"^#",  # Markdown header
+        r"^table\s",
+        r"^figure\s",
+        r"^acknowledgment",
+        r"^department\s",
+        r"^university\s",
+        r"^institute\s",
+    ]
+    for pattern in skip_patterns:
+        if re.match(pattern, line_lower):
+            return False, 0.0, f"matches skip pattern: {pattern}"
+
+    # Likely affiliation/institutional line (not authors)
+    # But be careful: "Smith, John" might have institution after
+    affiliation_keywords = ["university", "institute", "department", "college", "laboratory", "lab"]
+    is_likely_affiliation = any(kw in line_lower for kw in affiliation_keywords)
+    if is_likely_affiliation and "," not in line:
+        # Institution line without a comma (not "Name, Institution" format)
+        return False, 0.0, "likely affiliation line"
+
+    # Positive signals
+    score = 0.3
+    reasons = []
+
+    # "by" prefix is strong signal
+    if re.match(r"^by\s+", line_lower):
+        score += 0.3
+        reasons.append("'by' prefix")
+
+    # Contains "and" between what look like names
+    if re.search(r"\b[A-Z][a-z]+\s+and\s+[A-Z][a-z]+", line):
+        score += 0.2
+        reasons.append("name and name pattern")
+
+    # Contains comma-separated capitalized words (names)
+    cap_words = re.findall(r"\b[A-Z][a-z]+", line)
+    if len(cap_words) >= 2:
+        score += 0.1
+        reasons.append(f"{len(cap_words)} capitalized words")
+
+    # Contains email (author line often has emails)
+    if "@" in line:
+        score += 0.15
+        reasons.append("contains email")
+
+    # Superscript markers suggest author affiliations
+    if re.search(r"[¹²³⁴⁵⁶⁷⁸⁹⁰*†‡]", line):
+        score += 0.15
+        reasons.append("affiliation markers")
+
+    # Academic name format: "Last, First"
+    if re.search(r"[A-Z][a-z]+,\s*[A-Z]\.", line):
+        score += 0.2
+        reasons.append("academic format")
+
+    # Negative signals
+    # Too many numbers suggests not an author line
+    digits = sum(1 for c in line if c.isdigit())
+    if digits > 5:
+        score -= 0.2
+
+    # Contains date-like patterns
+    if re.search(r"\b\d{4}\b", line):
+        score -= 0.1
+
+    # Contains volume/issue patterns
+    if re.search(r"\bvol|issue|pp\.", line_lower):
+        score -= 0.3
+
+    # Penalize lines with institution keywords (unless it's a name match)
+    if is_likely_affiliation:
+        score -= 0.15
+
+    score = max(0.0, min(1.0, score))
+    reasoning = "; ".join(reasons) if reasons else "base heuristics"
+
+    return score >= 0.3, score, reasoning
+
+
+def _find_author_block(text: str) -> tuple[list[str], float, str]:
+    """Find the author block in document text.
+
+    Strategies (in order):
+    1. Look for "by" prefix
+    2. Look for lines between title and "Abstract"
+    3. Look for lines with author-like patterns
+
+    Returns:
+        Tuple of (author_lines, confidence, reasoning)
+    """
+    lines = text.split("\n")[:_AUTHOR_SEARCH_LINES]
+
+    # Strategy 1: Look for "by" prefix
+    for i, line in enumerate(lines):
+        if re.match(r"^\s*by\s+", line, re.IGNORECASE):
+            # Extract the rest of the line and possibly next line
+            author_text = re.sub(r"^\s*by\s+", "", line, flags=re.IGNORECASE)
+            # Check if continues to next line
+            if i + 1 < len(lines) and not lines[i + 1].strip().startswith(
+                ("Abstract", "Introduction", "#")
+            ):
+                next_line = lines[i + 1].strip()
+                if next_line and not _is_likely_author_line(next_line)[0]:
+                    pass  # Don't extend
+                elif next_line:
+                    author_text += ", " + next_line
+            return [author_text], 0.8, "'by' prefix detected"
+
+    # Strategy 2: Look for lines between title and Abstract
+    abstract_idx = None
+    title_end_idx = 0
+
+    for i, line in enumerate(lines):
+        stripped = line.strip().lower()
+        if stripped.startswith("abstract"):
+            abstract_idx = i
+            break
+        # Track where title might end (first blank line after content)
+        if i > 0 and not stripped and lines[i - 1].strip():
+            if title_end_idx == 0:
+                title_end_idx = i
+
+    if abstract_idx and title_end_idx > 0 and abstract_idx > title_end_idx:
+        # Lines between title and abstract
+        potential_lines = []
+        for i in range(title_end_idx, abstract_idx):
+            line = lines[i].strip()
+            if line:
+                is_likely, score, _ = _is_likely_author_line(line)
+                if is_likely or score > 0.2:
+                    potential_lines.append(line)
+        if potential_lines:
+            return potential_lines, 0.6, "between title and abstract"
+
+    # Strategy 3: Look for author-like patterns in first lines
+    author_lines = []
+    best_score = 0.0
+
+    for line in lines[1:15]:  # Skip first line (likely title)
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        is_likely, score, reasoning = _is_likely_author_line(stripped)
+        if is_likely:
+            author_lines.append(stripped)
+            best_score = max(best_score, score)
+
+    if author_lines:
+        return author_lines, best_score * 0.8, "author-like patterns"
+
+    return [], 0.0, "no author block found"
+
+
+def _parse_author_name(name: str) -> str:
+    """Parse an author name into normalized format.
+
+    Uses nameparser library for robust name parsing.
+    Returns format: "Family, Given" for CSL-JSON compatibility.
+    """
+    from nameparser import HumanName
+
+    # Clean the name first
+    name = _clean_author_name(name)
+
+    if not name:
+        return ""
+
+    # Use nameparser for robust parsing
+    parsed = HumanName(name)
+
+    # Build normalized format
+    if parsed.last:
+        if parsed.first:
+            return f"{parsed.last}, {parsed.first}"
+        return parsed.last
+    elif parsed.first:
+        return parsed.first
+
+    # Fallback: return cleaned original
+    return name
+
+
+def extract_authors(markdown_text: str) -> tuple[FieldExtraction, ...]:
+    """Extract author names from markdown text.
+
+    Detects author block using multiple strategies:
+    1. "by" keyword prefix
+    2. Lines between title and Abstract
+    3. Lines with author-like patterns (names, emails, affiliations)
+
+    Args:
+        markdown_text: Marker-produced markdown content
+
+    Returns:
+        Tuple of FieldExtraction objects, one per detected author
+    """
+    # Handle empty input
+    if not markdown_text or not markdown_text.strip():
+        return ()
+
+    # Find author block
+    author_lines, block_confidence, block_reasoning = _find_author_block(markdown_text)
+
+    if not author_lines:
+        return ()
+
+    # Extract individual authors from the block
+    authors: list[FieldExtraction] = []
+
+    for line in author_lines:
+        names = _split_author_string(line)
+
+        for name in names:
+            parsed = _parse_author_name(name)
+            if parsed and len(parsed) >= 3:
+                # Confidence combines block confidence and name quality
+                name_confidence = block_confidence
+
+                # Boost confidence for well-formed names
+                if "," in parsed:  # Has family, given format
+                    name_confidence = min(1.0, name_confidence + 0.1)
+
+                authors.append(
+                    FieldExtraction(
+                        value=parsed,
+                        confidence=round(name_confidence, 2),
+                        source="heuristic",
+                        alternatives=(),
+                        reasoning=block_reasoning,
+                    )
+                )
+
+    return tuple(authors)
+
+
 def extract_title(markdown_text: str) -> FieldExtraction:
     """Extract document title from markdown text.
 
