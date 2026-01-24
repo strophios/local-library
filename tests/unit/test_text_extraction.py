@@ -76,6 +76,7 @@ class TestTitleExtraction:
         result = extract_title(text)
 
         # Should join the two lines
+        assert result.value is not None
         assert "Long-Term Effects" in result.value
         assert "Economic Growth" in result.value
 
