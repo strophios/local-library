@@ -271,9 +271,6 @@ class TestConfidenceCalibration:
 
         accuracy_report.add_result(doc_result)
 
-        # Individual test passes (correlation checked in aggregate)
-        assert True
-
     def test_high_confidence_implies_high_accuracy(
         self,
         pdf_path: Path,

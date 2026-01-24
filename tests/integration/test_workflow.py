@@ -424,7 +424,9 @@ class TestTextExtractionIntegration:
             "extract_and_validate",
             return_value=mock_result,
         ):
-            result = integration_library_with_text_extraction.add(str(sample_pdf), metadata=explicit_metadata)
+            result = integration_library_with_text_extraction.add(
+                str(sample_pdf), metadata=explicit_metadata
+            )
 
         doc = result.document
         # Should use explicit metadata
