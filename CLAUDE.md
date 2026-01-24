@@ -76,13 +76,14 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 
 **Deferred to later phases:** M3c (API metadata enrichment), web content ingestion, Zotero sync, citation tooling, auto-tagging, note management, Neovim plugin. See `future_roadmap.md` for full details.
 
-### Current Status: M3b Author Extraction Complete
+### Active Work Session Tracking
 
-**Session:** 2025-01-24 (M3b text-based metadata extraction)
-**Completed:** Author extraction implementation with 13 passing tests
-**Commit:** `17af792 feat(text_extraction): implement author extraction with nameparser`
+**Session started:** 2025-01-24 (M3b implementation)
+**Last checkpoint:** Phase 3 complete (author extraction), starting Phase 4 (date extraction)
+**Commit at checkpoint:** `e3a54e7 fix: address code review feedback for author extraction`
 
-M3b Phase 3 (author extraction) is complete with full test coverage and all 314 unit tests passing.
+Phases completed this session: 1 (data types), 2 (title extraction), 3 (author extraction)
+Remaining: 4 (date), 5 (doc type), 6 (orchestrator), 7 (integration), 8 (LLM fallback)
 
 ### Architectural Layers
 
