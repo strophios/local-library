@@ -13,6 +13,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from local_library.core.models import FieldExtraction, TextExtractionResult
 
@@ -943,7 +944,7 @@ def extract_doc_type(markdown_text: str) -> FieldExtraction:
     )
 
 
-def build_csl_json(extraction_result: "TextExtractionResult") -> dict[str, any]:
+def build_csl_json(extraction_result: TextExtractionResult) -> dict[str, Any]:
     """Convert TextExtractionResult to CSL-JSON format.
 
     Builds a CSL-JSON dictionary suitable for MetadataHandler processing.
@@ -955,8 +956,6 @@ def build_csl_json(extraction_result: "TextExtractionResult") -> dict[str, any]:
     Returns:
         CSL-JSON dictionary with type, title, author, and issued fields
     """
-    from typing import Any
-
     csl: dict[str, Any] = {
         "type": extraction_result.doc_type.value or "article-journal",
     }
