@@ -207,3 +207,29 @@ class FieldExtraction:
     source: str  # "heuristic" | "llm"
     alternatives: tuple[str, ...]
     reasoning: str
+
+
+@dataclass(frozen=True)
+class TextExtractionResult:
+    """Complete metadata extraction result from document text.
+
+    Aggregates per-field extractions with overall confidence and review status.
+    Used by TextMetadataExtractor as the return type for extract().
+
+    Attributes:
+        title: Extracted title field
+        authors: Tuple of extracted author fields (one per author)
+        date: Extracted publication date field
+        doc_type: Extracted document type field
+        overall_confidence: Minimum of all field confidences
+        needs_review: True if any field confidence is below threshold
+        review_reasons: Explanations for why review is needed
+    """
+
+    title: FieldExtraction
+    authors: tuple[FieldExtraction, ...]
+    date: FieldExtraction
+    doc_type: FieldExtraction
+    overall_confidence: float
+    needs_review: bool
+    review_reasons: tuple[str, ...]

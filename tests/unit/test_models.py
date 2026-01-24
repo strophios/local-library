@@ -14,6 +14,7 @@ from local_library.core.models import (
     ExtractionResult,
     FieldExtraction,
     MetadataResult,
+    TextExtractionResult,
 )
 
 
@@ -241,6 +242,130 @@ class TestAddResult:
 
         assert result.is_duplicate is True
         assert result.duplicate_reason == "hash"
+
+
+class TestTextExtractionResult:
+    """Tests for TextExtractionResult dataclass."""
+
+    def test_text_extraction_result_is_frozen(self) -> None:
+        """TextExtractionResult should be immutable."""
+        title = FieldExtraction(
+            value="Test", confidence=0.9, source="heuristic", alternatives=(), reasoning=""
+        )
+        date = FieldExtraction(
+            value="2023", confidence=0.8, source="heuristic", alternatives=(), reasoning=""
+        )
+        doc_type = FieldExtraction(
+            value="article-journal",
+            confidence=0.7,
+            source="heuristic",
+            alternatives=(),
+            reasoning="",
+        )
+
+        result = TextExtractionResult(
+            title=title,
+            authors=(),
+            date=date,
+            doc_type=doc_type,
+            overall_confidence=0.7,
+            needs_review=False,
+            review_reasons=(),
+        )
+
+        with pytest.raises(AttributeError):
+            result.title = title  # type: ignore[misc]
+
+    def test_text_extraction_result_overall_confidence_from_minimum(self) -> None:
+        """overall_confidence should be the minimum of field confidences."""
+        title = FieldExtraction(
+            value="Test", confidence=0.9, source="heuristic", alternatives=(), reasoning=""
+        )
+        author = FieldExtraction(
+            value="Smith", confidence=0.6, source="heuristic", alternatives=(), reasoning=""
+        )
+        date = FieldExtraction(
+            value="2023", confidence=0.8, source="heuristic", alternatives=(), reasoning=""
+        )
+        doc_type = FieldExtraction(
+            value="article-journal",
+            confidence=0.95,
+            source="heuristic",
+            alternatives=(),
+            reasoning="",
+        )
+
+        result = TextExtractionResult(
+            title=title,
+            authors=(author,),
+            date=date,
+            doc_type=doc_type,
+            overall_confidence=0.6,  # min of 0.9, 0.6, 0.8, 0.95
+            needs_review=True,
+            review_reasons=("authors confidence below threshold",),
+        )
+
+        assert result.overall_confidence == 0.6
+
+    def test_text_extraction_result_needs_review_with_reasons(self) -> None:
+        """needs_review should have corresponding review_reasons."""
+        title = FieldExtraction(
+            value="Test", confidence=0.5, source="heuristic", alternatives=(), reasoning=""
+        )
+        date = FieldExtraction(
+            value=None, confidence=0.0, source="heuristic", alternatives=(), reasoning=""
+        )
+        doc_type = FieldExtraction(
+            value="article-journal",
+            confidence=0.7,
+            source="heuristic",
+            alternatives=(),
+            reasoning="",
+        )
+
+        result = TextExtractionResult(
+            title=title,
+            authors=(),
+            date=date,
+            doc_type=doc_type,
+            overall_confidence=0.0,
+            needs_review=True,
+            review_reasons=(
+                "title confidence 0.50 below threshold 0.70",
+                "date could not be extracted",
+            ),
+        )
+
+        assert result.needs_review is True
+        assert len(result.review_reasons) == 2
+
+    def test_text_extraction_result_empty_authors_allowed(self) -> None:
+        """TextExtractionResult should allow empty authors tuple."""
+        title = FieldExtraction(
+            value="Test", confidence=0.9, source="heuristic", alternatives=(), reasoning=""
+        )
+        date = FieldExtraction(
+            value="2023", confidence=0.8, source="heuristic", alternatives=(), reasoning=""
+        )
+        doc_type = FieldExtraction(
+            value="article-journal",
+            confidence=0.7,
+            source="heuristic",
+            alternatives=(),
+            reasoning="",
+        )
+
+        result = TextExtractionResult(
+            title=title,
+            authors=(),
+            date=date,
+            doc_type=doc_type,
+            overall_confidence=0.7,
+            needs_review=True,
+            review_reasons=("no authors found",),
+        )
+
+        assert result.authors == ()
 
 
 class TestMetadataResult:
