@@ -14,7 +14,6 @@ from dataclasses import dataclass
 
 from local_library.core.models import FieldExtraction
 
-
 # Title extraction constants
 _TITLE_MIN_LENGTH = 10  # Minimum characters for a valid title
 _TITLE_MAX_LENGTH = 300  # Maximum characters for a valid title
