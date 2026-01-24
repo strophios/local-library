@@ -9,10 +9,14 @@ produces a FieldExtraction result with confidence scoring.
 
 from __future__ import annotations
 
+import json
+import logging
 import re
 from dataclasses import dataclass
 
 from local_library.core.models import FieldExtraction, TextExtractionResult
+
+logger = logging.getLogger(__name__)
 
 # Title extraction constants
 _TITLE_MIN_LENGTH = 10  # Minimum characters for a valid title
@@ -1002,8 +1006,167 @@ def extract_title(markdown_text: str) -> FieldExtraction:
     )
 
 
+# LLM extraction constants
+_LLM_MAX_TEXT_LENGTH = 8000  # Characters to send to LLM
+_LLM_DEFAULT_MODEL = "gpt-4o-mini"  # Cost-effective default
+
 # Default confidence threshold for triggering needs_review
 _DEFAULT_CONFIDENCE_THRESHOLD = 0.7
+
+
+class LLMExtractor:
+    """LLM-based metadata extraction fallback.
+
+    Uses LiteLLM for provider-agnostic LLM access. Called when heuristic
+    confidence is below threshold.
+
+    The LLM extracts all fields in a single call for cost efficiency and
+    to leverage cross-field context.
+    """
+
+    def __init__(
+        self,
+        enabled: bool = False,
+        model: str = _LLM_DEFAULT_MODEL,
+    ) -> None:
+        """Initialize the LLM extractor.
+
+        Args:
+            enabled: Whether LLM fallback is enabled
+            model: LiteLLM model identifier (e.g., "gpt-4o-mini", "claude-3-haiku")
+        """
+        self.enabled = enabled
+        self.model = model
+
+    def extract(
+        self,
+        markdown_text: str,
+        heuristic_candidates: dict[str, str | list[str] | None] | None = None,
+    ) -> dict[str, str | list[str] | None] | None:
+        """Extract metadata using LLM.
+
+        Args:
+            markdown_text: Document text to analyze
+            heuristic_candidates: Optional dict of heuristic extraction results
+                                 to provide as context for the LLM
+
+        Returns:
+            Dict with keys: title, authors, year, type
+            Returns None if disabled, API error, or invalid response
+        """
+        if not self.enabled:
+            return None
+
+        try:
+            import litellm
+
+            # Truncate text if too long
+            text = markdown_text[:_LLM_MAX_TEXT_LENGTH]
+            if len(markdown_text) > _LLM_MAX_TEXT_LENGTH:
+                text += "\n[... text truncated ...]"
+
+            # Build prompt
+            system_prompt = self._build_system_prompt()
+            user_prompt = self._build_user_prompt(text, heuristic_candidates)
+
+            # Call LLM
+            response = litellm.completion(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.1,  # Low temperature for consistency
+                max_tokens=500,
+            )
+
+            # Parse response
+            content = response.choices[0].message.content
+            return self._parse_response(content)
+
+        except Exception as e:
+            logger.warning(f"LLM extraction failed: {e}")
+            return None
+
+    def _build_system_prompt(self) -> str:
+        """Build the system prompt for extraction."""
+        return """You are a metadata extraction assistant. \
+Extract bibliographic metadata from academic documents.
+
+Return ONLY a JSON object with these exact keys:
+- "title": string (document title)
+- "authors": array of strings (author names in "Family, Given" format)
+- "year": string (4-digit publication year) or null
+- "type": string (one of: "article-journal", "paper-conference", \
+"chapter", "thesis", "report", "book")
+
+If a field cannot be determined, use null for strings or empty \
+array for authors.
+Do not include any text outside the JSON object."""
+
+    def _build_user_prompt(
+        self,
+        text: str,
+        candidates: dict[str, str | list[str] | None] | None,
+    ) -> str:
+        """Build the user prompt with document text and optional candidates."""
+        prompt_parts = ["Extract metadata from this document:\n\n", text]
+
+        if candidates:
+            prompt_parts.append("\n\n---\nHeuristic extraction found these candidates:")
+            if candidates.get("title"):
+                prompt_parts.append(f"\nTitle candidate: {candidates['title']}")
+            if candidates.get("authors"):
+                prompt_parts.append(f"\nAuthor candidates: {candidates['authors']}")
+            if candidates.get("year"):
+                prompt_parts.append(f"\nYear candidate: {candidates['year']}")
+            prompt_parts.append(
+                "\n\nUse these as hints but extract the correct values from the document."
+            )
+
+        return "".join(prompt_parts)
+
+    def _parse_response(self, content: str) -> dict[str, str | list[str] | None] | None:
+        """Parse LLM response into structured dict.
+
+        Handles:
+        - JSON in markdown code blocks
+        - Plain JSON
+        - Invalid JSON (returns None)
+        """
+        if not content:
+            return None
+
+        # Try to extract JSON from markdown code block
+        json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", content, re.DOTALL)
+        if json_match:
+            content = json_match.group(1)
+        else:
+            # Try to find JSON object
+            json_match = re.search(r"\{[^{}]*\}", content, re.DOTALL)
+            if json_match:
+                content = json_match.group(0)
+
+        try:
+            data = json.loads(content)
+
+            # Validate structure
+            result: dict[str, str | list[str] | None] = {
+                "title": data.get("title"),
+                "authors": data.get("authors", []),
+                "year": data.get("year"),
+                "type": data.get("type", "article-journal"),
+            }
+
+            # Ensure authors is a list
+            if not isinstance(result["authors"], list):
+                result["authors"] = []
+
+            return result
+
+        except json.JSONDecodeError:
+            logger.warning(f"Failed to parse LLM response as JSON: {content[:100]}...")
+            return None
 
 
 class TextMetadataExtractor:
@@ -1011,6 +1174,8 @@ class TextMetadataExtractor:
 
     Combines individual field extractors (title, authors, date, type) and
     aggregates confidence scores to determine if human review is needed.
+
+    Supports optional LLM fallback when heuristic confidence is low.
 
     Usage:
         extractor = TextMetadataExtractor()
@@ -1021,16 +1186,26 @@ class TextMetadataExtractor:
     Attributes:
         confidence_threshold: Minimum confidence for a field to be considered
                              reliable. Fields below this trigger needs_review.
+        llm_enabled: Whether to use LLM fallback for low-confidence extractions.
+        llm_model: LiteLLM model identifier for fallback.
     """
 
-    def __init__(self, confidence_threshold: float = _DEFAULT_CONFIDENCE_THRESHOLD) -> None:
+    def __init__(
+        self,
+        confidence_threshold: float = _DEFAULT_CONFIDENCE_THRESHOLD,
+        llm_enabled: bool = False,
+        llm_model: str = _LLM_DEFAULT_MODEL,
+    ) -> None:
         """Initialize the extractor.
 
         Args:
             confidence_threshold: Minimum confidence (0.0-1.0) for fields.
                                  Default is 0.7 (70%).
+            llm_enabled: Whether to enable LLM fallback. Default is False.
+            llm_model: LiteLLM model identifier. Default is "gpt-4o-mini".
         """
         self.confidence_threshold = confidence_threshold
+        self._llm_extractor = LLMExtractor(enabled=llm_enabled, model=llm_model)
 
     def extract(self, markdown_text: str) -> TextExtractionResult:
         """Extract all metadata fields from markdown text.
@@ -1038,17 +1213,40 @@ class TextMetadataExtractor:
         Runs each field extractor independently, then aggregates results
         into a TextExtractionResult with overall confidence and review status.
 
+        If LLM fallback is enabled and any field confidence is below threshold,
+        the LLM re-extracts all fields. LLM values are used but heuristic
+        confidence is preserved.
+
         Args:
             markdown_text: Marker-produced markdown content
 
         Returns:
             TextExtractionResult with all extracted fields and aggregated metadata
         """
-        # Extract each field
+        # Extract each field with heuristics
         title = extract_title(markdown_text)
         authors = extract_authors(markdown_text)
         date = extract_date(markdown_text)
         doc_type = extract_doc_type(markdown_text)
+
+        # Check if LLM fallback is needed
+        needs_llm = self._needs_llm_fallback(title, authors, date, doc_type)
+
+        if needs_llm and self._llm_extractor.enabled:
+            # Build candidates dict for context
+            candidates = {
+                "title": title.value,
+                "authors": [a.value for a in authors if a.value],
+                "year": date.value,
+            }
+
+            llm_result = self._llm_extractor.extract(markdown_text, candidates)
+
+            if llm_result:
+                # Update extractions with LLM values but preserve heuristic confidence
+                title, authors, date, doc_type = self._merge_llm_results(
+                    title, authors, date, doc_type, llm_result
+                )
 
         # Calculate overall confidence (minimum of all fields)
         all_confidences = [title.confidence, date.confidence, doc_type.confidence]
@@ -1070,6 +1268,95 @@ class TextMetadataExtractor:
             needs_review=needs_review,
             review_reasons=tuple(review_reasons),
         )
+
+    def _needs_llm_fallback(
+        self,
+        title: FieldExtraction,
+        authors: tuple[FieldExtraction, ...],
+        date: FieldExtraction,
+        doc_type: FieldExtraction,
+    ) -> bool:
+        """Check if LLM fallback should be triggered."""
+        threshold = self.confidence_threshold
+
+        # Trigger if any major field is below threshold
+        if title.confidence < threshold:
+            return True
+        if date.confidence < threshold:
+            return True
+        if not authors or all(a.confidence < threshold for a in authors):
+            return True
+
+        return False
+
+    def _merge_llm_results(
+        self,
+        title: FieldExtraction,
+        authors: tuple[FieldExtraction, ...],
+        date: FieldExtraction,
+        doc_type: FieldExtraction,
+        llm_result: dict[str, str | list[str] | None],
+    ) -> tuple[
+        FieldExtraction,
+        tuple[FieldExtraction, ...],
+        FieldExtraction,
+        FieldExtraction,
+    ]:
+        """Merge LLM results into field extractions.
+
+        Uses LLM values but preserves heuristic confidence scores.
+        """
+        # Update title if LLM provided one
+        if llm_result.get("title"):
+            title = FieldExtraction(
+                value=llm_result["title"],
+                confidence=title.confidence,  # Preserve heuristic confidence
+                source="llm",
+                alternatives=title.alternatives,
+                reasoning=f"LLM extraction (heuristic: {title.value})",
+            )
+
+        # Update authors if LLM provided them
+        llm_authors = llm_result.get("authors", [])
+        if llm_authors:
+            new_authors = []
+            # Use average heuristic confidence for LLM authors
+            avg_conf = sum(a.confidence for a in authors) / len(authors) if authors else 0.3
+            for name in llm_authors:
+                if name:
+                    new_authors.append(
+                        FieldExtraction(
+                            value=name,
+                            confidence=avg_conf,  # Preserve heuristic confidence
+                            source="llm",
+                            alternatives=(),
+                            reasoning="LLM extraction",
+                        )
+                    )
+            if new_authors:
+                authors = tuple(new_authors)
+
+        # Update date if LLM provided one
+        if llm_result.get("year"):
+            date = FieldExtraction(
+                value=llm_result["year"],
+                confidence=date.confidence,  # Preserve heuristic confidence
+                source="llm",
+                alternatives=date.alternatives,
+                reasoning=f"LLM extraction (heuristic: {date.value})",
+            )
+
+        # Update type if LLM provided one
+        if llm_result.get("type"):
+            doc_type = FieldExtraction(
+                value=llm_result["type"],
+                confidence=doc_type.confidence,  # Preserve heuristic confidence
+                source="llm",
+                alternatives=doc_type.alternatives,
+                reasoning=f"LLM extraction (heuristic: {doc_type.value})",
+            )
+
+        return title, authors, date, doc_type
 
     def _check_review_needed(
         self,
