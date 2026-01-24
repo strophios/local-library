@@ -118,6 +118,7 @@ class TestLibraryDispatch:
             db_path=temp_dir / "test.db",
             storage_dir=temp_dir / "storage",
             extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=False,
         )
 
     def test_find_acquirer_returns_handler_for_pdf(self, library: Library, temp_dir: Path) -> None:
@@ -170,6 +171,7 @@ class TestLibraryAdd:
             db_path=temp_dir / "test.db",
             storage_dir=temp_dir / "storage",
             extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=False,
         )
 
     @pytest.fixture
@@ -319,6 +321,7 @@ class TestLibraryGet:
             db_path=temp_dir / "test.db",
             storage_dir=temp_dir / "storage",
             extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=False,
         )
 
         pdf_path = temp_dir / "sample.pdf"
@@ -367,6 +370,7 @@ class TestLibraryList:
             db_path=temp_dir / "test.db",
             storage_dir=temp_dir / "storage",
             extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=False,
         )
 
     def test_list_empty_returns_empty(self, library: Library) -> None:
@@ -424,6 +428,7 @@ class TestLibraryDelete:
             db_path=temp_dir / "test.db",
             storage_dir=temp_dir / "storage",
             extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=False,
         )
 
         pdf_path = temp_dir / "sample.pdf"
