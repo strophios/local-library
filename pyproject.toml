@@ -10,6 +10,7 @@ authors = [
 ]
 dependencies = [
     "jsonschema>=4.20.0",
+    "litellm>=1.0.0",
     "marker-pdf>=1.10.0",
     "nameparser>=1.1.0",
     "platformdirs>=4.0.0",
