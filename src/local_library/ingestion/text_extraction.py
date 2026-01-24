@@ -3,9 +3,9 @@
 This module implements heuristic extraction of bibliographic metadata
 from PDF text content. Each field has an independent extractor that
 produces a FieldExtraction result with confidence scoring.
-
-Pattern: Functional Core (pure extraction functions)
 """
+
+# pattern: Functional Core
 
 from __future__ import annotations
 
@@ -18,7 +18,6 @@ from local_library.core.models import FieldExtraction
 _TITLE_MIN_LENGTH = 10  # Minimum characters for a valid title
 _TITLE_MAX_LENGTH = 300  # Maximum characters for a valid title
 _TITLE_SEARCH_WORDS = 300  # Search first N words for title candidates
-_TITLE_MIN_CONFIDENCE = 0.3  # Minimum confidence to return a title
 
 
 @dataclass(frozen=True)

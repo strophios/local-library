@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
+from local_library.ingestion.text_extraction import extract_title
 
 
 class TestTitleExtraction:
@@ -10,8 +10,6 @@ class TestTitleExtraction:
 
     def test_extract_title_from_first_line(self) -> None:
         """Title should be extracted from isolated first line."""
-        from local_library.ingestion.text_extraction import extract_title
-
         text = """The Impact of Climate Change on Biodiversity
 
         This paper examines the relationship between global warming
@@ -26,8 +24,6 @@ class TestTitleExtraction:
 
     def test_extract_title_skips_blank_lines(self) -> None:
         """Extractor should skip leading blank lines."""
-        from local_library.ingestion.text_extraction import extract_title
-
         text = """
 
         Machine Learning in Healthcare
@@ -41,8 +37,6 @@ class TestTitleExtraction:
 
     def test_extract_title_from_markdown_header(self) -> None:
         """Title should be extracted from markdown # header."""
-        from local_library.ingestion.text_extraction import extract_title
-
         text = """# A Survey of Natural Language Processing
 
         ## Introduction
@@ -57,8 +51,6 @@ class TestTitleExtraction:
 
     def test_extract_title_prefers_header_over_plain_text(self) -> None:
         """Markdown headers should be preferred over plain text."""
-        from local_library.ingestion.text_extraction import extract_title
-
         text = """Journal of Computer Science
         Volume 42, Issue 3
 
@@ -74,8 +66,6 @@ class TestTitleExtraction:
 
     def test_extract_title_handles_multiline_title(self) -> None:
         """Titles spanning multiple lines should be joined."""
-        from local_library.ingestion.text_extraction import extract_title
-
         text = """Understanding the Long-Term Effects of
         Monetary Policy on Economic Growth
 
@@ -91,8 +81,6 @@ class TestTitleExtraction:
 
     def test_extract_title_confidence_from_isolation(self) -> None:
         """Isolated titles (followed by blank line) should have higher confidence."""
-        from local_library.ingestion.text_extraction import extract_title
-
         # Well-isolated title
         text_isolated = """Learning Algorithms
 
@@ -115,8 +103,6 @@ class TestTitleExtraction:
 
     def test_extract_title_rejects_too_short(self) -> None:
         """Very short lines should not be considered titles."""
-        from local_library.ingestion.text_extraction import extract_title
-
         text = """A
 
         This is the actual title of the document
@@ -132,9 +118,13 @@ class TestTitleExtraction:
 
     def test_extract_title_rejects_too_long(self) -> None:
         """Very long lines (likely paragraphs) should not be titles."""
-        from local_library.ingestion.text_extraction import extract_title
-
-        text = """This is a very long line that goes on and on and contains way too many words to be a reasonable title for any academic paper or technical document because titles are supposed to be concise and informative not rambling paragraphs of text that nobody wants to read.
+        long_line = (
+            "This is a very long line that goes on and on and contains way too many "
+            "words to be a reasonable title for any academic paper or technical "
+            "document because titles are supposed to be concise and informative not "
+            "rambling paragraphs of text that nobody wants to read."
+        )
+        text = f"""{long_line}
 
         Actual Document Title
 
@@ -148,8 +138,6 @@ class TestTitleExtraction:
 
     def test_extract_title_empty_text_returns_none(self) -> None:
         """Empty text should return None value with zero confidence."""
-        from local_library.ingestion.text_extraction import extract_title
-
         result = extract_title("")
 
         assert result.value is None
@@ -158,8 +146,6 @@ class TestTitleExtraction:
 
     def test_extract_title_whitespace_only_returns_none(self) -> None:
         """Whitespace-only text should return None value."""
-        from local_library.ingestion.text_extraction import extract_title
-
         result = extract_title("   \n\n   \t\t\n   ")
 
         assert result.value is None
@@ -167,8 +153,6 @@ class TestTitleExtraction:
 
     def test_extract_title_provides_alternatives(self) -> None:
         """Extraction should provide alternative candidates."""
-        from local_library.ingestion.text_extraction import extract_title
-
         text = """Document Processing Systems
 
         A Comprehensive Guide
@@ -183,8 +167,6 @@ class TestTitleExtraction:
 
     def test_extract_title_reasoning_explains_choice(self) -> None:
         """Reasoning should explain why this title was chosen."""
-        from local_library.ingestion.text_extraction import extract_title
-
         text = """# Important Research Finding
 
         Some content here...
