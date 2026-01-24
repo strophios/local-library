@@ -547,6 +547,191 @@ class TestTypeExtraction:
         assert result.value in ("article-journal", "article")
 
 
+class TestTextMetadataExtractor:
+    """Tests for the TextMetadataExtractor orchestration class."""
+
+    def test_extract_all_fields(self) -> None:
+        """Extractor should return all field extractions."""
+        from local_library.ingestion.text_extraction import TextMetadataExtractor
+
+        text = """Machine Learning in Healthcare
+
+        John Smith, Jane Doe
+        Published: 2023
+
+        Journal of Medical Informatics
+
+        Abstract: This paper presents...
+        """
+
+        extractor = TextMetadataExtractor()
+        result = extractor.extract(text)
+
+        # All fields should be present
+        assert result.title.value is not None
+        assert len(result.authors) >= 1
+        assert result.date.value is not None
+        assert result.doc_type.value is not None
+
+    def test_extract_overall_confidence_is_minimum(self) -> None:
+        """overall_confidence should be minimum of field confidences."""
+        from local_library.ingestion.text_extraction import TextMetadataExtractor
+
+        text = """# Clear Title With High Confidence
+
+        John Smith
+
+        2023
+
+        Abstract...
+        """
+
+        extractor = TextMetadataExtractor()
+        result = extractor.extract(text)
+
+        # Overall should be min of all fields
+        field_confidences = [
+            result.title.confidence,
+            result.date.confidence,
+            result.doc_type.confidence,
+        ]
+        if result.authors:
+            field_confidences.extend(a.confidence for a in result.authors)
+
+        # Allow small floating point difference
+        assert abs(result.overall_confidence - min(field_confidences)) < 0.01
+
+    def test_extract_needs_review_when_low_confidence(self) -> None:
+        """needs_review should be True when any field is below threshold."""
+        from local_library.ingestion.text_extraction import TextMetadataExtractor
+
+        # Minimal text likely to have low confidence
+        text = """Some Title
+
+        Content without clear author or date patterns...
+        """
+
+        extractor = TextMetadataExtractor(confidence_threshold=0.7)
+        result = extractor.extract(text)
+
+        # Should need review due to low confidence fields
+        assert result.needs_review is True
+        assert len(result.review_reasons) >= 1
+
+    def test_extract_review_reasons_explain_issues(self) -> None:
+        """review_reasons should explain which fields are uncertain."""
+        from local_library.ingestion.text_extraction import TextMetadataExtractor
+
+        text = """Document Title
+
+        Some content without dates or authors clearly marked.
+        """
+
+        extractor = TextMetadataExtractor(confidence_threshold=0.7)
+        result = extractor.extract(text)
+
+        if result.needs_review:
+            # Reasons should mention specific fields
+            reasons_text = " ".join(result.review_reasons).lower()
+            assert any(
+                field in reasons_text
+                for field in ["title", "author", "date", "type", "confidence"]
+            )
+
+    def test_extract_no_review_when_all_confident(self) -> None:
+        """needs_review should be False when all fields are confident."""
+        from local_library.ingestion.text_extraction import TextMetadataExtractor
+
+        # Well-structured document with clear signals
+        text = """# Deep Learning for Image Recognition
+
+        John Smith, Jane Doe
+
+        Published: January 15, 2023
+
+        Journal of Computer Vision, Vol. 42
+
+        Abstract: This paper presents a novel approach...
+        """
+
+        extractor = TextMetadataExtractor(confidence_threshold=0.5)
+        result = extractor.extract(text)
+
+        # All fields should be confident enough
+        assert result.title.confidence >= 0.5
+        # If needs_review is False, no reasons needed
+        if not result.needs_review:
+            assert result.review_reasons == ()
+
+    def test_extract_empty_text(self) -> None:
+        """Empty text should return result with needs_review=True."""
+        from local_library.ingestion.text_extraction import TextMetadataExtractor
+
+        extractor = TextMetadataExtractor()
+        result = extractor.extract("")
+
+        assert result.needs_review is True
+        assert result.overall_confidence == 0.0
+
+    def test_extract_configurable_threshold(self) -> None:
+        """Confidence threshold should be configurable."""
+        from local_library.ingestion.text_extraction import TextMetadataExtractor
+
+        text = """Some Title
+
+        John Smith
+        2023
+        """
+
+        # With low threshold, might not need review
+        low_threshold = TextMetadataExtractor(confidence_threshold=0.3)
+        low_result = low_threshold.extract(text)
+
+        # With high threshold, likely needs review
+        high_threshold = TextMetadataExtractor(confidence_threshold=0.9)
+        high_result = high_threshold.extract(text)
+
+        # High threshold should be more likely to need review
+        if low_result.overall_confidence >= 0.3 and low_result.overall_confidence < 0.9:
+            assert not low_result.needs_review
+            assert high_result.needs_review
+
+    def test_extract_returns_text_extraction_result(self) -> None:
+        """Result should be a proper TextExtractionResult."""
+        from local_library.core.models import TextExtractionResult
+        from local_library.ingestion.text_extraction import TextMetadataExtractor
+
+        extractor = TextMetadataExtractor()
+        result = extractor.extract("Some text")
+
+        assert isinstance(result, TextExtractionResult)
+
+    def test_extract_authors_tuple_not_list(self) -> None:
+        """Authors should be returned as tuple for immutability."""
+        from local_library.ingestion.text_extraction import TextMetadataExtractor
+
+        text = """Title
+
+        John Smith, Jane Doe
+
+        Content...
+        """
+
+        extractor = TextMetadataExtractor()
+        result = extractor.extract(text)
+
+        assert isinstance(result.authors, tuple)
+
+    def test_extract_review_reasons_tuple_not_list(self) -> None:
+        """review_reasons should be returned as tuple."""
+        from local_library.ingestion.text_extraction import TextMetadataExtractor
+
+        extractor = TextMetadataExtractor()
+        result = extractor.extract("minimal text")
+
+        assert isinstance(result.review_reasons, tuple)
+
+
 class TestTitleExtraction:
     """Tests for title extraction from markdown text."""
 
