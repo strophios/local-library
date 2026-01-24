@@ -5,6 +5,224 @@ from __future__ import annotations
 from local_library.ingestion.text_extraction import extract_title
 
 
+class TestAuthorExtraction:
+    """Tests for author extraction from markdown text."""
+
+    def test_extract_authors_single_author(self) -> None:
+        """Single author should be extracted correctly."""
+        from local_library.ingestion.text_extraction import extract_authors
+
+        text = """Machine Learning Fundamentals
+
+        John Smith
+        Department of Computer Science
+
+        Abstract: This paper presents...
+        """
+
+        result = extract_authors(text)
+
+        assert len(result) == 1
+        assert result[0].value is not None
+        # Should have family name
+        assert "Smith" in result[0].value
+
+    def test_extract_authors_multiple_authors_comma_separated(self) -> None:
+        """Multiple comma-separated authors should be extracted."""
+        from local_library.ingestion.text_extraction import extract_authors
+
+        text = """Research Paper Title
+
+        John Smith, Jane Doe, Bob Wilson
+        University Research Lab
+
+        Abstract...
+        """
+
+        result = extract_authors(text)
+
+        assert len(result) == 3
+        names = [r.value for r in result]
+        assert any("Smith" in n for n in names if n)
+        assert any("Doe" in n for n in names if n)
+        assert any("Wilson" in n for n in names if n)
+
+    def test_extract_authors_with_and_separator(self) -> None:
+        """Authors separated by 'and' should be extracted."""
+        from local_library.ingestion.text_extraction import extract_authors
+
+        text = """Title Here
+
+        John Smith and Jane Doe
+
+        Introduction...
+        """
+
+        result = extract_authors(text)
+
+        assert len(result) == 2
+
+    def test_extract_authors_after_by_keyword(self) -> None:
+        """Authors prefixed with 'by' should be detected."""
+        from local_library.ingestion.text_extraction import extract_authors
+
+        text = """Understanding Neural Networks
+
+        by John Smith
+
+        This tutorial explains...
+        """
+
+        result = extract_authors(text)
+
+        assert len(result) >= 1
+        assert any("Smith" in (r.value or "") for r in result)
+
+    def test_extract_authors_before_abstract(self) -> None:
+        """Authors appearing before 'Abstract' should be detected."""
+        from local_library.ingestion.text_extraction import extract_authors
+
+        text = """Paper Title
+
+        Alice Johnson
+        Bob Smith
+
+        Abstract
+
+        This paper discusses...
+        """
+
+        result = extract_authors(text)
+
+        assert len(result) >= 2
+
+    def test_extract_authors_with_affiliations_inline(self) -> None:
+        """Authors with inline affiliations should have names extracted."""
+        from local_library.ingestion.text_extraction import extract_authors
+
+        text = """Research Title
+
+        John Smith (MIT), Jane Doe (Stanford)
+
+        Abstract...
+        """
+
+        result = extract_authors(text)
+
+        assert len(result) == 2
+        # Affiliations should be stripped
+        assert "MIT" not in (result[0].value or "")
+        assert "Stanford" not in (result[1].value or "")
+
+    def test_extract_authors_with_email(self) -> None:
+        """Author lines with emails should extract names only."""
+        from local_library.ingestion.text_extraction import extract_authors
+
+        text = """Title
+
+        John Smith <john@example.com>
+
+        Content...
+        """
+
+        result = extract_authors(text)
+
+        assert len(result) >= 1
+        assert "example.com" not in (result[0].value or "")
+
+    def test_extract_authors_empty_text_returns_empty(self) -> None:
+        """Empty text should return empty list."""
+        from local_library.ingestion.text_extraction import extract_authors
+
+        result = extract_authors("")
+
+        assert result == ()
+
+    def test_extract_authors_no_authors_found(self) -> None:
+        """Text without detectable authors should return empty list."""
+        from local_library.ingestion.text_extraction import extract_authors
+
+        text = """Technical Specification
+
+        1. Introduction
+        2. Requirements
+        3. Implementation
+        """
+
+        result = extract_authors(text)
+
+        # Might return empty or low-confidence results
+        assert all(r.confidence < 0.5 for r in result) if result else True
+
+    def test_extract_authors_returns_field_extractions(self) -> None:
+        """Each author should be a FieldExtraction with confidence."""
+        from local_library.ingestion.text_extraction import extract_authors
+
+        text = """Title
+
+        John Smith, Jane Doe
+
+        Content...
+        """
+
+        result = extract_authors(text)
+
+        for author in result:
+            assert hasattr(author, "value")
+            assert hasattr(author, "confidence")
+            assert hasattr(author, "source")
+            assert author.source == "heuristic"
+
+    def test_extract_authors_handles_initials(self) -> None:
+        """Authors with initials should be parsed correctly."""
+        from local_library.ingestion.text_extraction import extract_authors
+
+        text = """Research Paper
+
+        J. Smith, A.B. Johnson
+
+        Abstract...
+        """
+
+        result = extract_authors(text)
+
+        assert len(result) >= 2
+
+    def test_extract_authors_academic_format(self) -> None:
+        """Academic format (Last, First) should be handled."""
+        from local_library.ingestion.text_extraction import extract_authors
+
+        text = """Journal Article
+
+        Smith, John; Doe, Jane; Wilson, Robert
+
+        Abstract...
+        """
+
+        result = extract_authors(text)
+
+        assert len(result) == 3
+
+    def test_extract_authors_superscript_affiliations(self) -> None:
+        """Superscript affiliation markers should be stripped."""
+        from local_library.ingestion.text_extraction import extract_authors
+
+        text = """Paper Title
+
+        John Smith¹, Jane Doe², Bob Wilson¹
+
+        ¹MIT, ²Stanford
+
+        Abstract...
+        """
+
+        result = extract_authors(text)
+
+        assert len(result) == 3
+        # Superscripts should be removed
+        assert "¹" not in (result[0].value or "")
+
+
 class TestTitleExtraction:
     """Tests for title extraction from markdown text."""
 
