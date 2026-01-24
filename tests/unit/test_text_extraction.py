@@ -634,8 +634,7 @@ class TestTextMetadataExtractor:
             # Reasons should mention specific fields
             reasons_text = " ".join(result.review_reasons).lower()
             assert any(
-                field in reasons_text
-                for field in ["title", "author", "date", "type", "confidence"]
+                field in reasons_text for field in ["title", "author", "date", "type", "confidence"]
             )
 
     def test_extract_no_review_when_all_confident(self) -> None:
