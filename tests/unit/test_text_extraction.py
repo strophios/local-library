@@ -223,6 +223,192 @@ class TestAuthorExtraction:
         assert "¹" not in (result[0].value or "")
 
 
+class TestDateExtraction:
+    """Tests for publication date extraction from markdown text."""
+
+    def test_extract_date_explicit_published(self) -> None:
+        """Date with 'Published:' label should be extracted."""
+        from local_library.ingestion.text_extraction import extract_date
+
+        text = """Research Paper
+
+        Published: January 15, 2023
+
+        Abstract...
+        """
+
+        result = extract_date(text)
+
+        assert result.value == "2023"
+        assert result.confidence >= 0.8
+
+    def test_extract_date_copyright_notice(self) -> None:
+        """Copyright year should be extracted."""
+        from local_library.ingestion.text_extraction import extract_date
+
+        text = """Technical Report
+
+        © 2022 IEEE
+
+        Abstract...
+        """
+
+        result = extract_date(text)
+
+        assert result.value == "2022"
+        assert result.confidence >= 0.7
+
+    def test_extract_date_copyright_word(self) -> None:
+        """'Copyright 2021' pattern should be detected."""
+        from local_library.ingestion.text_extraction import extract_date
+
+        text = """Document Title
+
+        Copyright 2021 ACM
+
+        Introduction...
+        """
+
+        result = extract_date(text)
+
+        assert result.value == "2021"
+
+    def test_extract_date_iso_format(self) -> None:
+        """ISO date format (2023-05-15) should be extracted."""
+        from local_library.ingestion.text_extraction import extract_date
+
+        text = """Report
+
+        Date: 2023-05-15
+
+        Content...
+        """
+
+        result = extract_date(text)
+
+        assert result.value == "2023"
+        assert result.confidence >= 0.7
+
+    def test_extract_date_standalone_year(self) -> None:
+        """Standalone year in header area should be extracted."""
+        from local_library.ingestion.text_extraction import extract_date
+
+        text = """Paper Title
+
+        John Smith
+        2020
+
+        Abstract...
+        """
+
+        result = extract_date(text)
+
+        assert result.value == "2020"
+        # Lower confidence for standalone year
+        assert result.confidence >= 0.4
+        assert result.confidence < 0.8
+
+    def test_extract_date_rejects_future_years(self) -> None:
+        """Years in the far future should be rejected or low confidence."""
+        from local_library.ingestion.text_extraction import extract_date
+
+        text = """Predictions for 2050
+
+        By 2100, climate change will...
+        """
+
+        result = extract_date(text)
+
+        # Should not pick 2050 or 2100 as publication date
+        if result.value:
+            assert int(result.value) <= 2030 or result.confidence < 0.3
+
+    def test_extract_date_rejects_old_years(self) -> None:
+        """Very old years (pre-1900) should be low confidence unless explicit."""
+        from local_library.ingestion.text_extraction import extract_date
+
+        text = """Analysis of 1776 Events
+
+        Historical analysis of events in 1776...
+        """
+
+        result = extract_date(text)
+
+        # Should not confidently pick 1776 as publication date
+        if result.value == "1776":
+            assert result.confidence < 0.5
+
+    def test_extract_date_prefers_header_area(self) -> None:
+        """Years in header area should be preferred over body."""
+        from local_library.ingestion.text_extraction import extract_date
+
+        text = """Paper Title
+
+        Published: 2022
+
+        In 2010, researchers discovered...
+        Later in 2015, this was confirmed...
+        """
+
+        result = extract_date(text)
+
+        assert result.value == "2022"
+
+    def test_extract_date_multiple_formats(self) -> None:
+        """Should handle multiple date formats."""
+        from local_library.ingestion.text_extraction import extract_date
+
+        formats = [
+            ("January 2023", "2023"),
+            ("Jan. 2023", "2023"),
+            ("01/2023", "2023"),
+            ("2023-01", "2023"),
+            ("March 15, 2022", "2022"),
+        ]
+
+        for date_str, expected_year in formats:
+            text = f"Title\n\nPublished: {date_str}\n\nContent..."
+            result = extract_date(text)
+            assert result.value == expected_year, f"Failed for format: {date_str}"
+
+    def test_extract_date_empty_text_returns_none(self) -> None:
+        """Empty text should return None with zero confidence."""
+        from local_library.ingestion.text_extraction import extract_date
+
+        result = extract_date("")
+
+        assert result.value is None
+        assert result.confidence == 0.0
+
+    def test_extract_date_no_date_found(self) -> None:
+        """Text without dates should return None."""
+        from local_library.ingestion.text_extraction import extract_date
+
+        text = """A Document Without Dates
+
+        This paper discusses various topics
+        without mentioning any specific years.
+        """
+
+        result = extract_date(text)
+
+        assert result.value is None
+        assert result.confidence == 0.0
+
+    def test_extract_date_returns_field_extraction(self) -> None:
+        """Result should be a proper FieldExtraction."""
+        from local_library.ingestion.text_extraction import extract_date
+
+        text = "Title\n\n2023\n\nContent"
+
+        result = extract_date(text)
+
+        assert hasattr(result, "value")
+        assert hasattr(result, "confidence")
+        assert hasattr(result, "source")
+        assert result.source == "heuristic"
+
+
 class TestTitleExtraction:
     """Tests for title extraction from markdown text."""
 
