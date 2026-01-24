@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from local_library.core.models import FieldExtraction
+from local_library.core.models import FieldExtraction, TextExtractionResult
 
 # Title extraction constants
 _TITLE_MIN_LENGTH = 10  # Minimum characters for a valid title
@@ -1023,9 +1023,7 @@ class TextMetadataExtractor:
                              reliable. Fields below this trigger needs_review.
     """
 
-    def __init__(
-        self, confidence_threshold: float = _DEFAULT_CONFIDENCE_THRESHOLD
-    ) -> None:
+    def __init__(self, confidence_threshold: float = _DEFAULT_CONFIDENCE_THRESHOLD) -> None:
         """Initialize the extractor.
 
         Args:
@@ -1034,7 +1032,7 @@ class TextMetadataExtractor:
         """
         self.confidence_threshold = confidence_threshold
 
-    def extract(self, markdown_text: str) -> "TextExtractionResult":
+    def extract(self, markdown_text: str) -> TextExtractionResult:
         """Extract all metadata fields from markdown text.
 
         Runs each field extractor independently, then aggregates results
@@ -1046,8 +1044,6 @@ class TextMetadataExtractor:
         Returns:
             TextExtractionResult with all extracted fields and aggregated metadata
         """
-        from local_library.core.models import TextExtractionResult
-
         # Extract each field
         title = extract_title(markdown_text)
         authors = extract_authors(markdown_text)
@@ -1114,9 +1110,7 @@ class TextMetadataExtractor:
         if date.value is None:
             reasons.append("date could not be extracted")
         elif date.confidence < threshold:
-            reasons.append(
-                f"date confidence {date.confidence:.2f} below threshold {threshold:.2f}"
-            )
+            reasons.append(f"date confidence {date.confidence:.2f} below threshold {threshold:.2f}")
 
         # Check doc_type (less critical, only flag if very low)
         if doc_type.confidence < threshold * 0.7:  # Lower bar for type
