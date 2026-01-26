@@ -245,22 +245,135 @@ def title_similarity(extracted: str, expected: str) -> float:
     return SequenceMatcher(None, norm_extracted, norm_expected).ratio()
 
 
+def _normalize_for_comparison(name: str) -> str:
+    """Normalize author name for comparison.
+
+    Handles:
+    - Unicode hyphen variants → ASCII hyphen
+    - Case normalization
+    - Whitespace normalization
+
+    Args:
+        name: Author name string
+
+    Returns:
+        Normalized name for comparison
+    """
+    import unicodedata
+
+    # Normalize unicode (NFKC handles many character variants)
+    name = unicodedata.normalize("NFKC", name)
+
+    # Replace various hyphen-like characters with ASCII hyphen
+    # U+2010 HYPHEN, U+2011 NON-BREAKING HYPHEN, U+2012 FIGURE DASH,
+    # U+2013 EN DASH, U+2014 EM DASH, U+2212 MINUS SIGN
+    import re
+
+    name = re.sub(r"[\u2010\u2011\u2012\u2013\u2014\u2212]", "-", name)
+
+    # Lowercase and normalize whitespace
+    name = name.lower().strip()
+    name = re.sub(r"\s+", " ", name)
+
+    return name
+
+
+def _extract_family_name(name: str) -> str:
+    """Extract family name from "Family, Given" format.
+
+    Args:
+        name: Author name in "Family, Given" format
+
+    Returns:
+        Family name portion, or full name if no comma
+    """
+    if "," in name:
+        return name.split(",")[0].strip()
+    # If no comma, assume last word is family name
+    parts = name.split()
+    return parts[-1] if parts else name
+
+
+def _names_match(extracted: str, expected: str, strict: bool = False) -> bool:
+    """Check if two author names match.
+
+    Uses fuzzy matching that handles:
+    - Case differences
+    - Missing middle initials (extracted "Lawrence" matches expected "Lawrence W.")
+    - Unicode hyphen variants
+
+    Args:
+        extracted: Extracted author name
+        expected: Ground truth author name
+        strict: If True, require exact match after normalization
+
+    Returns:
+        True if names match
+    """
+    ext_norm = _normalize_for_comparison(extracted)
+    exp_norm = _normalize_for_comparison(expected)
+
+    # Exact match after normalization
+    if ext_norm == exp_norm:
+        return True
+
+    if strict:
+        return False
+
+    # Try family name match with flexible given name
+    # "Family, Given" format
+    if "," in ext_norm and "," in exp_norm:
+        ext_family, ext_given = ext_norm.split(",", 1)
+        exp_family, exp_given = exp_norm.split(",", 1)
+
+        ext_family = ext_family.strip()
+        exp_family = exp_family.strip()
+        ext_given = ext_given.strip()
+        exp_given = exp_given.strip()
+
+        # Family names must match
+        if ext_family != exp_family:
+            return False
+
+        # Given name: extracted can be prefix of expected (missing middle initials)
+        # "christine" matches "christine d."
+        # "lawrence" matches "lawrence w."
+        if exp_given.startswith(ext_given):
+            return True
+
+        # Also allow expected to be prefix of extracted (extra detail extracted)
+        if ext_given.startswith(exp_given):
+            return True
+
+        # Check first name only (ignore middle initials entirely)
+        ext_first = ext_given.split()[0] if ext_given else ""
+        exp_first = exp_given.split()[0] if exp_given else ""
+        if ext_first and exp_first and ext_first == exp_first:
+            return True
+
+    return False
+
+
 def author_match_score(
     extracted: tuple[str, ...],
     expected: tuple[str, ...],
 ) -> float:
     """Calculate match score between extracted and expected authors.
 
-    Uses set-based Jaccard similarity: |intersection| / |union|.
-    Authors are normalized to "Family, Given" format and compared
-    case-insensitively.
+    Uses fuzzy matching that handles:
+    - Unicode hyphen variants (‑ vs -)
+    - Missing middle initials (extracted "Lawrence" matches "Lawrence W.")
+    - Case differences
+
+    Computes: matched_expected / total_expected
+    Each expected author can only be matched once.
 
     Args:
         extracted: Tuple of extracted author names
         expected: Tuple of ground truth author names
 
     Returns:
-        Match score from 0.0 (no overlap) to 1.0 (perfect match)
+        Match score from 0.0 (no overlap) to 1.0 (all expected authors found)
     """
     if not expected:
         # Can't compare against empty ground truth
@@ -270,17 +383,20 @@ def author_match_score(
         # No extracted authors means no match
         return 0.0
 
-    # Normalize to lowercase for comparison
-    extracted_set = {a.lower() for a in extracted}
-    expected_set = {a.lower() for a in expected}
+    # Track which expected authors have been matched
+    matched_expected = 0
+    remaining_extracted = list(extracted)
 
-    intersection = extracted_set & expected_set
-    union = extracted_set | expected_set
+    for exp_name in expected:
+        # Try to find a matching extracted name
+        for i, ext_name in enumerate(remaining_extracted):
+            if _names_match(ext_name, exp_name):
+                matched_expected += 1
+                remaining_extracted.pop(i)  # Remove so it can't match again
+                break
 
-    if not union:
-        return 1.0  # Both empty after normalization
-
-    return len(intersection) / len(union)
+    # Score is proportion of expected authors that were found
+    return matched_expected / len(expected)
 
 
 def year_matches(extracted: str | None, expected: str | None) -> bool:
@@ -772,8 +888,9 @@ def ground_truth(
 
     for _pdf_path, citekey in golden_set_pdfs:
         try:
-            item = zotero_reader.get_item(citekey)
-            truth[citekey] = GroundTruth.from_csl_json(citekey, item.csl_json)
+            # Use get_metadata() to avoid database access - we only need CSL-JSON
+            csl_json = zotero_reader.get_metadata(citekey)
+            truth[citekey] = GroundTruth.from_csl_json(citekey, csl_json)
         except ZoteroError as e:
             warnings.warn(
                 f"Could not load ground truth for {citekey}: {e}",

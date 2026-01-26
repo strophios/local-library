@@ -307,7 +307,12 @@ def _clean_author_name(name: str) -> str:
     - Email addresses
     - Parenthetical affiliations
     - Leading/trailing punctuation
+    - Markdown artifacts (pipes, brackets, etc)
     """
+    # Remove markdown artifacts (tables, images, links)
+    name = re.sub(r"[|\[\]!]", "", name)
+    name = re.sub(r"^-+$", "", name)  # Table separator rows
+
     # Remove superscript numbers and symbols
     name = re.sub(r"[¹²³⁴⁵⁶⁷⁸⁹⁰*†‡§]", "", name)
 
@@ -352,6 +357,9 @@ def _split_author_string(text: str) -> list[str]:
         cleaned = _clean_author_name(part)
         # Skip if too short to be a name or if it looks like a number/date
         if len(cleaned) >= 3 and not cleaned.isdigit():
+            # Skip if no letters (catches things like "---" or "|")
+            if not re.search(r"[a-zA-Z]", cleaned):
+                continue
             # Skip common institution names
             if cleaned.lower() not in _COMMON_INSTITUTION_NAMES:
                 names.append(cleaned)
@@ -388,6 +396,10 @@ def _is_likely_author_line(line: str) -> tuple[bool, float, str]:
         r"^department\s",
         r"^university\s",
         r"^institute\s",
+        r"^\|",  # Markdown table row
+        r"^!?\[",  # Markdown image or link
+        r"^-{3,}",  # Horizontal rule
+        r"^\*{3,}",  # Horizontal rule variant
     ]
     for pattern in skip_patterns:
         if re.match(pattern, line_lower):
@@ -401,8 +413,8 @@ def _is_likely_author_line(line: str) -> tuple[bool, float, str]:
         # Institution line without a comma (not "Name, Institution" format)
         return False, 0.0, "likely affiliation line"
 
-    # Positive signals
-    score = 0.3
+    # Positive signals - start low, require positive evidence
+    score = 0.15
     reasons = []
 
     # "by" prefix is strong signal
@@ -415,11 +427,20 @@ def _is_likely_author_line(line: str) -> tuple[bool, float, str]:
         score += 0.2
         reasons.append("name and name pattern")
 
-    # Contains comma-separated capitalized words (names)
+    # Contains capitalized words (potential names)
     cap_words = re.findall(r"\b[A-Z][a-z]+", line)
     if len(cap_words) >= 2:
         score += 0.1
         reasons.append(f"{len(cap_words)} capitalized words")
+
+    # Strong signal: line is ONLY 2-3 capitalized words (simple name like "John Smith")
+    words = line.split()
+    if 2 <= len(words) <= 3 and all(w[0].isupper() for w in words if w):
+        # Check that most characters are letters (not punctuation/numbers)
+        letter_ratio = sum(c.isalpha() for c in line) / max(len(line), 1)
+        if letter_ratio > 0.8:
+            score += 0.25
+            reasons.append("simple name pattern")
 
     # Contains email (author line often has emails)
     if "@" in line:

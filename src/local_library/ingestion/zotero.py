@@ -754,6 +754,31 @@ class ZoteroReader:
         """
         return self._json_parser.has_citekey(citekey)
 
+    def get_metadata(self, citekey: str) -> dict[str, Any]:
+        """Get CSL-JSON metadata for a citekey without database access.
+
+        This is a lightweight alternative to get_item() that only reads
+        from library.json. Use when you only need metadata and not
+        attachments or Zotero IDs.
+
+        Args:
+            citekey: Better BibTeX citation key
+
+        Returns:
+            CSL-JSON metadata dictionary
+
+        Raises:
+            ZoteroError: If citekey not found (ZOTERO_ITEM_NOT_FOUND)
+        """
+        metadata = self._json_parser.get_metadata(citekey)
+        if metadata is None:
+            raise ZoteroError(
+                message=f"item not found in library.json: {citekey}",
+                code=ErrorCode.ZOTERO_ITEM_NOT_FOUND,
+                details={"citekey": citekey, "source": "library.json"},
+            )
+        return metadata
+
     def refresh(self) -> None:
         """Reload library.json from disk.
 
