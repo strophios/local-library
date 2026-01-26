@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
-    from local_library.ingestion.pdf import PdfExtractor
+    from local_library.ingestion.pdf import ExtractionResult
     from tests.extraction.conftest import AccuracyReport, GroundTruth
 
 # Accuracy thresholds for M3b validation (per-document)
@@ -86,13 +86,13 @@ class TestMetadataExtraction:
     """Tests for M3b metadata extraction accuracy.
 
     These tests compare extracted metadata against Zotero ground truth.
+    Uses session-scoped cached_extractions to avoid redundant Marker calls.
     """
 
     def test_title_accuracy(
         self,
-        pdf_path: Path,
         citekey: str,
-        pdf_extractor: PdfExtractor,
+        cached_extractions: dict[str, ExtractionResult],
         ground_truth: dict[str, GroundTruth],
     ) -> None:
         """Extracted title should match ground truth with ≥80% similarity."""
@@ -101,8 +101,8 @@ class TestMetadataExtraction:
         if citekey not in ground_truth:
             pytest.skip(f"No ground truth available for {citekey}")
 
-        # Extract text and metadata
-        result = pdf_extractor.extract(pdf_path)
+        # Get cached extraction and extract metadata
+        result = cached_extractions[citekey]
         metadata = extract_metadata_from_text(result.text)
 
         extracted_title = metadata.get("title", "")
@@ -119,9 +119,8 @@ class TestMetadataExtraction:
 
     def test_author_accuracy(
         self,
-        pdf_path: Path,
         citekey: str,
-        pdf_extractor: PdfExtractor,
+        cached_extractions: dict[str, ExtractionResult],
         ground_truth: dict[str, GroundTruth],
     ) -> None:
         """Extracted authors should match ground truth with ≥70% overlap."""
@@ -130,8 +129,8 @@ class TestMetadataExtraction:
         if citekey not in ground_truth:
             pytest.skip(f"No ground truth available for {citekey}")
 
-        # Extract text and metadata
-        result = pdf_extractor.extract(pdf_path)
+        # Get cached extraction and extract metadata
+        result = cached_extractions[citekey]
         metadata = extract_metadata_from_text(result.text)
 
         extracted_authors = tuple(metadata.get("authors", []))
@@ -148,9 +147,8 @@ class TestMetadataExtraction:
 
     def test_year_accuracy(
         self,
-        pdf_path: Path,
         citekey: str,
-        pdf_extractor: PdfExtractor,
+        cached_extractions: dict[str, ExtractionResult],
         ground_truth: dict[str, GroundTruth],
     ) -> None:
         """Extracted year should exactly match ground truth."""
@@ -165,8 +163,8 @@ class TestMetadataExtraction:
         if gt.issued_year is None:
             pytest.skip(f"No ground truth year for {citekey}")
 
-        # Extract text and metadata
-        result = pdf_extractor.extract(pdf_path)
+        # Get cached extraction and extract metadata
+        result = cached_extractions[citekey]
         metadata = extract_metadata_from_text(result.text)
 
         extracted_year = metadata.get("year")
@@ -184,11 +182,12 @@ class TestAggregateAccuracy:
 
     These tests verify that the overall extraction system meets
     the design targets when measured across all documents.
+    Uses session-scoped cached_extractions to avoid redundant Marker calls.
     """
 
     def test_aggregate_date_accuracy_meets_threshold(
         self,
-        pdf_extractor: PdfExtractor,
+        cached_extractions: dict[str, ExtractionResult],
         ground_truth: dict[str, GroundTruth],
         golden_set_pdfs: list[tuple[Path, str]],
     ) -> None:
@@ -198,7 +197,7 @@ class TestAggregateAccuracy:
         total_with_year = 0
         correct = 0
 
-        for pdf_path, citekey in golden_set_pdfs:
+        for _pdf_path, citekey in golden_set_pdfs:
             if citekey not in ground_truth:
                 continue
 
@@ -208,7 +207,7 @@ class TestAggregateAccuracy:
 
             total_with_year += 1
 
-            result = pdf_extractor.extract(pdf_path)
+            result = cached_extractions[citekey]
             metadata = extract_metadata_from_text(result.text)
             extracted_year = metadata.get("year")
 
@@ -232,13 +231,13 @@ class TestConfidenceCalibration:
 
     Verifies that confidence scores correlate with actual accuracy:
     higher confidence should mean higher accuracy.
+    Uses session-scoped cached_extractions to avoid redundant Marker calls.
     """
 
     def test_title_confidence_correlates_with_accuracy(
         self,
-        pdf_path: Path,
         citekey: str,
-        pdf_extractor: PdfExtractor,
+        cached_extractions: dict[str, ExtractionResult],
         ground_truth: dict[str, GroundTruth],
         accuracy_report: AccuracyReport,
     ) -> None:
@@ -252,8 +251,8 @@ class TestConfidenceCalibration:
         if citekey not in ground_truth:
             pytest.skip(f"No ground truth available for {citekey}")
 
-        # Extract and compare
-        result = pdf_extractor.extract(pdf_path)
+        # Get cached extraction and extract metadata
+        result = cached_extractions[citekey]
         metadata = extract_metadata_from_text(result.text)
 
         extracted_title = metadata.get("title", "")
@@ -273,9 +272,8 @@ class TestConfidenceCalibration:
 
     def test_high_confidence_implies_high_accuracy(
         self,
-        pdf_path: Path,
         citekey: str,
-        pdf_extractor: PdfExtractor,
+        cached_extractions: dict[str, ExtractionResult],
         ground_truth: dict[str, GroundTruth],
     ) -> None:
         """Documents with high confidence (>0.8) should have high accuracy.
@@ -287,7 +285,7 @@ class TestConfidenceCalibration:
         if citekey not in ground_truth:
             pytest.skip(f"No ground truth available for {citekey}")
 
-        result = pdf_extractor.extract(pdf_path)
+        result = cached_extractions[citekey]
         metadata = extract_metadata_from_text(result.text)
 
         title_conf = metadata.get("title_confidence", 0.0)
@@ -308,14 +306,13 @@ class TestConfidenceCalibration:
 
     def test_low_confidence_triggers_needs_review(
         self,
-        pdf_path: Path,
         citekey: str,
-        pdf_extractor: PdfExtractor,
+        cached_extractions: dict[str, ExtractionResult],
     ) -> None:
         """Documents with low confidence should have needs_review=True."""
         from local_library.ingestion.text_extraction import TextMetadataExtractor
 
-        result = pdf_extractor.extract(pdf_path)
+        result = cached_extractions[citekey]
 
         extractor = TextMetadataExtractor(confidence_threshold=0.7)
         extraction = extractor.extract(result.text)

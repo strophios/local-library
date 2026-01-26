@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 if TYPE_CHECKING:
-    from local_library.ingestion.pdf import ExtractionResult, PdfExtractor
+    from local_library.ingestion.pdf import ExtractionResult
 
 # Quality thresholds matching production defaults
 MIN_CHARACTER_COUNT = 100
@@ -31,46 +31,22 @@ class TestExtractionQuality:
 
     Each test runs against all PDFs in the golden set via parametrization.
     Tests are marked with @pytest.mark.extraction for selective running.
+
+    Uses session-scoped cached_extractions fixture to avoid redundant
+    Marker invocations across tests.
     """
-
-    @pytest.fixture(autouse=True)
-    def _setup_extraction_cache(
-        self,
-        request: pytest.FixtureRequest,
-    ) -> None:
-        """Cache extraction results to avoid re-extracting for each test.
-
-        Stores results in the class for access by individual tests.
-        Uses session-scoped pdf_extractor for efficiency.
-        """
-        # Use request.node to access the specific PDF being tested
-        # The cache is built lazily per-PDF to avoid extracting all at once
-        if not hasattr(request.cls, "_extraction_cache"):
-            request.cls._extraction_cache: dict[str, ExtractionResult] = {}
-
-    def _get_extraction(
-        self,
-        pdf_path: Path,
-        citekey: str,
-        pdf_extractor: PdfExtractor,
-    ) -> ExtractionResult:
-        """Get cached extraction result or extract if not cached."""
-        if citekey not in self._extraction_cache:  # type: ignore[attr-defined]
-            self._extraction_cache[citekey] = pdf_extractor.extract(pdf_path)  # type: ignore[attr-defined]
-        return self._extraction_cache[citekey]  # type: ignore[attr-defined]
 
     def test_extraction_character_count(
         self,
-        pdf_path: Path,
         citekey: str,
-        pdf_extractor: PdfExtractor,
+        cached_extractions: dict[str, ExtractionResult],
     ) -> None:
         """Extraction should produce at least MIN_CHARACTER_COUNT characters.
 
         This validates that the PDF was successfully parsed and contains
         meaningful content, not just whitespace or extraction artifacts.
         """
-        result = self._get_extraction(pdf_path, citekey, pdf_extractor)
+        result = cached_extractions[citekey]
 
         assert result.character_count >= MIN_CHARACTER_COUNT, (
             f"Extraction for {citekey} produced only {result.character_count} "
@@ -79,9 +55,8 @@ class TestExtractionQuality:
 
     def test_extraction_printable_ratio(
         self,
-        pdf_path: Path,
         citekey: str,
-        pdf_extractor: PdfExtractor,
+        cached_extractions: dict[str, ExtractionResult],
     ) -> None:
         """Extraction should have at least MIN_PRINTABLE_RATIO printable characters.
 
@@ -89,7 +64,7 @@ class TestExtractionQuality:
         binary garbage or encoding errors. A high printable ratio indicates
         successful text extraction.
         """
-        result = self._get_extraction(pdf_path, citekey, pdf_extractor)
+        result = cached_extractions[citekey]
 
         assert result.printable_ratio >= MIN_PRINTABLE_RATIO, (
             f"Extraction for {citekey} has printable ratio {result.printable_ratio:.2%} "
@@ -99,7 +74,7 @@ class TestExtractionQuality:
     def test_extraction_quality_summary(
         self,
         golden_set_pdfs: list[tuple[Path, str]],
-        pdf_extractor: PdfExtractor,
+        cached_extractions: dict[str, ExtractionResult],
     ) -> None:
         """Summary test reporting overall extraction quality across golden set.
 
@@ -110,19 +85,15 @@ class TestExtractionQuality:
         results: list[tuple[str, int, float]] = []
         failures: list[tuple[str, str]] = []
 
-        for pdf_path, citekey in golden_set_pdfs:
-            try:
-                result = pdf_extractor.extract(pdf_path)
-                results.append((citekey, result.character_count, result.printable_ratio))
+        for _pdf_path, citekey in golden_set_pdfs:
+            result = cached_extractions[citekey]
+            results.append((citekey, result.character_count, result.printable_ratio))
 
-                # Track quality failures
-                if result.character_count < MIN_CHARACTER_COUNT:
-                    failures.append((citekey, f"character_count={result.character_count}"))
-                if result.printable_ratio < MIN_PRINTABLE_RATIO:
-                    failures.append((citekey, f"printable_ratio={result.printable_ratio:.2%}"))
-
-            except Exception as e:
-                failures.append((citekey, f"extraction_error: {e}"))
+            # Track quality failures
+            if result.character_count < MIN_CHARACTER_COUNT:
+                failures.append((citekey, f"character_count={result.character_count}"))
+            if result.printable_ratio < MIN_PRINTABLE_RATIO:
+                failures.append((citekey, f"printable_ratio={result.printable_ratio:.2%}"))
 
         # Print summary (visible with -v flag)
         total = len(golden_set_pdfs)

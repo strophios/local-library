@@ -863,6 +863,38 @@ def pdf_extractor() -> PdfExtractor:
 
 
 @pytest.fixture(scope="session")
+def cached_extractions(
+    pdf_extractor: PdfExtractor,
+    golden_set_pdfs: list[tuple[Path, str]],
+) -> dict[str, Any]:
+    """Session-scoped cache of extraction results for all golden set PDFs.
+
+    Extracts each PDF once and caches the result, avoiding redundant
+    Marker invocations across tests. This dramatically reduces test
+    runtime since Marker extraction is expensive (~seconds per PDF).
+
+    The cache is built lazily on first access to each citekey, but
+    since this fixture depends on golden_set_pdfs, all PDFs are known
+    upfront. We extract all at fixture creation time for simplicity.
+
+    Args:
+        pdf_extractor: Session-scoped extractor instance
+        golden_set_pdfs: List of (path, citekey) tuples
+
+    Returns:
+        Dict mapping citekey to ExtractionResult
+    """
+    from local_library.ingestion.pdf import ExtractionResult
+
+    cache: dict[str, ExtractionResult] = {}
+
+    for pdf_path, citekey in golden_set_pdfs:
+        cache[citekey] = pdf_extractor.extract(pdf_path)
+
+    return cache
+
+
+@pytest.fixture(scope="session")
 def ground_truth(
     zotero_reader: ZoteroReader,
     golden_set_pdfs: list[tuple[Path, str]],
@@ -991,20 +1023,38 @@ def pytest_terminal_summary(
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     """Generate test parameters from golden set PDFs.
 
-    Populates parametrized tests with (pdf_path, citekey) tuples from
+    Populates parametrized tests with pdf_path and/or citekey from
     the golden set directory. This allows individual test reports per PDF.
+
+    Handles three cases:
+    - Tests needing both pdf_path and citekey
+    - Tests needing only citekey (uses cached_extractions)
+    - Tests needing only pdf_path (rare, but supported)
     """
-    if "pdf_path" in metafunc.fixturenames and "citekey" in metafunc.fixturenames:
-        # Discover PDFs directly (can't use fixture in hook)
-        if not GOLDEN_SET_DIR.exists():
-            return
+    needs_pdf_path = "pdf_path" in metafunc.fixturenames
+    needs_citekey = "citekey" in metafunc.fixturenames
 
-        pdfs = sorted(GOLDEN_SET_DIR.glob("*.pdf"))
-        params = [(pdf, _extract_citekey_from_filename(pdf.name)) for pdf in pdfs]
+    if not (needs_pdf_path or needs_citekey):
+        return
 
-        # Use citekey as test ID for readable output
+    # Discover PDFs directly (can't use fixture in hook)
+    if not GOLDEN_SET_DIR.exists():
+        return
+
+    pdfs = sorted(GOLDEN_SET_DIR.glob("*.pdf"))
+    citekeys = [_extract_citekey_from_filename(pdf.name) for pdf in pdfs]
+
+    if needs_pdf_path and needs_citekey:
+        # Both needed: parametrize as tuple
+        params = list(zip(pdfs, citekeys, strict=True))
         metafunc.parametrize(
             ("pdf_path", "citekey"),
             params,
-            ids=[citekey for _, citekey in params],
+            ids=citekeys,
         )
+    elif needs_citekey:
+        # Only citekey needed (common case with cached_extractions)
+        metafunc.parametrize("citekey", citekeys, ids=citekeys)
+    else:
+        # Only pdf_path needed (rare)
+        metafunc.parametrize("pdf_path", pdfs, ids=citekeys)
