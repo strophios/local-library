@@ -159,6 +159,30 @@ class TestListCommand:
         assert result.exit_code == 1
         assert "invalid status" in result.output
 
+    def test_list_json_output(self, mock_library: MagicMock) -> None:
+        """list command with --json should output JSON with all fields."""
+        mock_doc = MagicMock()
+        mock_doc.id = "12345678-1234-1234-1234-123456789abc"
+        mock_doc.status = DocumentStatus.READY
+        mock_doc.citekey = "Smith2023"
+        mock_doc.title = "Test Document"
+        mock_doc.authors = "John Smith"
+        mock_doc.original_path = "/path/to/doc.pdf"
+        mock_doc.content_hash = "abcd1234"
+        mock_doc.created_at = None
+
+        mock_library.list.return_value = [mock_doc]
+
+        result = runner.invoke(app, ["list", "--json"])
+
+        assert result.exit_code == 0
+        assert '"citekey"' in result.output
+        assert '"Smith2023"' in result.output
+        assert '"title"' in result.output
+        assert '"Test Document"' in result.output
+        assert '"authors"' in result.output
+        assert '"John Smith"' in result.output
+
 
 class TestShowCommand:
     """Tests for the show command."""
