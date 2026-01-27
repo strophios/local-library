@@ -21,6 +21,7 @@ def mock_library():
         patch("local_library.cli.list.Library") as mock_list,
         patch("local_library.cli.show.Library") as mock_show,
         patch("local_library.cli.delete.Library") as mock_delete,
+        patch("local_library.cli.open.Library") as mock_open,
     ):
         mock_lib = MagicMock()
         mock_add.return_value.__enter__ = MagicMock(return_value=mock_lib)
@@ -31,6 +32,8 @@ def mock_library():
         mock_show.return_value.__exit__ = MagicMock(return_value=False)
         mock_delete.return_value.__enter__ = MagicMock(return_value=mock_lib)
         mock_delete.return_value.__exit__ = MagicMock(return_value=False)
+        mock_open.return_value.__enter__ = MagicMock(return_value=mock_lib)
+        mock_open.return_value.__exit__ = MagicMock(return_value=False)
 
         yield mock_lib
 
