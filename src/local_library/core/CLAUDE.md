@@ -1,6 +1,6 @@
 # Core Domain
 
-Last verified: 2026-01-24
+Last verified: 2026-01-27
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 
 ## Contracts
 
-- **Exposes**: Document, DocumentStatus (PENDING, READY, FAILED, NEEDS_REVIEW), AddResult, FieldExtraction, TextExtractionResult, ErrorCode hierarchy (including MetadataError, ZoteroError), Library class, storage functions
+- **Exposes**: Document, DocumentStatus (PENDING, READY, FAILED, NEEDS_REVIEW), AddResult, FieldExtraction, TextExtractionResult, ErrorCode hierarchy (including MetadataError, ZoteroError), Library class (with get_by_citekey, get_all_citekeys, update_metadata), storage functions
 - **Guarantees**:
   - Document.id is UUID, globally unique
   - Document.content_hash is SHA-256, content-addressable
@@ -37,6 +37,8 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 - **Lazy Library import**: `core.__init__` uses `__getattr__` to defer Library import until first access. Breaks circular dependency: `core.__init__` -> `core.library` -> `ingestion.pdf` -> `core.errors`. Eager imports for models/errors remain since they don't cause cycles.
 - **Citekey collision handling**: `get_unique_citekey()` appends suffixes (a, b, c...) to ensure uniqueness
 - **Text extraction integration**: Library._process_text_extraction() handles metadata extraction from document text, sets NEEDS_REVIEW when confidence is low
+- **Citekey lookup**: Library.get_by_citekey() returns Document or None; Library.get_all_citekeys() returns all non-null citekeys
+- **Metadata updates**: Library.update_metadata() allows updating status, citekey, and csl_json with automatic indexed field extraction
 
 ## Invariants
 
@@ -52,7 +54,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 - `models.py` - Document, AcquisitionResult, ExtractionResult, AddResult, FieldExtraction, TextExtractionResult
 - `errors.py` - ErrorCode enum, exception hierarchy (includes ACQUISITION_*, EXTRACTION_*, METADATA_*, ZOTERO_* codes)
 - `storage.py` - SQLite CRUD (get_connection, init_schema, create/get/update/delete)
-- `library.py` - Library orchestrator (add, get, list, delete) with handler dispatch and text extraction integration
+- `library.py` - Library orchestrator (add, get, get_by_citekey, get_all_citekeys, list, delete, update_metadata) with handler dispatch and text extraction integration
 
 ## Gotchas
 
