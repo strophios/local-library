@@ -2,7 +2,7 @@
 
 import pytest
 
-from local_library.cli.utils import levenshtein_distance
+from local_library.cli.utils import levenshtein_distance, suggest_citekeys
 
 
 class TestLevenshteinDistance:
@@ -37,3 +37,44 @@ class TestLevenshteinDistance:
     def test_case_sensitive(self) -> None:
         """Distance is case-sensitive."""
         assert levenshtein_distance("Test", "test") == 1
+
+
+class TestSuggestCitekeys:
+    """Tests for citekey suggestion generation."""
+
+    def test_prefix_match_prioritized(self) -> None:
+        """Prefix matches should appear first."""
+        all_citekeys = ["Smith2023", "Smith2024", "Jones2023", "Smithson2023"]
+        suggestions = suggest_citekeys("Smith", all_citekeys, max_suggestions=3)
+
+        # Prefix matches first
+        assert suggestions[0] in ["Smith2023", "Smith2024"]
+        assert suggestions[1] in ["Smith2023", "Smith2024"]
+
+    def test_levenshtein_fallback(self) -> None:
+        """When no prefix match, use Levenshtein distance."""
+        all_citekeys = ["Smith2023", "Jones2023", "Brown2023"]
+        suggestions = suggest_citekeys("Smyth2023", all_citekeys, max_suggestions=3)
+
+        # Smith2023 should be suggested (distance 1 from Smyth2023)
+        assert "Smith2023" in suggestions
+
+    def test_max_distance_respected(self) -> None:
+        """Suggestions beyond max_distance should be excluded."""
+        all_citekeys = ["AAAA", "BBBB", "CCCC"]
+        suggestions = suggest_citekeys("ZZZZ", all_citekeys, max_suggestions=3, max_distance=3)
+
+        # All have distance 4, should return empty
+        assert suggestions == []
+
+    def test_empty_citekeys(self) -> None:
+        """Empty citekey list returns empty suggestions."""
+        suggestions = suggest_citekeys("Smith", [], max_suggestions=3)
+        assert suggestions == []
+
+    def test_max_suggestions_limit(self) -> None:
+        """Should not return more than max_suggestions."""
+        all_citekeys = [f"Smith202{i}" for i in range(10)]
+        suggestions = suggest_citekeys("Smith", all_citekeys, max_suggestions=3)
+
+        assert len(suggestions) <= 3

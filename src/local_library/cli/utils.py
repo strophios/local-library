@@ -32,3 +32,50 @@ def levenshtein_distance(s1: str, s2: str) -> int:
         previous_row = current_row
 
     return previous_row[-1]
+
+
+def suggest_citekeys(
+    query: str,
+    all_citekeys: list[str],
+    max_suggestions: int = 3,
+    max_distance: int = 3,
+) -> list[str]:
+    """Generate citekey suggestions for a failed lookup.
+
+    Prioritizes prefix matches, then falls back to Levenshtein distance.
+
+    Args:
+        query: The citekey that wasn't found (without @ prefix)
+        all_citekeys: All available citekeys in the library
+        max_suggestions: Maximum number of suggestions to return
+        max_distance: Maximum Levenshtein distance for fuzzy matches
+
+    Returns:
+        List of suggested citekeys, prefix matches first
+    """
+    if not all_citekeys:
+        return []
+
+    # First: prefix matches
+    prefix_matches = [ck for ck in all_citekeys if ck.startswith(query)]
+
+    if len(prefix_matches) >= max_suggestions:
+        return prefix_matches[:max_suggestions]
+
+    # Second: Levenshtein distance for remaining slots
+    remaining_slots = max_suggestions - len(prefix_matches)
+    non_prefix = [ck for ck in all_citekeys if ck not in prefix_matches]
+
+    # Calculate distances and filter
+    with_distances = [
+        (ck, levenshtein_distance(query, ck))
+        for ck in non_prefix
+    ]
+    within_threshold = [
+        (ck, dist) for ck, dist in with_distances if dist <= max_distance
+    ]
+    within_threshold.sort(key=lambda x: x[1])
+
+    fuzzy_matches = [ck for ck, _ in within_threshold[:remaining_slots]]
+
+    return prefix_matches + fuzzy_matches
