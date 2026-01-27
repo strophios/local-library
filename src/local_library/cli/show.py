@@ -9,6 +9,7 @@ import typer
 from rich.console import Console
 from rich.panel import Panel
 
+from local_library.cli.utils import resolve_identifier
 from local_library.core import Library, LookupError
 
 console = Console()
@@ -16,7 +17,7 @@ err_console = Console(stderr=True)
 
 
 def show(
-    doc_id: Annotated[str, typer.Argument(help="Document ID (full or partial UUID)")],
+    identifier: Annotated[str, typer.Argument(help="Document ID (UUID or @citekey)")],
     json_output: Annotated[
         bool,
         typer.Option("--json", "-j", help="Output result as JSON"),
@@ -24,17 +25,20 @@ def show(
 ) -> None:
     """Show details for a specific document.
 
-    Supports partial UUID matching - if the prefix uniquely identifies
-    a document, it will be shown.
+    Supports both UUID (full or partial) and @citekey identifiers.
     """
     try:
         with Library() as lib:
-            doc = lib.get(doc_id)
+            doc = resolve_identifier(identifier, lib)
     except LookupError as e:
         if json_output:
             err_console.print(json.dumps({"error": e.message, "code": e.code.value}))
         else:
             err_console.print(f"[red]error:[/red] {e.message}")
+            if "suggestions" in e.details and e.details["suggestions"]:
+                err_console.print("[dim]Did you mean:[/dim]")
+                for suggestion in e.details["suggestions"]:
+                    err_console.print(f"  [cyan]@{suggestion}[/cyan]")
         raise typer.Exit(code=1) from None
 
     if json_output:
@@ -57,6 +61,7 @@ def show(
             "pending": "yellow",
             "ready": "green",
             "failed": "red",
+            "needs_review": "yellow bold",
         }.get(doc.status.value, "white")
 
         lines = [

@@ -222,6 +222,46 @@ class TestShowCommand:
         assert "not found" in result.output
 
 
+class TestShowCommandCitekey:
+    """Tests for show command with citekey support."""
+
+    def test_show_by_citekey(self, mock_library: MagicMock) -> None:
+        """show @citekey should use citekey lookup."""
+        mock_doc = MagicMock()
+        mock_doc.id = "12345678-1234-1234-1234-123456789abc"
+        mock_doc.status = DocumentStatus.READY
+        mock_doc.original_path = "/path/to/doc.pdf"
+        mock_doc.storage_path = "/storage/doc.pdf"
+        mock_doc.extracted_path = "/extracted/doc.md"
+        mock_doc.content_hash = "abcd1234"
+        mock_doc.citekey = "Smith2023"
+        mock_doc.error_message = None
+        mock_doc.error_code = None
+        mock_doc.created_at = None
+        mock_doc.updated_at = None
+
+        mock_library.get_by_citekey.return_value = mock_doc
+        mock_library.get_all_citekeys.return_value = ["Smith2023"]
+
+        result = runner.invoke(app, ["show", "@Smith2023"])
+
+        assert result.exit_code == 0
+        assert "12345678" in result.output
+        mock_library.get_by_citekey.assert_called_once_with("Smith2023")
+
+    def test_show_citekey_not_found_with_suggestions(self, mock_library: MagicMock) -> None:
+        """show @citekey should show suggestions on miss."""
+        mock_library.get_by_citekey.return_value = None
+        mock_library.get_all_citekeys.return_value = ["Smith2023", "Smith2024"]
+
+        result = runner.invoke(app, ["show", "@Smth2023"])
+
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()
+        # Should suggest similar citekeys
+        assert "Smith2023" in result.output or "Did you mean" in result.output
+
+
 class TestListCommandEnhanced:
     """Tests for enhanced list command features."""
 
