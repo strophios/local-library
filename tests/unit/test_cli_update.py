@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 
 from local_library.cli.main import app
 from local_library.cli.update import (
+    _check_citekey_regeneration,
     build_editable_json,
     insert_errors_as_comments,
     parse_edited_json,
@@ -240,6 +241,112 @@ class TestBuildEditableJson:
         assert parsed["csl_json"] is None
 
 
+class TestCheckCitekeyRegeneration:
+    """Tests for citekey regeneration detection."""
+
+    def test_returns_false_when_citekey_changed_manually(self) -> None:
+        """Should return False when citekey was changed manually."""
+        result = _check_citekey_regeneration(
+            original_csl={"title": "Test", "author": [{"family": "Smith"}]},
+            new_csl={"title": "Test Updated", "author": [{"family": "Smith"}]},
+            original_citekey="Smith2023",
+            new_citekey="Jones2024",  # Manually changed
+        )
+
+        assert result is False
+
+    def test_returns_false_when_original_csl_is_none(self) -> None:
+        """Should return False when original CSL is None."""
+        result = _check_citekey_regeneration(
+            original_csl=None,  # No original CSL
+            new_csl={"title": "Test", "author": [{"family": "Smith"}]},
+            original_citekey="Smith2023",
+            new_citekey="Smith2023",
+        )
+
+        assert result is False
+
+    def test_returns_false_when_new_csl_is_none(self) -> None:
+        """Should return False when new CSL is None."""
+        result = _check_citekey_regeneration(
+            original_csl={"title": "Test", "author": [{"family": "Smith"}]},
+            new_csl=None,  # No new CSL
+            original_citekey="Smith2023",
+            new_citekey="Smith2023",
+        )
+
+        assert result is False
+
+    def test_returns_true_when_title_changed_and_citekey_unchanged(self) -> None:
+        """Should return True when title changed but citekey unchanged."""
+        result = _check_citekey_regeneration(
+            original_csl={
+                "title": "Original Title",
+                "author": [{"family": "Smith"}],
+                "issued": {"date-parts": [[2023]]},
+            },
+            new_csl={
+                "title": "Updated Title",
+                "author": [{"family": "Smith"}],
+                "issued": {"date-parts": [[2023]]},
+            },
+            original_citekey="Smith2023",
+            new_citekey="Smith2023",  # Unchanged
+        )
+
+        assert result is True
+
+    def test_returns_true_when_author_changed_and_citekey_unchanged(self) -> None:
+        """Should return True when author changed but citekey unchanged."""
+        result = _check_citekey_regeneration(
+            original_csl={
+                "title": "Test",
+                "author": [{"family": "Smith"}],
+                "issued": {"date-parts": [[2023]]},
+            },
+            new_csl={
+                "title": "Test",
+                "author": [{"family": "Jones"}],
+                "issued": {"date-parts": [[2023]]},
+            },
+            original_citekey="Smith2023",
+            new_citekey="Smith2023",  # Unchanged
+        )
+
+        assert result is True
+
+    def test_returns_true_when_issued_changed_and_citekey_unchanged(self) -> None:
+        """Should return True when issued date changed but citekey unchanged."""
+        result = _check_citekey_regeneration(
+            original_csl={
+                "title": "Test",
+                "author": [{"family": "Smith"}],
+                "issued": {"date-parts": [[2023]]},
+            },
+            new_csl={
+                "title": "Test",
+                "author": [{"family": "Smith"}],
+                "issued": {"date-parts": [[2024]]},
+            },
+            original_citekey="Smith2023",
+            new_citekey="Smith2023",  # Unchanged
+        )
+
+        assert result is True
+
+    def test_returns_false_when_csl_unchanged(self) -> None:
+        """Should return False when CSL unchanged."""
+        csl = {"title": "Test", "author": [{"family": "Smith"}], "issued": {"date-parts": [[2023]]}}
+        result = _check_citekey_regeneration(
+            original_csl=csl,
+            new_csl=csl,  # Same as original
+            original_citekey="Smith2023",
+            new_citekey="Smith2023",
+        )
+
+        assert result is False
+
+
 @pytest.fixture
 def mock_library_update():
     """Provide a mock Library for update command testing."""
@@ -274,11 +381,13 @@ class TestUpdateCommand:
         mock_library_update.get_all_citekeys.return_value = ["Smith2023"]
 
         # Mock the editor to return modified JSON
-        edited_json = json.dumps({
-            "status": "ready",
-            "citekey": "Smith2023",
-            "csl_json": {"type": "article", "title": "Updated Title"},
-        })
+        edited_json = json.dumps(
+            {
+                "status": "ready",
+                "citekey": "Smith2023",
+                "csl_json": {"type": "article", "title": "Updated Title"},
+            }
+        )
 
         with (
             patch("local_library.cli.update.find_editor", return_value="/usr/bin/nvim"),
@@ -347,11 +456,13 @@ class TestUpdateCommand:
         mock_library_update.get_by_citekey.return_value = mock_doc
         mock_library_update.get_all_citekeys.return_value = ["Smith2023"]
 
-        edited_json = json.dumps({
-            "status": "ready",
-            "citekey": "Smith2023",
-            "csl_json": {"type": "article", "title": "Test"},
-        })
+        edited_json = json.dumps(
+            {
+                "status": "ready",
+                "citekey": "Smith2023",
+                "csl_json": {"type": "article", "title": "Test"},
+            }
+        )
 
         with (
             patch("local_library.cli.update.find_editor", return_value="/usr/bin/nvim"),

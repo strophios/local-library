@@ -3,6 +3,7 @@
 # pattern: Mixed (Functional Core utilities + Imperative Shell update command)
 
 import json
+import os
 import subprocess
 import tempfile
 from typing import Annotated, Any
@@ -192,9 +193,7 @@ def build_editable_json(doc: Document) -> str:
 
 
 def update(
-    identifier: Annotated[
-        str, typer.Argument(help="Document ID (UUID or @citekey)")
-    ],
+    identifier: Annotated[str, typer.Argument(help="Document ID (UUID or @citekey)")],
 ) -> None:
     """Edit document metadata in your editor.
 
@@ -209,9 +208,7 @@ def update(
     editor = find_editor()
     if not editor:
         err_console.print("[red]error:[/red] no editor found")
-        err_console.print(
-            "[dim]Install nvim/vim or set $EDITOR environment variable.[/dim]"
-        )
+        err_console.print("[dim]Install nvim/vim or set $EDITOR environment variable.[/dim]")
         raise typer.Exit(code=1) from None
 
     try:
@@ -222,45 +219,51 @@ def update(
             # Build initial JSON
             json_content = build_editable_json(doc)
 
-            # Edit loop
-            while True:
-                # Write to temp file and open editor
-                with tempfile.NamedTemporaryFile(
-                    mode="w",
-                    suffix=".json",
-                    delete=False,
-                ) as f:
-                    f.write(json_content)
-                    temp_path = f.name
+            # Edit loop - use try/finally to ensure temp file cleanup
+            temp_path = None
+            try:
+                while True:
+                    # Write to temp file and open editor
+                    with tempfile.NamedTemporaryFile(
+                        mode="w",
+                        suffix=".json",
+                        delete=False,
+                    ) as f:
+                        f.write(json_content)
+                        temp_path = f.name
 
-                subprocess.run([editor, temp_path], check=False)
+                    subprocess.run([editor, temp_path], check=False)
 
-                # Read edited content
-                with open(temp_path) as f:
-                    edited_content = f.read()
+                    # Read edited content
+                    with open(temp_path) as f:
+                        edited_content = f.read()
 
-                # Parse
-                try:
-                    parsed = parse_edited_json(edited_content)
-                except ValueError as e:
-                    # JSON parse error - re-edit with error message
-                    json_content = insert_errors_as_comments(edited_content, [str(e)])
-                    continue
+                    # Parse
+                    try:
+                        parsed = parse_edited_json(edited_content)
+                    except ValueError as e:
+                        # JSON parse error - re-edit with error message
+                        json_content = insert_errors_as_comments(edited_content, [str(e)])
+                        continue
 
-                # Check for abort
-                if parsed is None:
-                    console.print("[yellow]Update aborted.[/yellow]")
-                    return
+                    # Check for abort
+                    if parsed is None:
+                        console.print("[yellow]Update aborted.[/yellow]")
+                        return
 
-                # Validate
-                errors = validate_edited_json(parsed, doc.citekey, all_citekeys)
-                if errors:
-                    # Re-edit with errors
-                    json_content = insert_errors_as_comments(edited_content, errors)
-                    continue
+                    # Validate
+                    errors = validate_edited_json(parsed, doc.citekey, all_citekeys)
+                    if errors:
+                        # Re-edit with errors
+                        json_content = insert_errors_as_comments(edited_content, errors)
+                        continue
 
-                # Valid - break out of loop
-                break
+                    # Valid - break out of loop
+                    break
+            finally:
+                # Clean up temp file
+                if temp_path and os.path.exists(temp_path):
+                    os.unlink(temp_path)
 
             # Check if citekey should be regenerated
             new_citekey = parsed.get("citekey")
