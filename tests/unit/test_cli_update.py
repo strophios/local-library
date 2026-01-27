@@ -6,6 +6,12 @@ from uuid import UUID
 
 import pytest
 
+from local_library.cli.update import (
+    build_editable_json,
+    insert_errors_as_comments,
+    parse_edited_json,
+    validate_edited_json,
+)
 from local_library.core.models import Document, DocumentStatus
 
 
@@ -14,8 +20,6 @@ class TestParseEditedJson:
 
     def test_parse_clean_json(self) -> None:
         """Should parse clean JSON."""
-        from local_library.cli.update import parse_edited_json
-
         content = '{"status": "ready", "citekey": "Smith2023"}'
 
         result = parse_edited_json(content)
@@ -24,8 +28,6 @@ class TestParseEditedJson:
 
     def test_parse_json_with_comments(self) -> None:
         """Should strip comments and parse JSON."""
-        from local_library.cli.update import parse_edited_json
-
         content = """// ERRORS:
 //   - some error
 //
@@ -37,16 +39,12 @@ class TestParseEditedJson:
 
     def test_parse_empty_file_returns_none(self) -> None:
         """Should return None for empty/whitespace-only file (abort signal)."""
-        from local_library.cli.update import parse_edited_json
-
         assert parse_edited_json("") is None
         assert parse_edited_json("   \n\n  ") is None
         assert parse_edited_json("// just comments\n// more comments") is None
 
     def test_parse_invalid_json_raises(self) -> None:
         """Should raise ValueError for invalid JSON."""
-        from local_library.cli.update import parse_edited_json
-
         content = '{"status": "ready", missing_quotes: bad}'
 
         with pytest.raises(ValueError) as exc_info:
@@ -60,8 +58,6 @@ class TestInsertErrorsAsComments:
 
     def test_insert_errors_at_top(self) -> None:
         """Should insert errors as comments at top of JSON."""
-        from local_library.cli.update import insert_errors_as_comments
-
         original = '{\n  "status": "invalid"\n}'
         errors = ["invalid status 'invalid'", "citekey already exists"]
 
@@ -75,8 +71,6 @@ class TestInsertErrorsAsComments:
 
     def test_insert_errors_preserves_json(self) -> None:
         """Should preserve original JSON content."""
-        from local_library.cli.update import insert_errors_as_comments
-
         original = '{\n  "status": "ready",\n  "citekey": "Smith2023"\n}'
         errors = ["some error"]
 
@@ -92,8 +86,6 @@ class TestValidateEditedJson:
 
     def test_validate_valid_json(self) -> None:
         """Should return no errors for valid JSON."""
-        from local_library.cli.update import validate_edited_json
-
         edited = {
             "status": "ready",
             "citekey": "Smith2023",
@@ -110,8 +102,6 @@ class TestValidateEditedJson:
 
     def test_validate_invalid_status(self) -> None:
         """Should error on invalid status value."""
-        from local_library.cli.update import validate_edited_json
-
         edited = {
             "status": "invalid_status",
             "citekey": "Smith2023",
@@ -128,8 +118,6 @@ class TestValidateEditedJson:
 
     def test_validate_duplicate_citekey(self) -> None:
         """Should error on duplicate citekey."""
-        from local_library.cli.update import validate_edited_json
-
         edited = {
             "status": "ready",
             "citekey": "Jones2024",  # Different from current, exists in library
@@ -146,8 +134,6 @@ class TestValidateEditedJson:
 
     def test_validate_citekey_same_as_current(self) -> None:
         """Should allow keeping current citekey."""
-        from local_library.cli.update import validate_edited_json
-
         edited = {
             "status": "ready",
             "citekey": "Smith2023",  # Same as current
@@ -164,8 +150,6 @@ class TestValidateEditedJson:
 
     def test_validate_invalid_csl_json(self) -> None:
         """Should error on invalid CSL-JSON."""
-        from local_library.cli.update import validate_edited_json
-
         edited = {
             "status": "ready",
             "citekey": "Smith2023",
@@ -182,8 +166,6 @@ class TestValidateEditedJson:
 
     def test_validate_missing_status(self) -> None:
         """Should error on missing status."""
-        from local_library.cli.update import validate_edited_json
-
         edited = {
             "citekey": "Smith2023",
             "csl_json": {"type": "article", "title": "Test"},
@@ -203,8 +185,6 @@ class TestBuildEditableJson:
 
     def test_build_editable_json_structure(self) -> None:
         """Should build correct JSON structure for editing."""
-        from local_library.cli.update import build_editable_json
-
         doc = Document(
             id=UUID("12345678-1234-1234-1234-123456789abc"),
             original_path="/path/to/doc.pdf",
@@ -236,8 +216,6 @@ class TestBuildEditableJson:
 
     def test_build_editable_json_null_fields(self) -> None:
         """Should handle null fields gracefully."""
-        from local_library.cli.update import build_editable_json
-
         doc = Document(
             id=UUID("12345678-1234-1234-1234-123456789abc"),
             original_path="/path/to/doc.pdf",

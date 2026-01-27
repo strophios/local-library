@@ -1,6 +1,6 @@
 """Update command - edit document metadata."""
 
-# pattern: Imperative Shell
+# pattern: Functional Core
 
 import json
 from typing import Any
