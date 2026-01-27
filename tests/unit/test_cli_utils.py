@@ -1,8 +1,13 @@
 """Unit tests for CLI utilities."""
 
+from unittest.mock import MagicMock
+from uuid import UUID
+
 import pytest
 
-from local_library.cli.utils import levenshtein_distance, suggest_citekeys
+from local_library.core import ErrorCode, LookupError
+from local_library.core.models import Document, DocumentStatus
+from local_library.cli.utils import levenshtein_distance, resolve_identifier, suggest_citekeys
 
 
 class TestLevenshteinDistance:
@@ -78,3 +83,78 @@ class TestSuggestCitekeys:
         suggestions = suggest_citekeys("Smith", all_citekeys, max_suggestions=3)
 
         assert len(suggestions) <= 3
+
+
+def _make_mock_document(
+    doc_id: str = "12345678-1234-1234-1234-123456789abc",
+    citekey: str | None = "Smith2023",
+) -> MagicMock:
+    """Create a mock Document for testing."""
+    mock = MagicMock(spec=Document)
+    mock.id = UUID(doc_id)
+    mock.citekey = citekey
+    mock.status = DocumentStatus.READY
+    return mock
+
+
+class TestResolveIdentifier:
+    """Tests for identifier resolution."""
+
+    def test_uuid_lookup(self) -> None:
+        """UUID without @ prefix uses Library.get()."""
+        mock_lib = MagicMock()
+        mock_doc = _make_mock_document()
+        mock_lib.get.return_value = mock_doc
+
+        result = resolve_identifier("12345678", mock_lib)
+
+        assert result == mock_doc
+        mock_lib.get.assert_called_once_with("12345678")
+
+    def test_citekey_lookup_with_at_prefix(self) -> None:
+        """@citekey syntax uses citekey lookup."""
+        mock_lib = MagicMock()
+        mock_doc = _make_mock_document()
+        mock_lib.get_by_citekey.return_value = mock_doc
+
+        result = resolve_identifier("@Smith2023", mock_lib)
+
+        assert result == mock_doc
+        mock_lib.get_by_citekey.assert_called_once_with("Smith2023")
+
+    def test_citekey_not_found_with_suggestions(self) -> None:
+        """Citekey miss should raise LookupError with suggestions."""
+        mock_lib = MagicMock()
+        mock_lib.get_by_citekey.return_value = None
+        mock_lib.get_all_citekeys.return_value = ["Smith2023", "Smith2024", "Jones2023"]
+
+        with pytest.raises(LookupError) as exc_info:
+            resolve_identifier("@Smth2023", mock_lib)
+
+        assert exc_info.value.code == ErrorCode.NOT_FOUND
+        assert "Smth2023" in exc_info.value.message
+        # Should have suggestions in details
+        assert "suggestions" in exc_info.value.details
+
+    def test_citekey_not_found_no_suggestions(self) -> None:
+        """Citekey miss with no close matches has empty suggestions."""
+        mock_lib = MagicMock()
+        mock_lib.get_by_citekey.return_value = None
+        mock_lib.get_all_citekeys.return_value = ["AAAA", "BBBB"]
+
+        with pytest.raises(LookupError) as exc_info:
+            resolve_identifier("@ZZZZCompletely2023Different", mock_lib)
+
+        assert exc_info.value.code == ErrorCode.NOT_FOUND
+        # No close matches, suggestions may be empty
+        assert exc_info.value.details.get("suggestions", []) == []
+
+    def test_uuid_not_found_passthrough(self) -> None:
+        """UUID miss should pass through Library.get() exception."""
+        mock_lib = MagicMock()
+        mock_lib.get.side_effect = LookupError("document not found", ErrorCode.NOT_FOUND)
+
+        with pytest.raises(LookupError) as exc_info:
+            resolve_identifier("nonexistent", mock_lib)
+
+        assert exc_info.value.code == ErrorCode.NOT_FOUND

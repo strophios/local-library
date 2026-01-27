@@ -1,6 +1,22 @@
 """CLI utility functions."""
 
-# pattern: Functional Core
+# pattern: Mixed (Functional Core utilities + Imperative Shell resolve_identifier)
+
+from typing import TYPE_CHECKING, Protocol
+
+from local_library.core import ErrorCode, LookupError
+from local_library.core.models import Document
+
+if TYPE_CHECKING:
+    from local_library.core import Library
+
+
+class LibraryProtocol(Protocol):
+    """Protocol for Library methods used by resolve_identifier."""
+
+    def get(self, doc_id: str) -> Document: ...
+    def get_by_citekey(self, citekey: str) -> Document | None: ...
+    def get_all_citekeys(self) -> list[str]: ...
 
 
 def levenshtein_distance(s1: str, s2: str) -> int:
@@ -79,3 +95,38 @@ def suggest_citekeys(
     fuzzy_matches = [ck for ck, _ in within_threshold[:remaining_slots]]
 
     return prefix_matches + fuzzy_matches
+
+
+def resolve_identifier(identifier: str, library: LibraryProtocol) -> Document:
+    """Resolve a document identifier (UUID or @citekey) to a Document.
+
+    Args:
+        identifier: Either a UUID (full or partial) or @citekey
+        library: Library instance for lookups
+
+    Returns:
+        The resolved Document
+
+    Raises:
+        LookupError: If document not found, with suggestions for citekey misses
+    """
+    if identifier.startswith("@"):
+        # Citekey lookup
+        citekey = identifier[1:]  # Strip @ prefix
+        doc = library.get_by_citekey(citekey)
+
+        if doc is not None:
+            return doc
+
+        # Not found - generate suggestions
+        all_citekeys = library.get_all_citekeys()
+        suggestions = suggest_citekeys(citekey, all_citekeys)
+
+        raise LookupError(
+            f"citekey not found: {citekey}",
+            ErrorCode.NOT_FOUND,
+            details={"citekey": citekey, "suggestions": suggestions},
+        )
+
+    # UUID lookup - delegate to Library.get() which handles partial matching
+    return library.get(identifier)

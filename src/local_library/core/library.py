@@ -27,7 +27,9 @@ from local_library.core.models import AddResult, Document, DocumentStatus
 from local_library.core.storage import (
     create_document,
     delete_document,
+    get_all_citekeys,
     get_connection,
+    get_document_by_citekey,
     get_document_by_hash,
     get_document_by_id,
     get_document_by_path,
@@ -64,7 +66,7 @@ class Library:
         extractors: list[ContentExtractor] | None = None,
         text_extraction_enabled: bool = True,
         text_extraction_llm_enabled: bool = False,
-        text_extraction_llm_model: str = "gpt-4o-mini",
+        text_extraction_llm_model: str = "gemini/gemini-2.0-flash",
         text_extraction_confidence_threshold: float = 0.7,
     ) -> None:
         """Initialize the library.
@@ -507,6 +509,25 @@ class Library:
             )
 
         return matches[0]
+
+    def get_by_citekey(self, citekey: str) -> Document | None:
+        """Get a document by citekey.
+
+        Args:
+            citekey: Citation key to look up
+
+        Returns:
+            Document if found, None otherwise
+        """
+        return get_document_by_citekey(self._conn, citekey)
+
+    def get_all_citekeys(self) -> list[str]:
+        """Get all citekeys in the library.
+
+        Returns:
+            List of all non-null citekeys
+        """
+        return get_all_citekeys(self._conn)
 
     def list(self, status: DocumentStatus | None = None) -> list[Document]:
         """List all documents, optionally filtered by status.
