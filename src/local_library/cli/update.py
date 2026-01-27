@@ -60,6 +60,28 @@ def validate_edited_json(
     return errors
 
 
+def insert_errors_as_comments(json_content: str, errors: list[str]) -> str:
+    """Insert validation errors as comments at top of JSON.
+
+    Note: JSON doesn't support comments, but editors will display them.
+    The parse step will need to strip these comments before parsing.
+
+    Args:
+        json_content: Original JSON string
+        errors: List of error messages
+
+    Returns:
+        JSON with error comments prepended
+    """
+    comment_lines = ["// ERRORS (fix these issues and save again):"]
+    for error in errors:
+        comment_lines.append(f"//   - {error}")
+    comment_lines.append("//")
+    comment_lines.append("")
+
+    return "\n".join(comment_lines) + json_content
+
+
 def build_editable_json(doc: Document) -> str:
     """Build JSON structure for editing in $EDITOR.
 

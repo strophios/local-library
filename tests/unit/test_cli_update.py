@@ -9,6 +9,38 @@ import pytest
 from local_library.core.models import Document, DocumentStatus
 
 
+class TestInsertErrorsAsComments:
+    """Tests for error insertion in JSON."""
+
+    def test_insert_errors_at_top(self) -> None:
+        """Should insert errors as comments at top of JSON."""
+        from local_library.cli.update import insert_errors_as_comments
+
+        original = '{\n  "status": "invalid"\n}'
+        errors = ["invalid status 'invalid'", "citekey already exists"]
+
+        result = insert_errors_as_comments(original, errors)
+
+        # Errors should appear as comments before JSON
+        lines = result.split("\n")
+        assert "// ERRORS" in lines[0]
+        assert any("invalid status" in line for line in lines[:5])
+        assert any("citekey" in line for line in lines[:5])
+
+    def test_insert_errors_preserves_json(self) -> None:
+        """Should preserve original JSON content."""
+        from local_library.cli.update import insert_errors_as_comments
+
+        original = '{\n  "status": "ready",\n  "citekey": "Smith2023"\n}'
+        errors = ["some error"]
+
+        result = insert_errors_as_comments(original, errors)
+
+        # JSON should still be present after comments
+        assert '"status": "ready"' in result
+        assert '"citekey": "Smith2023"' in result
+
+
 class TestValidateEditedJson:
     """Tests for edited JSON validation."""
 
