@@ -66,3 +66,122 @@ class TestFindEditor:
             os.environ.pop("EDITOR", None)
             editor = find_editor()
             assert editor is None
+
+
+class TestOpenCommand:
+    """Tests for open command."""
+
+    def test_open_markdown_default(self, mock_library_open: MagicMock) -> None:
+        """open command should open markdown by default."""
+        mock_doc = MagicMock()
+        mock_doc.id = "12345678-1234-1234-1234-123456789abc"
+        mock_doc.extracted_path = "/path/to/doc.md"
+        mock_doc.storage_path = "/path/to/doc.pdf"
+        mock_doc.status = DocumentStatus.READY
+
+        mock_library_open.get.return_value = mock_doc
+
+        with (
+            patch("local_library.cli.open.find_editor", return_value="/usr/bin/nvim"),
+            patch("local_library.cli.open.subprocess.run") as mock_run,
+        ):
+            result = runner.invoke(app, ["open", "12345678"])
+
+            assert result.exit_code == 0
+            mock_run.assert_called_once()
+            call_args = mock_run.call_args[0][0]
+            assert "/usr/bin/nvim" in call_args
+            assert "/path/to/doc.md" in call_args
+
+    def test_open_pdf_flag(self, mock_library_open: MagicMock) -> None:
+        """open --pdf should open PDF in system viewer."""
+        mock_doc = MagicMock()
+        mock_doc.id = "12345678-1234-1234-1234-123456789abc"
+        mock_doc.extracted_path = "/path/to/doc.md"
+        mock_doc.storage_path = "/path/to/doc.pdf"
+        mock_doc.status = DocumentStatus.READY
+
+        mock_library_open.get.return_value = mock_doc
+
+        with patch("local_library.cli.open.subprocess.Popen") as mock_popen:
+            result = runner.invoke(app, ["open", "--pdf", "12345678"])
+
+            assert result.exit_code == 0
+            mock_popen.assert_called_once()
+            call_args = mock_popen.call_args[0][0]
+            assert "open" in call_args
+            assert "/path/to/doc.pdf" in call_args
+
+    def test_open_both_flag(self, mock_library_open: MagicMock) -> None:
+        """open --both should open PDF then markdown."""
+        mock_doc = MagicMock()
+        mock_doc.id = "12345678-1234-1234-1234-123456789abc"
+        mock_doc.extracted_path = "/path/to/doc.md"
+        mock_doc.storage_path = "/path/to/doc.pdf"
+        mock_doc.status = DocumentStatus.READY
+
+        mock_library_open.get.return_value = mock_doc
+
+        with (
+            patch("local_library.cli.open.find_editor", return_value="/usr/bin/nvim"),
+            patch("local_library.cli.open.subprocess.Popen") as mock_popen,
+            patch("local_library.cli.open.subprocess.run") as mock_run,
+        ):
+            result = runner.invoke(app, ["open", "--both", "12345678"])
+
+            assert result.exit_code == 0
+            # PDF opened first (non-blocking)
+            mock_popen.assert_called_once()
+            # Markdown opened second (blocking)
+            mock_run.assert_called_once()
+
+    def test_open_citekey_lookup(self, mock_library_open: MagicMock) -> None:
+        """open @citekey should use citekey lookup."""
+        mock_doc = MagicMock()
+        mock_doc.id = "12345678-1234-1234-1234-123456789abc"
+        mock_doc.extracted_path = "/path/to/doc.md"
+        mock_doc.storage_path = "/path/to/doc.pdf"
+        mock_doc.status = DocumentStatus.READY
+
+        mock_library_open.get_by_citekey.return_value = mock_doc
+        mock_library_open.get_all_citekeys.return_value = ["Smith2023"]
+
+        with (
+            patch("local_library.cli.open.find_editor", return_value="/usr/bin/nvim"),
+            patch("local_library.cli.open.subprocess.run"),
+        ):
+            result = runner.invoke(app, ["open", "@Smith2023"])
+
+            assert result.exit_code == 0
+            mock_library_open.get_by_citekey.assert_called_once_with("Smith2023")
+
+    def test_open_no_extracted_path(self, mock_library_open: MagicMock) -> None:
+        """open should error if no markdown available."""
+        mock_doc = MagicMock()
+        mock_doc.id = "12345678-1234-1234-1234-123456789abc"
+        mock_doc.extracted_path = None
+        mock_doc.storage_path = "/path/to/doc.pdf"
+        mock_doc.status = DocumentStatus.PENDING
+
+        mock_library_open.get.return_value = mock_doc
+
+        result = runner.invoke(app, ["open", "12345678"])
+
+        assert result.exit_code == 1
+        assert "no extracted markdown" in result.output.lower()
+
+    def test_open_no_editor_found(self, mock_library_open: MagicMock) -> None:
+        """open should error if no editor found."""
+        mock_doc = MagicMock()
+        mock_doc.id = "12345678-1234-1234-1234-123456789abc"
+        mock_doc.extracted_path = "/path/to/doc.md"
+        mock_doc.storage_path = "/path/to/doc.pdf"
+        mock_doc.status = DocumentStatus.READY
+
+        mock_library_open.get.return_value = mock_doc
+
+        with patch("local_library.cli.open.find_editor", return_value=None):
+            result = runner.invoke(app, ["open", "12345678"])
+
+            assert result.exit_code == 1
+            assert "no editor found" in result.output.lower()
