@@ -2,10 +2,13 @@
 
 import json
 from datetime import datetime, timezone
+from unittest.mock import MagicMock, mock_open, patch
 from uuid import UUID
 
 import pytest
+from typer.testing import CliRunner
 
+from local_library.cli.main import app
 from local_library.cli.update import (
     build_editable_json,
     insert_errors_as_comments,
@@ -13,6 +16,8 @@ from local_library.cli.update import (
     validate_edited_json,
 )
 from local_library.core.models import Document, DocumentStatus
+
+runner = CliRunner()
 
 
 class TestParseEditedJson:
@@ -233,3 +238,130 @@ class TestBuildEditableJson:
 
         assert parsed["citekey"] is None
         assert parsed["csl_json"] is None
+
+
+@pytest.fixture
+def mock_library_update():
+    """Provide a mock Library for update command testing."""
+    with patch("local_library.cli.update.Library") as mock_lib_cls:
+        mock_lib = MagicMock()
+        mock_lib_cls.return_value.__enter__ = MagicMock(return_value=mock_lib)
+        mock_lib_cls.return_value.__exit__ = MagicMock(return_value=False)
+        yield mock_lib
+
+
+class TestUpdateCommand:
+    """Tests for update command."""
+
+    def test_update_success(self, mock_library_update: MagicMock) -> None:
+        """update command should apply valid changes."""
+        mock_doc = MagicMock()
+        mock_doc.id = UUID("12345678-1234-1234-1234-123456789abc")
+        mock_doc.status = DocumentStatus.NEEDS_REVIEW
+        mock_doc.citekey = "Smith2023"
+        mock_doc.csl_json = {"type": "article", "title": "Test"}
+        mock_doc.original_path = "/path/to/doc.pdf"
+        mock_doc.storage_path = "/storage/doc.pdf"
+        mock_doc.extracted_path = "/extracted/doc.md"
+        mock_doc.content_hash = "abc123"
+        mock_doc.created_at = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        mock_doc.updated_at = datetime(2025, 1, 2, tzinfo=timezone.utc)
+        mock_doc.title = "Test"
+        mock_doc.authors = "Smith"
+        mock_doc.issued_date = "2023"
+
+        mock_library_update.get.return_value = mock_doc
+        mock_library_update.get_all_citekeys.return_value = ["Smith2023"]
+
+        # Mock the editor to return modified JSON
+        edited_json = json.dumps({
+            "status": "ready",
+            "citekey": "Smith2023",
+            "csl_json": {"type": "article", "title": "Updated Title"},
+        })
+
+        with (
+            patch("local_library.cli.update.find_editor", return_value="/usr/bin/nvim"),
+            patch("tempfile.NamedTemporaryFile") as mock_tempfile,
+            patch("local_library.cli.update.subprocess.run"),
+            patch("builtins.open", mock_open(read_data=edited_json)),
+            patch("local_library.cli.update.Confirm.ask", return_value=False),
+        ):
+            mock_tempfile.return_value.__enter__.return_value.name = "/tmp/edit.json"
+
+            result = runner.invoke(app, ["update", "12345678"])
+
+            assert result.exit_code == 0
+            mock_library_update.update_metadata.assert_called_once()
+
+    def test_update_abort_on_empty(self, mock_library_update: MagicMock) -> None:
+        """update command should abort if file is empty."""
+        mock_doc = MagicMock()
+        mock_doc.id = UUID("12345678-1234-1234-1234-123456789abc")
+        mock_doc.status = DocumentStatus.NEEDS_REVIEW
+        mock_doc.citekey = "Smith2023"
+        mock_doc.csl_json = {"type": "article", "title": "Test"}
+        mock_doc.original_path = "/path/to/doc.pdf"
+        mock_doc.storage_path = "/storage/doc.pdf"
+        mock_doc.extracted_path = "/extracted/doc.md"
+        mock_doc.content_hash = "abc123"
+        mock_doc.created_at = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        mock_doc.updated_at = datetime(2025, 1, 2, tzinfo=timezone.utc)
+        mock_doc.title = None
+        mock_doc.authors = None
+        mock_doc.issued_date = None
+
+        mock_library_update.get.return_value = mock_doc
+
+        with (
+            patch("local_library.cli.update.find_editor", return_value="/usr/bin/nvim"),
+            patch("tempfile.NamedTemporaryFile") as mock_tempfile,
+            patch("local_library.cli.update.subprocess.run"),
+            patch("builtins.open", mock_open(read_data="")),  # Empty file = abort
+        ):
+            mock_tempfile.return_value.__enter__.return_value.name = "/tmp/edit.json"
+
+            result = runner.invoke(app, ["update", "12345678"])
+
+            assert result.exit_code == 0
+            assert "aborted" in result.output.lower()
+            mock_library_update.update_metadata.assert_not_called()
+
+    def test_update_citekey_lookup(self, mock_library_update: MagicMock) -> None:
+        """update @citekey should use citekey lookup."""
+        mock_doc = MagicMock()
+        mock_doc.id = UUID("12345678-1234-1234-1234-123456789abc")
+        mock_doc.status = DocumentStatus.READY
+        mock_doc.citekey = "Smith2023"
+        mock_doc.csl_json = {"type": "article", "title": "Test"}
+        mock_doc.original_path = "/path/to/doc.pdf"
+        mock_doc.storage_path = "/storage/doc.pdf"
+        mock_doc.extracted_path = "/extracted/doc.md"
+        mock_doc.content_hash = "abc123"
+        mock_doc.created_at = datetime(2025, 1, 1, tzinfo=timezone.utc)
+        mock_doc.updated_at = datetime(2025, 1, 2, tzinfo=timezone.utc)
+        mock_doc.title = "Test"
+        mock_doc.authors = "Smith"
+        mock_doc.issued_date = "2023"
+
+        mock_library_update.get_by_citekey.return_value = mock_doc
+        mock_library_update.get_all_citekeys.return_value = ["Smith2023"]
+
+        edited_json = json.dumps({
+            "status": "ready",
+            "citekey": "Smith2023",
+            "csl_json": {"type": "article", "title": "Test"},
+        })
+
+        with (
+            patch("local_library.cli.update.find_editor", return_value="/usr/bin/nvim"),
+            patch("tempfile.NamedTemporaryFile") as mock_tempfile,
+            patch("local_library.cli.update.subprocess.run"),
+            patch("builtins.open", mock_open(read_data=edited_json)),
+        ):
+            mock_tempfile.return_value.__enter__.return_value.name = "/tmp/edit.json"
+
+            result = runner.invoke(app, ["update", "@Smith2023"])
+
+            assert result.exit_code == 0
+            mock_library_update.get_by_citekey.assert_called_once_with("Smith2023")

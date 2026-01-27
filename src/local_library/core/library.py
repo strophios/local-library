@@ -529,6 +529,65 @@ class Library:
         """
         return get_all_citekeys(self._conn)
 
+    def update_metadata(
+        self,
+        doc_id: UUID,
+        status: DocumentStatus | None = None,
+        citekey: str | None = None,
+        csl_json: dict[str, Any] | None = None,
+    ) -> Document:
+        """Update a document's metadata.
+
+        Args:
+            doc_id: Document UUID
+            status: New status (if changing)
+            citekey: New citekey (if changing)
+            csl_json: New CSL-JSON (if changing)
+
+        Returns:
+            Updated Document
+        """
+        # Extract indexed fields from CSL-JSON if provided
+        title = None
+        authors = None
+        issued_date = None
+
+        if csl_json:
+            title = csl_json.get("title")
+            if "author" in csl_json:
+                author_names = []
+                for author in csl_json["author"]:
+                    if "family" in author:
+                        name = author.get("family", "")
+                        if "given" in author:
+                            name = f"{author['given']} {name}"
+                        author_names.append(name)
+                    elif "literal" in author:
+                        author_names.append(author["literal"])
+                authors = "; ".join(author_names) if author_names else None
+
+            if "issued" in csl_json:
+                issued = csl_json["issued"]
+                if "date-parts" in issued and issued["date-parts"]:
+                    date_parts = issued["date-parts"][0]
+                    if date_parts:
+                        issued_date = str(date_parts[0])  # Year
+
+        # Update status if provided
+        if status is not None:
+            update_document_status(self._conn, doc_id, status)
+
+        # Update metadata fields
+        return update_document_metadata(
+            self._conn,
+            doc_id,
+            citekey=citekey,
+            csl_json=csl_json,
+            title=title,
+            authors=authors,
+            issued_date=issued_date,
+        )
+
     def list(self, status: DocumentStatus | None = None) -> list[Document]:
         """List all documents, optionally filtered by status.
 
