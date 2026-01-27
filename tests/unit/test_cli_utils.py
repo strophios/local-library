@@ -5,9 +5,9 @@ from uuid import UUID
 
 import pytest
 
+from local_library.cli.utils import levenshtein_distance, resolve_identifier, suggest_citekeys
 from local_library.core import ErrorCode, LookupError
 from local_library.core.models import Document, DocumentStatus
-from local_library.cli.utils import levenshtein_distance, resolve_identifier, suggest_citekeys
 
 
 class TestLevenshteinDistance:

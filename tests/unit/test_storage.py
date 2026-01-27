@@ -503,13 +503,13 @@ class TestGetAllCitekeys:
         )
         update_document_metadata(db_conn, doc1.id, citekey="Smith2023")
 
-        doc2 = create_document(
+        create_document(
             db_conn,
             original_path="/path/doc2.pdf",
             content_hash="hash2",
             storage_path="/storage/doc2.pdf",
         )
-        # doc2 has no citekey
+        # This document has no citekey
 
         doc3 = create_document(
             db_conn,

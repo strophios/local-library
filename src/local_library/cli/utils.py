@@ -2,13 +2,10 @@
 
 # pattern: Mixed (Functional Core utilities + Imperative Shell resolve_identifier)
 
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
 from local_library.core import ErrorCode, LookupError
 from local_library.core.models import Document
-
-if TYPE_CHECKING:
-    pass
 
 
 class LibraryProtocol(Protocol):
