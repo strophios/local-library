@@ -9,6 +9,52 @@ import pytest
 from local_library.core.models import Document, DocumentStatus
 
 
+class TestParseEditedJson:
+    """Tests for JSON parsing with comment handling."""
+
+    def test_parse_clean_json(self) -> None:
+        """Should parse clean JSON."""
+        from local_library.cli.update import parse_edited_json
+
+        content = '{"status": "ready", "citekey": "Smith2023"}'
+
+        result = parse_edited_json(content)
+
+        assert result == {"status": "ready", "citekey": "Smith2023"}
+
+    def test_parse_json_with_comments(self) -> None:
+        """Should strip comments and parse JSON."""
+        from local_library.cli.update import parse_edited_json
+
+        content = """// ERRORS:
+//   - some error
+//
+{"status": "ready", "citekey": "Smith2023"}"""
+
+        result = parse_edited_json(content)
+
+        assert result == {"status": "ready", "citekey": "Smith2023"}
+
+    def test_parse_empty_file_returns_none(self) -> None:
+        """Should return None for empty/whitespace-only file (abort signal)."""
+        from local_library.cli.update import parse_edited_json
+
+        assert parse_edited_json("") is None
+        assert parse_edited_json("   \n\n  ") is None
+        assert parse_edited_json("// just comments\n// more comments") is None
+
+    def test_parse_invalid_json_raises(self) -> None:
+        """Should raise ValueError for invalid JSON."""
+        from local_library.cli.update import parse_edited_json
+
+        content = '{"status": "ready", missing_quotes: bad}'
+
+        with pytest.raises(ValueError) as exc_info:
+            parse_edited_json(content)
+
+        assert "JSON" in str(exc_info.value) or "parse" in str(exc_info.value).lower()
+
+
 class TestInsertErrorsAsComments:
     """Tests for error insertion in JSON."""
 

@@ -82,6 +82,33 @@ def insert_errors_as_comments(json_content: str, errors: list[str]) -> str:
     return "\n".join(comment_lines) + json_content
 
 
+def parse_edited_json(content: str) -> dict[str, Any] | None:
+    """Parse JSON content, stripping any comment lines.
+
+    Args:
+        content: File content (may include // comments)
+
+    Returns:
+        Parsed JSON dict, or None if file is empty/aborted
+
+    Raises:
+        ValueError: If JSON parsing fails
+    """
+    # Strip comment lines (lines starting with //)
+    lines = content.split("\n")
+    json_lines = [line for line in lines if not line.strip().startswith("//")]
+    json_content = "\n".join(json_lines).strip()
+
+    # Empty content = abort
+    if not json_content:
+        return None
+
+    try:
+        return json.loads(json_content)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"invalid JSON: {e}") from e
+
+
 def build_editable_json(doc: Document) -> str:
     """Build JSON structure for editing in $EDITOR.
 
