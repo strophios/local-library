@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-01-24
+Last verified: 2026-01-27
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -75,7 +75,9 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - **NEEDS_REVIEW workflow**: documents with low-confidence extraction flagged for human review
 - **Optional LLM fallback**: LiteLLM integration for re-extracting low-confidence fields
 - SQLite storage with content-addressable file layout
-- CLI interface (add, list, show, delete, --metadata flag)
+- CLI interface (add, list, show, delete, open, update, review commands)
+- @citekey identifier support with fuzzy matching suggestions
+- Pagination support (--limit, --all flags on list command)
 - Zotero read-only access: ZoteroReader facade with database and JSON export backends, BetterBibTeX citekey mapping, attachment resolution
 
 **Next milestones:** M5 (embedding pipeline). See `build_plan.md` for full details.
@@ -155,11 +157,16 @@ A detailed evaluation framework with quality targets, test set design, and evalu
 
 ## Commands
 
+All commands accepting document IDs support both UUID (full or partial) and @citekey identifiers (e.g., `@Smith2023`).
+
 - `uv run local-library add <path>` - Add a PDF to the library
 - `uv run local-library add <path> --metadata <csl-json-file>` - Add with bibliographic metadata
-- `uv run local-library list` - List all documents
+- `uv run local-library list` - List all documents (use `--limit N` for pagination, `--all` for unlimited)
 - `uv run local-library show <id>` - Show document details
 - `uv run local-library delete <id>` - Delete a document
+- `uv run local-library open <id>` - Open extracted markdown in editor (use `--pdf` for PDF, `--both` for both)
+- `uv run local-library update <id>` - Edit document metadata in editor with validation loop
+- `uv run local-library review <id>` - Combined open + update workflow for NEEDS_REVIEW documents
 - `uv run pytest` - Run tests
 - `uv run ruff check` - Lint code
 - `uv run ruff format` - Format code
@@ -185,12 +192,16 @@ src/local_library/
 └── cli/                 # CLI interface (Typer/Rich)
     ├── main.py          # Entry point, command registration
     ├── add.py           # Add command
-    ├── list.py          # List command
-    ├── show.py          # Show command
-    └── delete.py        # Delete command
+    ├── list.py          # List command (pagination with --limit/--all)
+    ├── show.py          # Show command (@citekey support)
+    ├── delete.py        # Delete command (@citekey support)
+    ├── open.py          # Open command (markdown/PDF viewing)
+    ├── update.py        # Update command (editor-based metadata editing)
+    ├── review.py        # Review command (combined open + update)
+    └── utils.py         # Shared utilities (identifier resolution, fuzzy matching)
 ```
 
-See `src/local_library/core/CLAUDE.md` and `src/local_library/ingestion/CLAUDE.md` for domain contracts.
+See `src/local_library/core/CLAUDE.md`, `src/local_library/ingestion/CLAUDE.md`, and `src/local_library/cli/CLAUDE.md` for domain contracts.
 
 ## Background Documentation
 

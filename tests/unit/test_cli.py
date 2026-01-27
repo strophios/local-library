@@ -21,6 +21,7 @@ def mock_library():
         patch("local_library.cli.list.Library") as mock_list,
         patch("local_library.cli.show.Library") as mock_show,
         patch("local_library.cli.delete.Library") as mock_delete,
+        patch("local_library.cli.open.Library") as mock_open,
     ):
         mock_lib = MagicMock()
         mock_add.return_value.__enter__ = MagicMock(return_value=mock_lib)
@@ -31,6 +32,8 @@ def mock_library():
         mock_show.return_value.__exit__ = MagicMock(return_value=False)
         mock_delete.return_value.__enter__ = MagicMock(return_value=mock_lib)
         mock_delete.return_value.__exit__ = MagicMock(return_value=False)
+        mock_open.return_value.__enter__ = MagicMock(return_value=mock_lib)
+        mock_open.return_value.__exit__ = MagicMock(return_value=False)
 
         yield mock_lib
 
@@ -129,6 +132,9 @@ class TestListCommand:
         mock_doc = MagicMock()
         mock_doc.id = "12345678-1234-1234-1234-123456789abc"
         mock_doc.status = DocumentStatus.READY
+        mock_doc.citekey = "TestDoc2024"
+        mock_doc.title = "Test Document"
+        mock_doc.authors = "Test Author"
         mock_doc.original_path = "/path/to/doc.pdf"
         mock_doc.content_hash = "abcd1234"
         mock_doc.created_at = None
@@ -155,6 +161,30 @@ class TestListCommand:
 
         assert result.exit_code == 1
         assert "invalid status" in result.output
+
+    def test_list_json_output(self, mock_library: MagicMock) -> None:
+        """list command with --json should output JSON with all fields."""
+        mock_doc = MagicMock()
+        mock_doc.id = "12345678-1234-1234-1234-123456789abc"
+        mock_doc.status = DocumentStatus.READY
+        mock_doc.citekey = "Smith2023"
+        mock_doc.title = "Test Document"
+        mock_doc.authors = "John Smith"
+        mock_doc.original_path = "/path/to/doc.pdf"
+        mock_doc.content_hash = "abcd1234"
+        mock_doc.created_at = None
+
+        mock_library.list.return_value = [mock_doc]
+
+        result = runner.invoke(app, ["list", "--json"])
+
+        assert result.exit_code == 0
+        assert '"citekey"' in result.output
+        assert '"Smith2023"' in result.output
+        assert '"title"' in result.output
+        assert '"Test Document"' in result.output
+        assert '"authors"' in result.output
+        assert '"John Smith"' in result.output
 
 
 class TestShowCommand:
@@ -192,6 +222,173 @@ class TestShowCommand:
         assert "not found" in result.output
 
 
+class TestShowCommandCitekey:
+    """Tests for show command with citekey support."""
+
+    def test_show_by_citekey(self, mock_library: MagicMock) -> None:
+        """show @citekey should use citekey lookup."""
+        mock_doc = MagicMock()
+        mock_doc.id = "12345678-1234-1234-1234-123456789abc"
+        mock_doc.status = DocumentStatus.READY
+        mock_doc.original_path = "/path/to/doc.pdf"
+        mock_doc.storage_path = "/storage/doc.pdf"
+        mock_doc.extracted_path = "/extracted/doc.md"
+        mock_doc.content_hash = "abcd1234"
+        mock_doc.citekey = "Smith2023"
+        mock_doc.error_message = None
+        mock_doc.error_code = None
+        mock_doc.created_at = None
+        mock_doc.updated_at = None
+
+        mock_library.get_by_citekey.return_value = mock_doc
+        mock_library.get_all_citekeys.return_value = ["Smith2023"]
+
+        result = runner.invoke(app, ["show", "@Smith2023"])
+
+        assert result.exit_code == 0
+        assert "12345678" in result.output
+        mock_library.get_by_citekey.assert_called_once_with("Smith2023")
+
+    def test_show_citekey_not_found_with_suggestions(self, mock_library: MagicMock) -> None:
+        """show @citekey should show suggestions on miss."""
+        mock_library.get_by_citekey.return_value = None
+        mock_library.get_all_citekeys.return_value = ["Smith2023", "Smith2024"]
+
+        result = runner.invoke(app, ["show", "@Smth2023"])
+
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()
+        # Should suggest similar citekeys
+        assert "Smith2023" in result.output or "Did you mean" in result.output
+
+
+class TestListCommandEnhanced:
+    """Tests for enhanced list command features."""
+
+    def test_list_shows_citekey_column(self, mock_library: MagicMock) -> None:
+        """list command should display citekey column."""
+        mock_doc = MagicMock()
+        mock_doc.id = "12345678-1234-1234-1234-123456789abc"
+        mock_doc.status = DocumentStatus.READY
+        mock_doc.citekey = "Smith2023"
+        mock_doc.title = "Test Document"
+        mock_doc.authors = "John Smith"
+        mock_doc.original_path = "/path/to/doc.pdf"
+        mock_doc.content_hash = "abcd1234"
+        mock_doc.created_at = None
+
+        mock_library.list.return_value = [mock_doc]
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 0
+        assert "Smith2023" in result.output
+        assert "Test Document" in result.output
+
+    def test_list_shows_needs_review_status(self, mock_library: MagicMock) -> None:
+        """list command should handle NEEDS_REVIEW status."""
+        mock_doc = MagicMock()
+        mock_doc.id = "12345678-1234-1234-1234-123456789abc"
+        mock_doc.status = DocumentStatus.NEEDS_REVIEW
+        mock_doc.citekey = "Smith2023"
+        mock_doc.title = "Test Document"
+        mock_doc.authors = "John Smith"
+        mock_doc.original_path = "/path/to/doc.pdf"
+        mock_doc.content_hash = "abcd1234"
+        mock_doc.created_at = None
+
+        mock_library.list.return_value = [mock_doc]
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 0
+        assert "needs_review" in result.output
+
+    def test_list_filter_needs_review(self, mock_library: MagicMock) -> None:
+        """list command should filter by needs_review status."""
+        mock_library.list.return_value = []
+
+        result = runner.invoke(app, ["list", "--status", "needs_review"])
+
+        assert result.exit_code == 0
+        mock_library.list.assert_called_once_with(status=DocumentStatus.NEEDS_REVIEW)
+
+
+class TestListCommandPagination:
+    """Tests for list command pagination."""
+
+    def test_list_default_limit(self, mock_library: MagicMock) -> None:
+        """list command should default to 15 rows."""
+        # Create 20 mock documents
+        mock_docs = []
+        for i in range(20):
+            mock_doc = MagicMock()
+            mock_doc.id = f"1234567{i}-1234-1234-1234-123456789abc"
+            mock_doc.status = DocumentStatus.READY
+            mock_doc.citekey = f"Author202{i}"
+            mock_doc.title = f"Document {i}"
+            mock_doc.authors = f"Author {i}"
+            mock_doc.original_path = f"/path/doc{i}.pdf"
+            mock_doc.content_hash = f"hash{i:04d}"
+            mock_doc.created_at = None
+            mock_docs.append(mock_doc)
+
+        mock_library.list.return_value = mock_docs
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 0
+        # Should show hint about more items
+        assert "Showing 15 of 20" in result.output
+        assert "--all" in result.output
+
+    def test_list_custom_limit(self, mock_library: MagicMock) -> None:
+        """list command should respect --limit flag."""
+        mock_docs = []
+        for i in range(10):
+            mock_doc = MagicMock()
+            mock_doc.id = f"1234567{i}-1234-1234-1234-123456789abc"
+            mock_doc.status = DocumentStatus.READY
+            mock_doc.citekey = f"Author202{i}"
+            mock_doc.title = f"Document {i}"
+            mock_doc.authors = f"Author {i}"
+            mock_doc.original_path = f"/path/doc{i}.pdf"
+            mock_doc.content_hash = f"hash{i:04d}"
+            mock_doc.created_at = None
+            mock_docs.append(mock_doc)
+
+        mock_library.list.return_value = mock_docs
+
+        result = runner.invoke(app, ["list", "--limit", "5"])
+
+        assert result.exit_code == 0
+        assert "Showing 5 of 10" in result.output
+
+    def test_list_no_pagination_when_under_limit(self, mock_library: MagicMock) -> None:
+        """list command should not show pagination hint when under limit."""
+        mock_docs = []
+        for i in range(5):
+            mock_doc = MagicMock()
+            mock_doc.id = f"1234567{i}-1234-1234-1234-123456789abc"
+            mock_doc.status = DocumentStatus.READY
+            mock_doc.citekey = f"Author202{i}"
+            mock_doc.title = f"Document {i}"
+            mock_doc.authors = f"Author {i}"
+            mock_doc.original_path = f"/path/doc{i}.pdf"
+            mock_doc.content_hash = f"hash{i:04d}"
+            mock_doc.created_at = None
+            mock_docs.append(mock_doc)
+
+        mock_library.list.return_value = mock_docs
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 0
+        # Should just show count, no "Showing X of Y"
+        assert "5 document(s)" in result.output
+        assert "Showing" not in result.output
+
+
 class TestDeleteCommand:
     """Tests for the delete command."""
 
@@ -218,3 +415,34 @@ class TestDeleteCommand:
 
         assert result.exit_code == 1
         assert "not found" in result.output
+
+
+class TestDeleteCommandCitekey:
+    """Tests for delete command with citekey support."""
+
+    def test_delete_by_citekey(self, mock_library: MagicMock) -> None:
+        """delete @citekey should use citekey lookup."""
+        mock_doc = MagicMock()
+        mock_doc.id = "12345678-1234-1234-1234-123456789abc"
+        mock_doc.status = DocumentStatus.READY
+        mock_doc.original_path = "/path/to/doc.pdf"
+
+        mock_library.get_by_citekey.return_value = mock_doc
+        mock_library.get_all_citekeys.return_value = ["Smith2023"]
+        mock_library.delete.return_value = True
+
+        result = runner.invoke(app, ["delete", "--force", "@Smith2023"])
+
+        assert result.exit_code == 0
+        assert "deleted" in result.output.lower()
+        mock_library.get_by_citekey.assert_called_once_with("Smith2023")
+
+    def test_delete_citekey_not_found_with_suggestions(self, mock_library: MagicMock) -> None:
+        """delete @citekey should show suggestions on miss."""
+        mock_library.get_by_citekey.return_value = None
+        mock_library.get_all_citekeys.return_value = ["Smith2023", "Smith2024"]
+
+        result = runner.invoke(app, ["delete", "--force", "@Smth2023"])
+
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()

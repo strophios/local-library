@@ -7,7 +7,10 @@ import typer
 from local_library.cli import add as add_cmd
 from local_library.cli import delete as delete_cmd
 from local_library.cli import list as list_cmd
+from local_library.cli import open as open_cmd
+from local_library.cli import review as review_cmd
 from local_library.cli import show as show_cmd
+from local_library.cli import update as update_cmd
 
 # Create Typer app
 app = typer.Typer(
@@ -21,6 +24,9 @@ app.command(name="add")(add_cmd.add)
 app.command(name="list")(list_cmd.list_docs)
 app.command(name="show")(show_cmd.show)
 app.command(name="delete")(delete_cmd.delete)
+app.command(name="open")(open_cmd.open_doc)
+app.command(name="update")(update_cmd.update)
+app.command(name="review")(review_cmd.review)
 
 
 def main() -> None:

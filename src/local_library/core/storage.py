@@ -322,6 +322,21 @@ def get_document_by_citekey(conn: sqlite3.Connection, citekey: str) -> Document 
     return _row_to_document(row)
 
 
+def get_all_citekeys(conn: sqlite3.Connection) -> list[str]:
+    """Get all non-null citekeys in the library.
+
+    Args:
+        conn: Database connection
+
+    Returns:
+        List of citekeys (excludes documents without citekeys)
+    """
+    cursor = conn.execute(
+        "SELECT citekey FROM documents WHERE citekey IS NOT NULL ORDER BY citekey"
+    )
+    return [row[0] for row in cursor.fetchall()]
+
+
 def get_unique_citekey(conn: sqlite3.Connection, base_citekey: str) -> str:
     """Get a unique citekey, adding suffix if necessary.
 
