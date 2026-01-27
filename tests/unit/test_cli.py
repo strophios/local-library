@@ -415,3 +415,34 @@ class TestDeleteCommand:
 
         assert result.exit_code == 1
         assert "not found" in result.output
+
+
+class TestDeleteCommandCitekey:
+    """Tests for delete command with citekey support."""
+
+    def test_delete_by_citekey(self, mock_library: MagicMock) -> None:
+        """delete @citekey should use citekey lookup."""
+        mock_doc = MagicMock()
+        mock_doc.id = "12345678-1234-1234-1234-123456789abc"
+        mock_doc.status = DocumentStatus.READY
+        mock_doc.original_path = "/path/to/doc.pdf"
+
+        mock_library.get_by_citekey.return_value = mock_doc
+        mock_library.get_all_citekeys.return_value = ["Smith2023"]
+        mock_library.delete.return_value = True
+
+        result = runner.invoke(app, ["delete", "--force", "@Smith2023"])
+
+        assert result.exit_code == 0
+        assert "deleted" in result.output.lower()
+        mock_library.get_by_citekey.assert_called_once_with("Smith2023")
+
+    def test_delete_citekey_not_found_with_suggestions(self, mock_library: MagicMock) -> None:
+        """delete @citekey should show suggestions on miss."""
+        mock_library.get_by_citekey.return_value = None
+        mock_library.get_all_citekeys.return_value = ["Smith2023", "Smith2024"]
+
+        result = runner.invoke(app, ["delete", "--force", "@Smth2023"])
+
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()
