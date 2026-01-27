@@ -5,7 +5,59 @@
 import json
 from typing import Any
 
-from local_library.core.models import Document
+from local_library.core.models import Document, DocumentStatus
+from local_library.ingestion.metadata import MetadataHandler
+
+
+def validate_edited_json(
+    edited: dict[str, Any],
+    current_citekey: str | None,
+    all_citekeys: list[str],
+) -> list[str]:
+    """Validate edited JSON structure.
+
+    Checks:
+    - status is valid DocumentStatus value
+    - citekey is unique (or unchanged from current)
+    - csl_json passes schema validation
+
+    Args:
+        edited: Parsed JSON from editor
+        current_citekey: Document's current citekey (for uniqueness check)
+        all_citekeys: All citekeys in the library
+
+    Returns:
+        List of error messages (empty if valid)
+    """
+    errors: list[str] = []
+
+    # Validate status
+    if "status" not in edited:
+        errors.append("missing required field: status")
+    else:
+        try:
+            DocumentStatus(edited["status"])
+        except ValueError:
+            valid = ", ".join(s.value for s in DocumentStatus)
+            errors.append(f"invalid status '{edited['status']}' (valid: {valid})")
+
+    # Validate citekey uniqueness
+    new_citekey = edited.get("citekey")
+    if new_citekey is not None and new_citekey != current_citekey:
+        if new_citekey in all_citekeys:
+            errors.append(f"citekey '{new_citekey}' already exists in library")
+
+    # Validate CSL-JSON if present
+    csl_json = edited.get("csl_json")
+    if csl_json is not None:
+        handler = MetadataHandler()
+        is_valid, issues = handler.validate(csl_json)
+        if not is_valid:
+            for issue in issues:
+                if not issue.startswith("warning:"):
+                    errors.append(f"CSL-JSON: {issue}")
+
+    return errors
 
 
 def build_editable_json(doc: Document) -> str:

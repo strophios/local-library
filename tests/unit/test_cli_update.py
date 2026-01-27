@@ -9,6 +9,101 @@ import pytest
 from local_library.core.models import Document, DocumentStatus
 
 
+class TestValidateEditedJson:
+    """Tests for edited JSON validation."""
+
+    def test_validate_valid_json(self) -> None:
+        """Should return no errors for valid JSON."""
+        from local_library.cli.update import validate_edited_json
+
+        edited = {
+            "status": "ready",
+            "citekey": "Smith2023",
+            "csl_json": {"type": "article", "title": "Test"},
+        }
+
+        errors = validate_edited_json(edited, current_citekey="Smith2023", all_citekeys=["Smith2023"])
+
+        assert errors == []
+
+    def test_validate_invalid_status(self) -> None:
+        """Should error on invalid status value."""
+        from local_library.cli.update import validate_edited_json
+
+        edited = {
+            "status": "invalid_status",
+            "citekey": "Smith2023",
+            "csl_json": {"type": "article", "title": "Test"},
+        }
+
+        errors = validate_edited_json(edited, current_citekey="Smith2023", all_citekeys=["Smith2023"])
+
+        assert any("status" in e.lower() for e in errors)
+
+    def test_validate_duplicate_citekey(self) -> None:
+        """Should error on duplicate citekey."""
+        from local_library.cli.update import validate_edited_json
+
+        edited = {
+            "status": "ready",
+            "citekey": "Jones2024",  # Different from current, exists in library
+            "csl_json": {"type": "article", "title": "Test"},
+        }
+
+        errors = validate_edited_json(
+            edited,
+            current_citekey="Smith2023",
+            all_citekeys=["Smith2023", "Jones2024"],  # Jones2024 already exists
+        )
+
+        assert any("citekey" in e.lower() and "exists" in e.lower() for e in errors)
+
+    def test_validate_citekey_same_as_current(self) -> None:
+        """Should allow keeping current citekey."""
+        from local_library.cli.update import validate_edited_json
+
+        edited = {
+            "status": "ready",
+            "citekey": "Smith2023",  # Same as current
+            "csl_json": {"type": "article", "title": "Test"},
+        }
+
+        errors = validate_edited_json(
+            edited,
+            current_citekey="Smith2023",
+            all_citekeys=["Smith2023", "Jones2024"],
+        )
+
+        assert errors == []
+
+    def test_validate_invalid_csl_json(self) -> None:
+        """Should error on invalid CSL-JSON."""
+        from local_library.cli.update import validate_edited_json
+
+        edited = {
+            "status": "ready",
+            "citekey": "Smith2023",
+            "csl_json": {"title": "Missing type field"},  # No 'type' field
+        }
+
+        errors = validate_edited_json(edited, current_citekey="Smith2023", all_citekeys=["Smith2023"])
+
+        assert any("type" in e.lower() for e in errors)
+
+    def test_validate_missing_status(self) -> None:
+        """Should error on missing status."""
+        from local_library.cli.update import validate_edited_json
+
+        edited = {
+            "citekey": "Smith2023",
+            "csl_json": {"type": "article", "title": "Test"},
+        }
+
+        errors = validate_edited_json(edited, current_citekey="Smith2023", all_citekeys=["Smith2023"])
+
+        assert any("status" in e.lower() for e in errors)
+
+
 class TestBuildEditableJson:
     """Tests for JSON structure builder."""
 
