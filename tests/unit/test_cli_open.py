@@ -7,6 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from local_library.cli.main import app
+from local_library.cli.open import find_editor
 from local_library.core.models import DocumentStatus
 
 runner = CliRunner()
@@ -27,8 +28,6 @@ class TestFindEditor:
 
     def test_find_editor_nvim(self) -> None:
         """Should prefer nvim if available."""
-        from local_library.cli.open import find_editor
-
         with patch("shutil.which") as mock_which:
             mock_which.side_effect = lambda x: f"/usr/bin/{x}" if x == "nvim" else None
             editor = find_editor()
@@ -36,8 +35,6 @@ class TestFindEditor:
 
     def test_find_editor_vim_fallback(self) -> None:
         """Should fall back to vim if nvim not available."""
-        from local_library.cli.open import find_editor
-
         with patch("shutil.which") as mock_which:
             mock_which.side_effect = lambda x: "/usr/bin/vim" if x == "vim" else None
             editor = find_editor()
@@ -45,8 +42,6 @@ class TestFindEditor:
 
     def test_find_editor_env_fallback(self) -> None:
         """Should use $EDITOR if nvim/vim not available."""
-        from local_library.cli.open import find_editor
-
         with (
             patch("shutil.which", return_value=None),
             patch.dict(os.environ, {"EDITOR": "/usr/bin/nano"}),
@@ -56,8 +51,6 @@ class TestFindEditor:
 
     def test_find_editor_none(self) -> None:
         """Should return None if no editor found."""
-        from local_library.cli.open import find_editor
-
         with (
             patch("shutil.which", return_value=None),
             patch.dict(os.environ, {}, clear=True),

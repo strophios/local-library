@@ -5,6 +5,7 @@
 import os
 import shutil
 import subprocess
+import sys
 from typing import Annotated
 
 import typer
@@ -44,9 +45,19 @@ def _open_pdf(path: str) -> None:
 
     Args:
         path: Path to PDF file
+
+    Uses platform-native commands:
+    - macOS: open
+    - Windows: start
+    - Linux/other Unix: xdg-open
     """
-    # macOS: use 'open' command
-    subprocess.Popen(["open", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    devnull = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", path], **devnull)
+    elif sys.platform == "win32":
+        subprocess.Popen(["start", "", path], shell=True, **devnull)
+    else:  # Linux and other Unix-like systems
+        subprocess.Popen(["xdg-open", path], **devnull)
 
 
 def _open_markdown(path: str, editor: str) -> None:
@@ -114,4 +125,5 @@ def open_doc(
         console.print(f"[green]Opened PDF:[/green] {doc.storage_path}")
 
     # Open markdown (blocking)
+    console.print(f"[green]Opening markdown:[/green] {doc.extracted_path}")
     _open_markdown(doc.extracted_path, editor)
