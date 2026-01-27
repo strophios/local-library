@@ -16,11 +16,12 @@ produces a FieldExtraction result with confidence scoring.
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from dataclasses import dataclass
 from typing import Any
+
+import pydantic
 
 from local_library.core.models import FieldExtraction, TextExtractionResult
 
@@ -1118,10 +1119,35 @@ def extract_title(markdown_text: str) -> FieldExtraction:
 
 # LLM extraction constants
 _LLM_MAX_TEXT_LENGTH = 8000  # Characters to send to LLM
-_LLM_DEFAULT_MODEL = "gpt-4o-mini"  # Cost-effective default
+_LLM_DEFAULT_MODEL = "gemini/gemini-2.0-flash"  # Fast, cheap, supports structured output
 
 # Default confidence threshold for triggering needs_review
 _DEFAULT_CONFIDENCE_THRESHOLD = 0.7
+
+
+class MetadataExtractionResponse(pydantic.BaseModel):
+    """Pydantic model for LLM structured output.
+
+    Used with LiteLLM's response_format parameter to guarantee
+    valid JSON matching this schema. Eliminates manual parsing.
+    """
+
+    title: str | None = pydantic.Field(
+        default=None,
+        description="Document title",
+    )
+    authors: list[str] = pydantic.Field(
+        default_factory=list,
+        description="Author names in 'Family, Given' format",
+    )
+    year: str | None = pydantic.Field(
+        default=None,
+        description="4-digit publication year",
+    )
+    type: str = pydantic.Field(
+        default="article-journal",
+        description="CSL document type (article-journal, paper-conference, etc.)",
+    )
 
 
 class LLMExtractor:
@@ -1130,6 +1156,7 @@ class LLMExtractor:
     Uses LiteLLM for provider-agnostic LLM access. Called when heuristic
     confidence is below threshold.
 
+    Uses structured output (response_format) for guaranteed valid JSON.
     The LLM extracts all fields in a single call for cost efficiency and
     to leverage cross-field context.
     """
@@ -1143,7 +1170,7 @@ class LLMExtractor:
 
         Args:
             enabled: Whether LLM fallback is enabled
-            model: LiteLLM model identifier (e.g., "gpt-4o-mini", "claude-3-haiku")
+            model: LiteLLM model identifier (e.g., "gemini/gemini-2.0-flash")
         """
         self.enabled = enabled
         self.model = model
@@ -1153,7 +1180,7 @@ class LLMExtractor:
         markdown_text: str,
         heuristic_candidates: dict[str, str | list[str] | None] | None = None,
     ) -> dict[str, str | list[str] | None] | None:
-        """Extract metadata using LLM.
+        """Extract metadata using LLM with structured output.
 
         Args:
             markdown_text: Document text to analyze
@@ -1162,7 +1189,7 @@ class LLMExtractor:
 
         Returns:
             Dict with keys: title, authors, year, type
-            Returns None if disabled, API error, or invalid response
+            Returns None if disabled or API error
         """
         if not self.enabled:
             return None
@@ -1179,24 +1206,22 @@ class LLMExtractor:
             system_prompt = self._build_system_prompt()
             user_prompt = self._build_user_prompt(text, heuristic_candidates)
 
-            # Call LLM
+            # Call LLM with structured output
             response = litellm.completion(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
+                response_format=MetadataExtractionResponse,
                 temperature=0.1,  # Low temperature for consistency
                 max_tokens=500,
             )
 
-            # Parse response
+            # Parse structured response
             content = response.choices[0].message.content
             return self._parse_response(content)
 
-        except json.JSONDecodeError as e:
-            logger.warning(f"LLM extraction failed: invalid JSON response: {e}")
-            return None
         except Exception as e:
             # Catch litellm API errors and other exceptions
             logger.warning(f"LLM extraction failed: {e}")
@@ -1207,16 +1232,10 @@ class LLMExtractor:
         return """You are a metadata extraction assistant. \
 Extract bibliographic metadata from academic documents.
 
-Return ONLY a JSON object with these exact keys:
-- "title": string (document title)
-- "authors": array of strings (author names in "Family, Given" format)
-- "year": string (4-digit publication year) or null
-- "type": string (one of: "article-journal", "paper-conference", \
-"chapter", "thesis", "report", "book")
-
-If a field cannot be determined, use null for strings or empty \
-array for authors.
-Do not include any text outside the JSON object."""
+For author names, use "Family, Given" format (e.g., "Smith, John").
+For document type, use one of: article-journal, paper-conference, \
+chapter, thesis, report, or book.
+If a field cannot be determined, use null."""
 
     def _build_user_prompt(
         self,
@@ -1241,45 +1260,25 @@ Do not include any text outside the JSON object."""
         return "".join(prompt_parts)
 
     def _parse_response(self, content: str) -> dict[str, str | list[str] | None] | None:
-        """Parse LLM response into structured dict.
+        """Parse structured LLM response.
 
-        Handles:
-        - JSON in markdown code blocks
-        - Plain JSON
-        - Invalid JSON (returns None)
+        With structured output, the response is guaranteed to be valid JSON
+        matching our schema. We just need to parse it.
         """
         if not content:
             return None
 
-        # Try to extract JSON from markdown code block
-        json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", content, re.DOTALL)
-        if json_match:
-            content = json_match.group(1)
-        else:
-            # Try to find JSON object
-            json_match = re.search(r"\{[^{}]*\}", content, re.DOTALL)
-            if json_match:
-                content = json_match.group(0)
-
         try:
-            data = json.loads(content)
-
-            # Validate structure
-            result: dict[str, str | list[str] | None] = {
-                "title": data.get("title"),
-                "authors": data.get("authors", []),
-                "year": data.get("year"),
-                "type": data.get("type", "article-journal"),
+            # Parse and validate with Pydantic
+            parsed = MetadataExtractionResponse.model_validate_json(content)
+            return {
+                "title": parsed.title,
+                "authors": parsed.authors,
+                "year": parsed.year,
+                "type": parsed.type,
             }
-
-            # Ensure authors is a list
-            if not isinstance(result["authors"], list):
-                result["authors"] = []
-
-            return result
-
-        except json.JSONDecodeError:
-            logger.warning(f"Failed to parse LLM response as JSON: {content[:100]}...")
+        except pydantic.ValidationError as e:
+            logger.warning(f"Failed to validate LLM response: {e}")
             return None
 
 

@@ -8,7 +8,7 @@ from local_library.core import ErrorCode, LookupError
 from local_library.core.models import Document
 
 if TYPE_CHECKING:
-    from local_library.core import Library
+    pass
 
 
 class LibraryProtocol(Protocol):
@@ -83,13 +83,8 @@ def suggest_citekeys(
     non_prefix = [ck for ck in all_citekeys if ck not in prefix_matches]
 
     # Calculate distances and filter
-    with_distances = [
-        (ck, levenshtein_distance(query, ck))
-        for ck in non_prefix
-    ]
-    within_threshold = [
-        (ck, dist) for ck, dist in with_distances if dist <= max_distance
-    ]
+    with_distances = [(ck, levenshtein_distance(query, ck)) for ck in non_prefix]
+    within_threshold = [(ck, dist) for ck, dist in with_distances if dist <= max_distance]
     within_threshold.sort(key=lambda x: x[1])
 
     fuzzy_matches = [ck for ck, _ in within_threshold[:remaining_slots]]

@@ -4,7 +4,18 @@
       "Bash(uv run pytest:*)",
       "Bash(pgrep:*)",
       "Bash(uv run ruff check:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(uv run:*)",
+      "WebFetch(domain:rich.readthedocs.io)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:textual.textualize.io)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git checkout:*)",
+      "Bash(git diff:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(test:*)",
+      "Bash(git -C \"/Users/strophios/development/local-library/\" rev-parse:*)"
     ]
   }
 }

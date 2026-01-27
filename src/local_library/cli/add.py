@@ -38,6 +38,20 @@ def add(
             readable=True,
         ),
     ] = None,
+    llm: Annotated[
+        bool,
+        typer.Option(
+            "--llm",
+            help="Use LLM fallback for low-confidence metadata extraction",
+        ),
+    ] = False,
+    llm_model: Annotated[
+        str,
+        typer.Option(
+            "--llm-model",
+            help="LLM model for fallback (default: gemini-2.0-flash)",
+        ),
+    ] = "gemini/gemini-2.0-flash",
     json_output: Annotated[
         bool,
         typer.Option("--json", "-j", help="Output result as JSON"),
@@ -64,7 +78,10 @@ def add(
             raise typer.Exit(code=1) from None
 
     try:
-        with Library() as lib:
+        with Library(
+            text_extraction_llm_enabled=llm,
+            text_extraction_llm_model=llm_model,
+        ) as lib:
             result = lib.add(str(path), force=force, metadata=metadata)
     except AcquisitionError as e:
         if json_output:
