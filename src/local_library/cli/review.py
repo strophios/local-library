@@ -2,15 +2,16 @@
 
 # pattern: Imperative Shell
 
-import subprocess
+import os
 import tempfile
+from subprocess import run as subprocess_run
 from typing import Annotated, Any
 
 import typer
 from rich.console import Console
 from rich.prompt import Confirm
 
-from local_library.cli.open import find_editor
+from local_library.cli.open import _open_markdown, _open_pdf, find_editor
 from local_library.cli.update import (
     _check_citekey_regeneration,
     build_editable_json,
@@ -28,16 +29,6 @@ console = Console()
 err_console = Console(stderr=True)
 
 
-def _open_pdf(path: str) -> None:
-    """Open PDF in system viewer (non-blocking)."""
-    subprocess.Popen(["open", path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-
-def _open_markdown(path: str, editor: str) -> None:
-    """Open markdown in editor (blocking)."""
-    subprocess.run([editor, path], check=False)
-
-
 def _run_update_workflow(
     doc: Document,
     lib: Any,
@@ -51,43 +42,49 @@ def _run_update_workflow(
     # Build initial JSON
     json_content = build_editable_json(doc)
 
-    # Edit loop
-    while True:
-        # Write to temp file and open editor
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".json",
-            delete=False,
-        ) as f:
-            f.write(json_content)
-            temp_path = f.name
+    # Edit loop - use try/finally to ensure temp file cleanup
+    temp_path = None
+    try:
+        while True:
+            # Write to temp file and open editor
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".json",
+                delete=False,
+            ) as f:
+                f.write(json_content)
+                temp_path = f.name
 
-        subprocess.run([editor, temp_path], check=False)
+            subprocess_run([editor, temp_path], check=False)
 
-        # Read edited content
-        with open(temp_path) as f:
-            edited_content = f.read()
+            # Read edited content
+            with open(temp_path) as f:
+                edited_content = f.read()
 
-        # Parse
-        try:
-            parsed = parse_edited_json(edited_content)
-        except ValueError as e:
-            json_content = insert_errors_as_comments(edited_content, [str(e)])
-            continue
+            # Parse
+            try:
+                parsed = parse_edited_json(edited_content)
+            except ValueError as e:
+                json_content = insert_errors_as_comments(edited_content, [str(e)])
+                continue
 
-        # Check for abort
-        if parsed is None:
-            console.print("[yellow]Update aborted.[/yellow]")
-            return
+            # Check for abort
+            if parsed is None:
+                console.print("[yellow]Update aborted.[/yellow]")
+                return
 
-        # Validate
-        errors = validate_edited_json(parsed, doc.citekey, all_citekeys)
-        if errors:
-            json_content = insert_errors_as_comments(edited_content, errors)
-            continue
+            # Validate
+            errors = validate_edited_json(parsed, doc.citekey, all_citekeys)
+            if errors:
+                json_content = insert_errors_as_comments(edited_content, errors)
+                continue
 
-        # Valid - break out of loop
-        break
+            # Valid - break out of loop
+            break
+    finally:
+        # Clean up temp file
+        if temp_path and os.path.exists(temp_path):
+            os.unlink(temp_path)
 
     # Check if citekey should be regenerated
     new_citekey = parsed.get("citekey")
