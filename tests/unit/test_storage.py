@@ -11,6 +11,7 @@ from local_library.core.models import DocumentStatus
 from local_library.core.storage import (
     create_document,
     delete_document,
+    get_all_citekeys,
     get_connection,
     get_document_by_citekey,
     get_document_by_hash,
@@ -486,3 +487,44 @@ class TestCitekeyCollision:
         result = get_unique_citekey(db_conn, "Key2020")
 
         assert result == "Key2020b"
+
+
+class TestGetAllCitekeys:
+    """Tests for get_all_citekeys function."""
+
+    def test_get_all_citekeys_returns_non_null_citekeys(self, db_conn: sqlite3.Connection) -> None:
+        """get_all_citekeys should return only documents with citekeys."""
+        # Create documents with and without citekeys
+        doc1 = create_document(
+            db_conn,
+            original_path="/path/doc1.pdf",
+            content_hash="hash1",
+            storage_path="/storage/doc1.pdf",
+        )
+        update_document_metadata(db_conn, doc1.id, citekey="Smith2023")
+
+        doc2 = create_document(
+            db_conn,
+            original_path="/path/doc2.pdf",
+            content_hash="hash2",
+            storage_path="/storage/doc2.pdf",
+        )
+        # doc2 has no citekey
+
+        doc3 = create_document(
+            db_conn,
+            original_path="/path/doc3.pdf",
+            content_hash="hash3",
+            storage_path="/storage/doc3.pdf",
+        )
+        update_document_metadata(db_conn, doc3.id, citekey="Jones2024")
+
+        citekeys = get_all_citekeys(db_conn)
+
+        assert sorted(citekeys) == ["Jones2024", "Smith2023"]
+
+    def test_get_all_citekeys_empty_library(self, db_conn: sqlite3.Connection) -> None:
+        """get_all_citekeys should return empty list for empty library."""
+        citekeys = get_all_citekeys(db_conn)
+
+        assert citekeys == []
