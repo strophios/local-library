@@ -100,7 +100,11 @@ class TestValidateEditedJson:
             "csl_json": {"type": "article", "title": "Test"},
         }
 
-        errors = validate_edited_json(edited, current_citekey="Smith2023", all_citekeys=["Smith2023"])
+        errors = validate_edited_json(
+            edited,
+            current_citekey="Smith2023",
+            all_citekeys=["Smith2023"],
+        )
 
         assert errors == []
 
@@ -114,7 +118,11 @@ class TestValidateEditedJson:
             "csl_json": {"type": "article", "title": "Test"},
         }
 
-        errors = validate_edited_json(edited, current_citekey="Smith2023", all_citekeys=["Smith2023"])
+        errors = validate_edited_json(
+            edited,
+            current_citekey="Smith2023",
+            all_citekeys=["Smith2023"],
+        )
 
         assert any("status" in e.lower() for e in errors)
 
@@ -164,7 +172,11 @@ class TestValidateEditedJson:
             "csl_json": {"title": "Missing type field"},  # No 'type' field
         }
 
-        errors = validate_edited_json(edited, current_citekey="Smith2023", all_citekeys=["Smith2023"])
+        errors = validate_edited_json(
+            edited,
+            current_citekey="Smith2023",
+            all_citekeys=["Smith2023"],
+        )
 
         assert any("type" in e.lower() for e in errors)
 
@@ -177,7 +189,11 @@ class TestValidateEditedJson:
             "csl_json": {"type": "article", "title": "Test"},
         }
 
-        errors = validate_edited_json(edited, current_citekey="Smith2023", all_citekeys=["Smith2023"])
+        errors = validate_edited_json(
+            edited,
+            current_citekey="Smith2023",
+            all_citekeys=["Smith2023"],
+        )
 
         assert any("status" in e.lower() for e in errors)
 
