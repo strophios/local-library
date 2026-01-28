@@ -52,6 +52,13 @@ def add(
             help="LLM model for fallback (default: gemini-2.0-flash)",
         ),
     ] = "gemini/gemini-2.0-flash",
+    llm_extract: Annotated[
+        bool,
+        typer.Option(
+            "--llm-extract",
+            help="Use Marker's LLM-enhanced PDF extraction (better tables, math, images). Requires GEMINI_API_KEY.",
+        ),
+    ] = False,
     json_output: Annotated[
         bool,
         typer.Option("--json", "-j", help="Output result as JSON"),
