@@ -23,15 +23,19 @@ class PdfExtractor:
     DEFAULT_MIN_LENGTH = 100
     DEFAULT_MIN_PRINTABLE_RATIO = 0.8
 
-    def __init__(self, lazy_load: bool = True) -> None:
+    def __init__(self, lazy_load: bool = True, llm_enabled: bool = False) -> None:
         """Initialize the PDF extractor.
 
         Args:
             lazy_load: If True, defer model loading until first extraction.
                        If False, load models immediately.
+            llm_enabled: If True, enable Marker's LLM-enhanced extraction for
+                         better table, math, and image handling. Requires
+                         GEMINI_API_KEY environment variable.
         """
         self._converter: Any = None
         self._lazy_load = lazy_load
+        self._llm_enabled = llm_enabled
 
         if not lazy_load:
             self._ensure_models_loaded()
