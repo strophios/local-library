@@ -2,6 +2,7 @@
 
 # pattern: Imperative Shell
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -41,15 +42,43 @@ class PdfExtractor:
             self._ensure_models_loaded()
 
     def _ensure_models_loaded(self) -> None:
-        """Load Marker models if not already loaded."""
+        """Load Marker models if not already loaded.
+
+        When llm_enabled is True and GEMINI_API_KEY is available, configures
+        Marker for LLM-enhanced extraction with:
+        - use_llm: True
+        - redo_inline_math: True (better LaTeX extraction)
+        - disable_image_extraction: True (images become text descriptions)
+        """
         if self._converter is not None:
             return
 
         try:
+            from marker.config.parser import ConfigParser
             from marker.converters.pdf import PdfConverter
             from marker.models import create_model_dict
 
-            self._converter = PdfConverter(artifact_dict=create_model_dict())
+            config: dict[str, Any] = {}
+
+            if self._llm_enabled:
+                # Check for API key - Marker expects GOOGLE_API_KEY
+                gemini_key = os.environ.get("GEMINI_API_KEY")
+                if gemini_key:
+                    # Set GOOGLE_API_KEY for Marker's Gemini service
+                    os.environ["GOOGLE_API_KEY"] = gemini_key
+                    config.update({
+                        "use_llm": True,
+                        "llm_service": "marker.services.gemini.GoogleGeminiService",
+                        "redo_inline_math": True,
+                        "disable_image_extraction": True,
+                    })
+
+            # Use ConfigParser to generate proper config dict
+            config_parser = ConfigParser(config)
+            self._converter = PdfConverter(
+                config=config_parser.generate_config_dict(),
+                artifact_dict=create_model_dict(),
+            )
         except ImportError as e:
             raise ExtractionError(
                 f"marker-pdf not installed or import failed: {e}",
