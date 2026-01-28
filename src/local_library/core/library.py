@@ -68,6 +68,7 @@ class Library:
         text_extraction_llm_enabled: bool = False,
         text_extraction_llm_model: str = "gemini/gemini-2.0-flash",
         text_extraction_confidence_threshold: float = 0.7,
+        pdf_llm_enabled: bool = False,
     ) -> None:
         """Initialize the library.
 
@@ -79,8 +80,10 @@ class Library:
             extractors: List of content extractors (default: [PdfExtractor(lazy_load=True)])
             text_extraction_enabled: Whether to extract metadata from text (default: True)
             text_extraction_llm_enabled: Whether to use LLM fallback (default: False)
-            text_extraction_llm_model: LLM model for fallback (default: "gpt-4o-mini")
+            text_extraction_llm_model: LLM model for fallback (default: "gemini-2.0-flash")
             text_extraction_confidence_threshold: Confidence threshold (default: 0.7)
+            pdf_llm_enabled: Whether to use Marker's LLM-enhanced PDF extraction (default: False).
+                            Enables better table, math, and image handling. Requires GEMINI_API_KEY.
         """
         # Use defaults from config if not specified
         self._db_path = db_path or get_database_path()
