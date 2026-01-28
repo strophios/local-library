@@ -492,8 +492,9 @@ class TestLibraryPdfLLMConfiguration:
         ) as lib:
             # Check the default PdfExtractor was created with llm_enabled=False
             assert len(lib._extractors) == 1
-            assert isinstance(lib._extractors[0], PdfExtractor)
-            assert lib._extractors[0]._llm_enabled is False
+            extractor = lib._extractors[0]
+            assert isinstance(extractor, PdfExtractor)
+            assert extractor._llm_enabled is False
 
     def test_pdf_llm_enabled_passed_to_extractor(self, temp_dir: Path) -> None:
         """Library should pass pdf_llm_enabled=True to PdfExtractor."""
@@ -505,8 +506,9 @@ class TestLibraryPdfLLMConfiguration:
         ) as lib:
             # Check the PdfExtractor was created with llm_enabled=True
             assert len(lib._extractors) == 1
-            assert isinstance(lib._extractors[0], PdfExtractor)
-            assert lib._extractors[0]._llm_enabled is True
+            extractor = lib._extractors[0]
+            assert isinstance(extractor, PdfExtractor)
+            assert extractor._llm_enabled is True
 
     def test_custom_extractors_not_affected_by_pdf_llm_enabled(self, temp_dir: Path) -> None:
         """Custom extractors should not be affected by pdf_llm_enabled."""
@@ -522,4 +524,6 @@ class TestLibraryPdfLLMConfiguration:
         ) as lib:
             # Custom extractor should be used as-is
             assert lib._extractors == [custom_extractor]
-            assert lib._extractors[0]._llm_enabled is False
+            extractor = lib._extractors[0]
+            assert isinstance(extractor, PdfExtractor)
+            assert extractor._llm_enabled is False
