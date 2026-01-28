@@ -3,6 +3,7 @@
 # pattern: Imperative Shell
 
 import json
+import os
 from pathlib import Path
 from typing import Annotated
 
@@ -19,6 +20,37 @@ from local_library.core import (
 
 console = Console()
 err_console = Console(stderr=True)
+
+
+def check_api_key_available(
+    env_var: str,
+    feature_name: str,
+    json_output: bool,
+) -> bool:
+    """Check if an API key environment variable is available.
+
+    Args:
+        env_var: Name of the environment variable to check
+        feature_name: Human-readable name of the feature (for warning message)
+        json_output: Whether to format warning as JSON
+
+    Returns:
+        True if the key is available, False otherwise (with warning output)
+    """
+    if os.environ.get(env_var):
+        return True
+
+    if json_output:
+        err_console.print(
+            json.dumps({
+                "warning": f"{env_var} not set, {feature_name} disabled",
+            })
+        )
+    else:
+        err_console.print(
+            f"[yellow]warning:[/yellow] {env_var} not set, {feature_name} disabled"
+        )
+    return False
 
 
 def add(
