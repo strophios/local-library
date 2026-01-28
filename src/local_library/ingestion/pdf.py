@@ -66,12 +66,14 @@ class PdfExtractor:
                 if gemini_key:
                     # Set GOOGLE_API_KEY for Marker's Gemini service
                     os.environ["GOOGLE_API_KEY"] = gemini_key
-                    config.update({
-                        "use_llm": True,
-                        "llm_service": "marker.services.gemini.GoogleGeminiService",
-                        "redo_inline_math": True,
-                        "disable_image_extraction": True,
-                    })
+                    config.update(
+                        {
+                            "use_llm": True,
+                            "llm_service": "marker.services.gemini.GoogleGeminiService",
+                            "redo_inline_math": True,
+                            "disable_image_extraction": True,
+                        }
+                    )
 
             # Use ConfigParser to generate proper config dict
             config_parser = ConfigParser(config)

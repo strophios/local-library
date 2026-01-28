@@ -179,6 +179,49 @@ To-do:
     - This may actually be more (or as much) a chunking issue, but making sure that we're not just only getting meaningful chunks, but that we're only feeding meaningful text into the chunks, and that we're not splitting the text such that we're feeding it in in a non-meaningful way. Some of this is realted to the "dealing with boilerplate" issue and should (maybe?) be handled purely on the ingestion + extraction end (e.g., making sure that we're not providing chunks that are like "meaningful words \[page break + header\] meaningful words" or "meaningful words \[meaningful words but from an unrelated footnote\]", etc.), but some of it could be addressed partly by the chunking process itself (either the chunking algorithm or by specific pre-processing). This is particularly the case because there are probably cases where we want to keep the text (i.e., have it in the extracted markdown doc) but not include it in the chunks for embedding (we might filter out tables, or bibliographic references, reference sections, etc. even though we probably want to keep those in the extracted text). 
 
 
+- check that we have in fact fulfilled the definition of done for M3b. If so, write a completion report summarizing what was done and detailing how we know it works, including significant detail on the quality extraction tests on the golden test set.
+    - make sure that `test_extraction_quality.py` works correctly; we appeared to get all the way through it and then just waited around as though it hadn't completed. unless there's some other issue in its implementation such that it hadn't actually completed (I think). 
+    - make sure that `test_metadata_extraction.py` doesn't have to re-extract text from the test PDFs if we either A) already have it in the library (I think); or, B) just extracted it for `test_extraction_quality.py`
+        - same goes for the confidence tests.
+    - also, are they running multiple times? or does it just print the (apparently complete) summary multiple times while still running?
+- Add centralized basic user-facing documentation for all commands and options (as well as making sure our help summaries from the command line are up to date and sufficiently complete). 
+- Now that we have metadata provision + extraction, we need ways for the user to review and update that information (i.e., via the command line interface). I'm open to other/additional suggestions, but at a minimum, I think we need: 
+    - To change the table displayed by the `list` command to include: id, citekey, status, title (truncated for length), author(s) (truncated for length), hash (possibly other columns, and I'm ambivalent on including the hash or not; really I'm just of the opinion that we *need* the first five of those columns). 
+    - To enable `list` to filter by status
+    - An `open` command (or similar) to make it easy for the user to actually go look at an item's stored pdf and/or extracted text. 
+        - We might want `open` with different flags to do different things (e.g., `open [id] --md` opens markdown) and/or we might want a separate command (maybe `compare`) that would open both the pdf and extracted markdown side-by-side
+    - An `update` command (or similar) to allow the user to actually update the extracted metadata.
+    - (maybe) A quality of life `review` command that would bundle opening an item's pdf and/or markdown together with the `update` flow. 
+    - Update all item retrieval commands (i.e., `show` plus `open`, `update`, `compare`, `review`, if added) to be able to take citekey in addition to or instead of UUID. We might do this via an input convention rather than a pure heuristic or requiring a flag, something like "command assumes it's being passed a UUID unless the passed value starts with `@` (e.g., `show @Smith2017Attention`)". 
+
+1. Launch and external editor with a file to modify. 
+2. I think we use the system default for PDFs and (ideally) nvim for markdown (vim would also be acceptable). Side-by-side comparison is a quality of life feature for the moment, so I can be flexible to get it working. That said, I suppose a mild preference for terminal split aesthetically, but that may not be feasible with PDFs/markdown as the side-by-side. Frankly, just markdown in the existing terminal + PDF in new window would be fine, I think. 
+3. Terminal constraints: 
+    - I tend to use a full width window (240 columns), but we won't want to use the full width; maybe max 200?
+    - No particular color preferences, other than that we should use it effectively. 
+    - I think we'll want to default to just displaying a maximum number of rows (e.g., 10-15). Pagination might also be effective, I just don't want to ever be taking over a user's terminal in an inconvenient way. 
+4. The user should explicitly set status, probably within the same external editor call in which they edit the metadata. (Note that we should, of course, be validating their updates; including to the status field.)
+5. It's worth considering whether any changes to underlying storage/models would be warranted, but I think my default is to assume that we are unlikely to do so. And I don't think there are any fields that need to be editable, except (potentially) status, as just mentioned. Additionally, we should make sure to re-index any changed fields from the JSON blob (i.e., we don't want to accidentally have `update` allow the user to change the authors in the CSL-JSON blob, but not see that change reflected in the item's `author` field in the database). 
+
+at some point potentially adding search text of abstract (or search by LLM generated summary if no abstract?)
+
+at some point, get it to handle the entire CSL-JSON spec (and thus the entire blob it will get from Zotero when importing). not that it needs to index any more fields or anything, just that all the info should be there if provided, editable via update, and (maybe) we eventually expand what it is capable of extracting, etc.
+
+get zotero import working ahead of embedding pipeline?
+
+
+PCC Training questions: 
+
+- sending an updated file: keeps everyone who's already in the file and add new people, right? can we update info as will + will that rerun the matching?
+    - they will accept updated info and rerun matching when they get new info. 
+    - they basically rerun the file each time (so they'll drop people if we drop the people from the file)
+- the IDs in the census tab are the IDs we provided and that's always true of any ID they show us
+
+enabling LLM fallback
+
+looks like there are a number of text normalization functions in `tests/extraction/conftest.py` that I kind of expect should also exist in the ingestion/extraction pipeline itself? like, we should also be normalizing the extracted author names and stuff in actual production, even if we don't have a ground truth to compare to later. so are they duplicating functionality, or not present in the production pipeline, or what?
+
+
 Generally yes, though I've realized we have an issue: we're currently testing accuracy on three of the most substantively important pieces of metadata (for the user), which is good; however, we're not currently checking document *type*, which is a required field in CSL-JSON and thus required for our schema. That said, it's possible that the appropriate approach for item type is either to 1) have a default/fallback option; or, 2) require that it always be supplied (or selected) by the user at input, rather than extracting it from the document. Given those options, maybe we don't want to change anything now, but what do you think?
 
 
@@ -188,23 +231,23 @@ I agree with keeping type out of M3b extraction scope, and I think your suggesti
 Just upgraded to Zotero 8, will need to go back and make sure M4 (Zotero import) still works and make changes as necessary. Also make sure BetterBibTex still works. 
 
 
-is Marker using MPS acceleration?
-    "surya: `TableRecEncoderDecoderModel` is not compatible with mps backend. Defaulting to cpu instead"
-        https://github.com/datalab-to/marker/issues/960
 
 
-1. Your Zotero library characteristics:
-    - Roughly how many PDFs? What range of document types? (journal articles, books, conference papers, preprints, etc.)
-    - Any challenging cases you're aware of? (scanned documents, non-English, historical texts, etc.)
-    - Is there a representative subset you'd use for testing, or would you select that as part of this work?
-2. What "quality tests" means to you:
-    - Are you thinking automated validation (e.g., "extracted text contains expected keywords"), manual review ("I look at 20 PDFs and judge quality"), or both?
-    - For metadata specifically: do you have ground-truth metadata in Zotero to compare against, or would you be validating extraction against the PDF content itself?
-3. Current state observations:
-    - Have you run the existing add command on any PDFs? What's your sense of extraction quality so far?
-    - Are there specific failure modes you're concerned about?
-4. Scope preference:
-    - If we split this, would you prefer: (A) M3 first with synthetic/minimal test cases, then a separate "quality validation" phase, or (B) build quality testing infrastructure first, then use it to validate M3?
+What would help complete the picture:
+
+1. Existing patterns: yes, definitely. 
+2. Marker output characteristics: 
+    - It does tend to do a pretty good job of preserving font size, structure, or other emphasis signals, though this is sometimes via heading levels and sometimes via bold or italics. 
+    - It does a pretty decent job at omitting headers and footers (e.g., page numbers, repeated titles, etc.), but sometimes in ways that omit actual text. 
+3. Particular concern: 
+    - Book sections or essays in collections, where we might have the book title as well as the section or essay title. 
+    - Yes, there are a number of scanned and non-English documents (some of which are both) and a limited number of historical texts (though nothing handwritten or pre-1800). All of these could present challenges. 
+4. Ideally flagging for manual review.
+
+
+Oh, do we know for sure/can we confirm LLM providers that will support validated structured output
+
+You seem to have been errored out during implementation. This has happened a couple of times; I don't think it's something with the code per se, but just in case, I want you to investigate the codebase and git history to establish where we are, make a note in @CLAUDE.md so that, in case there's an error, we can look at where this run started and see what progress was made, or if we keep erroring in the same place. Then continue with implementation using the executing-an-implementation-plan skill.
 
 other options for embedding: 
 
