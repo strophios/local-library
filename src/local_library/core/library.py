@@ -95,7 +95,9 @@ class Library:
             acquirers if acquirers is not None else [FileAcquirer()]
         )
         self._extractors: list[ContentExtractor] = (
-            extractors if extractors is not None else [PdfExtractor(lazy_load=True)]
+            extractors
+            if extractors is not None
+            else [PdfExtractor(lazy_load=True, llm_enabled=pdf_llm_enabled)]
         )
 
         # Initialize metadata handler
