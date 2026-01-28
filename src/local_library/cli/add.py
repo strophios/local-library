@@ -42,14 +42,14 @@ def check_api_key_available(
 
     if json_output:
         err_console.print(
-            json.dumps({
-                "warning": f"{env_var} not set, {feature_name} disabled",
-            })
+            json.dumps(
+                {
+                    "warning": f"{env_var} not set, {feature_name} disabled",
+                }
+            )
         )
     else:
-        err_console.print(
-            f"[yellow]warning:[/yellow] {env_var} not set, {feature_name} disabled"
-        )
+        err_console.print(f"[yellow]warning:[/yellow] {env_var} not set, {feature_name} disabled")
     return False
 
 
@@ -88,7 +88,7 @@ def add(
         bool,
         typer.Option(
             "--llm-extract",
-            help="Use Marker's LLM-enhanced PDF extraction (better tables, math, images). Requires GEMINI_API_KEY.",
+            help="Enable Marker LLM extraction (tables, math, images). Requires GEMINI_API_KEY.",
         ),
     ] = False,
     json_output: Annotated[

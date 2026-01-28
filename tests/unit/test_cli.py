@@ -451,9 +451,7 @@ class TestDeleteCommandCitekey:
 class TestAddCommandLLMExtract:
     """Tests for add command --llm-extract flag."""
 
-    def test_llm_extract_flag_accepted(
-        self, mock_library: MagicMock, temp_dir: Path
-    ) -> None:
+    def test_llm_extract_flag_accepted(self, mock_library: MagicMock, temp_dir: Path) -> None:
         """add command should accept --llm-extract flag."""
         pdf_path = temp_dir / "test.pdf"
         pdf_path.write_bytes(b"%PDF-1.4")
