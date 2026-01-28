@@ -508,9 +508,7 @@ class TestLibraryPdfLLMConfiguration:
             assert isinstance(lib._extractors[0], PdfExtractor)
             assert lib._extractors[0]._llm_enabled is True
 
-    def test_custom_extractors_not_affected_by_pdf_llm_enabled(
-        self, temp_dir: Path
-    ) -> None:
+    def test_custom_extractors_not_affected_by_pdf_llm_enabled(self, temp_dir: Path) -> None:
         """Custom extractors should not be affected by pdf_llm_enabled."""
         # Create a custom extractor with llm_enabled=False
         custom_extractor = PdfExtractor(lazy_load=True, llm_enabled=False)
