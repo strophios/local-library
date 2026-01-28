@@ -116,10 +116,20 @@ def add(
                 err_console.print(f"[red]error:[/red] invalid JSON in metadata file: {e}")
             raise typer.Exit(code=1) from None
 
+    # Early validation of API keys for LLM features
+    effective_llm = llm
+    effective_llm_extract = llm_extract
+
+    if llm or llm_extract:
+        if not check_api_key_available("GEMINI_API_KEY", "LLM features", json_output):
+            effective_llm = False
+            effective_llm_extract = False
+
     try:
         with Library(
-            text_extraction_llm_enabled=llm,
+            text_extraction_llm_enabled=effective_llm,
             text_extraction_llm_model=llm_model,
+            pdf_llm_enabled=effective_llm_extract,
         ) as lib:
             result = lib.add(str(path), force=force, metadata=metadata)
     except AcquisitionError as e:
