@@ -1,6 +1,5 @@
 """Unit tests for PDF extractor module."""
 
-import os
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -302,23 +301,28 @@ class TestLLMConfiguration:
         # Verify LLM config was NOT included (graceful fallback)
         assert "use_llm" not in captured_config
 
-    def test_google_api_key_set_from_gemini_key(
+    def test_gemini_api_key_passed_in_config(
         self, sample_pdf: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """When llm_enabled=True, GOOGLE_API_KEY should be set from GEMINI_API_KEY."""
+        """When llm_enabled=True, gemini_api_key should be passed in config dict."""
         monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
-        # Ensure GOOGLE_API_KEY is not set initially
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+
+        captured_config: dict[str, Any] = {}
 
         mock_config_parser = MagicMock()
         mock_config_parser.generate_config_dict.return_value = {}
+
+        def capture_config(config: dict[str, Any]) -> MagicMock:
+            captured_config.update(config)
+            return mock_config_parser
+
         mock_converter = MagicMock()
 
-        with patch("marker.config.parser.ConfigParser", return_value=mock_config_parser):
+        with patch("marker.config.parser.ConfigParser", side_effect=capture_config):
             with patch("marker.converters.pdf.PdfConverter", return_value=mock_converter):
                 with patch("marker.models.create_model_dict", return_value={}):
                     extractor = PdfExtractor(lazy_load=True, llm_enabled=True)
                     extractor._ensure_models_loaded()
 
-        # Verify GOOGLE_API_KEY was set
-        assert os.environ.get("GOOGLE_API_KEY") == "test-gemini-key"
+        # Verify gemini_api_key was passed in config (not set in environment)
+        assert captured_config.get("gemini_api_key") == "test-gemini-key"

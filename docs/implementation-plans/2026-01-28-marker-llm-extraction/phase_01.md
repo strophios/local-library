@@ -4,7 +4,7 @@
 
 **Architecture:** Thread `llm_enabled` config through CLI → Library → PdfExtractor. PdfExtractor configures Marker's PdfConverter with LLM options when enabled. API key validation at CLI layer with graceful fallback.
 
-**Tech Stack:** Marker (marker-pdf), Gemini API (via GOOGLE_API_KEY env var), ConfigParser for Marker config
+**Tech Stack:** Marker (marker-pdf), Gemini API (via gemini_api_key config parameter), ConfigParser for Marker config
 
 **Scope:** 4 phases from original design (phases 1-4)
 
@@ -16,9 +16,7 @@
 
 This phase adds the `llm_enabled` parameter to PdfExtractor and modifies `_ensure_models_loaded()` to configure Marker for LLM-enhanced extraction when enabled.
 
-**Key insight:** Marker requires `GOOGLE_API_KEY` environment variable (not a config dict parameter). We'll check for `GEMINI_API_KEY` (our naming convention) and set `GOOGLE_API_KEY` before Marker initialization.
-
-**Design deviation note:** The design document (Section "API Key Handling") states we should pass `gemini_api_key` directly via Marker's config dict to "avoid side effects." However, research confirms Marker does NOT support a `gemini_api_key` config parameter - it exclusively reads from `GOOGLE_API_KEY` environment variable. This deviation is necessary; the design assumption was incorrect. The side effect is limited to setting one env var at model load time, which is acceptable given the constraint.
+**Key insight:** Marker supports passing `gemini_api_key` directly via config dict, avoiding environment variable manipulation. We read `GEMINI_API_KEY` from the environment and pass it explicitly to Marker's configuration.
 
 **Design clarification:** The design's "Not Configured" section says `llm_service` "defaults to Gemini." We explicitly set `llm_service: "marker.services.gemini.GoogleGeminiService"` for explicitness and to ensure behavior doesn't change if Marker's defaults change. This is defensive but aligns with design intent.
 
@@ -123,13 +121,12 @@ def _ensure_models_loaded(self) -> None:
         config: dict[str, Any] = {}
 
         if self._llm_enabled:
-            # Check for API key - Marker expects GOOGLE_API_KEY
             gemini_key = os.environ.get("GEMINI_API_KEY")
             if gemini_key:
-                # Set GOOGLE_API_KEY for Marker's Gemini service
-                os.environ["GOOGLE_API_KEY"] = gemini_key
+                # Pass API key directly via config (avoids environment mutation)
                 config.update({
                     "use_llm": True,
+                    "gemini_api_key": gemini_key,
                     "llm_service": "marker.services.gemini.GoogleGeminiService",
                     "redo_inline_math": True,
                     "disable_image_extraction": True,
@@ -167,7 +164,7 @@ git commit -m "$(cat <<'EOF'
 feat(pdf): implement LLM config in _ensure_models_loaded
 
 When llm_enabled=True and GEMINI_API_KEY is set:
-- Sets GOOGLE_API_KEY env var (Marker's expected key name)
+- Passes gemini_api_key directly via config dict
 - Configures use_llm, llm_service, redo_inline_math, disable_image_extraction
 - Uses ConfigParser to generate proper config dict
 
@@ -297,26 +294,31 @@ class TestLLMConfiguration:
         # Verify LLM config was NOT included (graceful fallback)
         assert "use_llm" not in captured_config
 
-    def test_google_api_key_set_from_gemini_key(
+    def test_gemini_api_key_passed_in_config(
         self, sample_pdf: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """When llm_enabled=True, GOOGLE_API_KEY should be set from GEMINI_API_KEY."""
+        """When llm_enabled=True, gemini_api_key should be passed in config dict."""
         monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
-        # Ensure GOOGLE_API_KEY is not set initially
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+
+        captured_config: dict[str, Any] = {}
 
         mock_config_parser = MagicMock()
         mock_config_parser.generate_config_dict.return_value = {}
+
+        def capture_config(config: dict[str, Any]) -> MagicMock:
+            captured_config.update(config)
+            return mock_config_parser
+
         mock_converter = MagicMock()
 
-        with patch("marker.config.parser.ConfigParser", return_value=mock_config_parser):
+        with patch("marker.config.parser.ConfigParser", side_effect=capture_config):
             with patch("marker.converters.pdf.PdfConverter", return_value=mock_converter):
                 with patch("marker.models.create_model_dict", return_value={}):
                     extractor = PdfExtractor(lazy_load=True, llm_enabled=True)
                     extractor._ensure_models_loaded()
 
-        # Verify GOOGLE_API_KEY was set
-        assert os.environ.get("GOOGLE_API_KEY") == "test-gemini-key"
+        # Verify gemini_api_key was passed in config (not set in environment)
+        assert captured_config.get("gemini_api_key") == "test-gemini-key"
 ```
 
 **Step 2: Add required import for Any type**
@@ -352,7 +354,7 @@ Tests verify:
 - LLM config passed to Marker when enabled + API key present
 - LLM config NOT passed when disabled
 - LLM config NOT passed when no API key (graceful fallback)
-- GOOGLE_API_KEY set from GEMINI_API_KEY
+- gemini_api_key passed via config dict
 
 Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 EOF
@@ -408,7 +410,7 @@ EOF
 
 - [ ] PdfExtractor accepts `llm_enabled` parameter
 - [ ] `_ensure_models_loaded()` configures Marker for LLM when enabled + API key present
-- [ ] `GOOGLE_API_KEY` set from `GEMINI_API_KEY` for Marker compatibility
+- [ ] `gemini_api_key` passed via config dict (avoids environment mutation)
 - [ ] Graceful fallback when API key missing (no LLM config, standard extraction)
 - [ ] All new tests pass
 - [ ] No regressions in existing tests

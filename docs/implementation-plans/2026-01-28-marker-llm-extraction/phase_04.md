@@ -67,7 +67,7 @@ Add a new decision after "Lazy Marker loading":
 Add a new gotcha:
 
 ```markdown
-- PdfExtractor with `llm_enabled=True` sets GOOGLE_API_KEY from GEMINI_API_KEY at model load time (Marker's expected env var name)
+- PdfExtractor with `llm_enabled=True` passes `gemini_api_key` directly via Marker's config dict (avoids environment variable mutation)
 ```
 
 **Step 4: Update the "Last verified" date**
@@ -87,7 +87,7 @@ docs(ingestion): update CLAUDE.md for PdfExtractor LLM support
 
 - Add LLM extraction guarantee to contracts
 - Document LLM mode configuration decision
-- Add gotcha about GOOGLE_API_KEY env var mapping
+- Add gotcha about gemini_api_key config dict approach
 - Update last verified date
 
 Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>

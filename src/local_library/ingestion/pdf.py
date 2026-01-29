@@ -47,6 +47,7 @@ class PdfExtractor:
         When llm_enabled is True and GEMINI_API_KEY is available, configures
         Marker for LLM-enhanced extraction with:
         - use_llm: True
+        - gemini_api_key: passed directly from GEMINI_API_KEY env var
         - redo_inline_math: True (better LaTeX extraction)
         - disable_image_extraction: True (images become text descriptions)
         """
@@ -61,14 +62,13 @@ class PdfExtractor:
             config: dict[str, Any] = {}
 
             if self._llm_enabled:
-                # Check for API key - Marker expects GOOGLE_API_KEY
                 gemini_key = os.environ.get("GEMINI_API_KEY")
                 if gemini_key:
-                    # Set GOOGLE_API_KEY for Marker's Gemini service
-                    os.environ["GOOGLE_API_KEY"] = gemini_key
+                    # Pass API key directly via config (avoids environment mutation)
                     config.update(
                         {
                             "use_llm": True,
+                            "gemini_api_key": gemini_key,
                             "llm_service": "marker.services.gemini.GoogleGeminiService",
                             "redo_inline_math": True,
                             "disable_image_extraction": True,

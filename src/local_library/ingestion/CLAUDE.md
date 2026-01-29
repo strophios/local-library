@@ -71,4 +71,4 @@ Handles content acquisition (getting files into the system), extraction (convert
 - TextMetadataExtractor preserves heuristic confidence even when LLM provides the value (for consistent needs_review determination)
 - Field extractors return FieldExtraction with value=None when extraction fails (not exceptions)
 - The `nameparser` library is used for robust author name parsing
-- PdfExtractor with `llm_enabled=True` sets GOOGLE_API_KEY from GEMINI_API_KEY at model load time (Marker's expected env var name)
+- PdfExtractor with `llm_enabled=True` passes `gemini_api_key` directly via Marker's config dict (avoids environment variable mutation)

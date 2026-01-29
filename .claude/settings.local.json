@@ -65,7 +65,21 @@
       "Bash(git -C /Users/strophios/development/local-library show --stat bdd589c)",
       "Bash(git -C /Users/strophios/development/local-library show bdd589c:docs/design-plans/2026-01-28-marker-llm-extraction.md)",
       "Bash(git -C /Users/strophios/development/local-library diff 6b31d168c221553cc36d1d3252bc454a78ed92a8..4bec7a662adc1f032e90dad587246b6466a8febb -- src/local_library/core/library.py)",
-      "Bash(git -C /Users/strophios/development/local-library diff 6b31d168c221553cc36d1d3252bc454a78ed92a8..4bec7a662adc1f032e90dad587246b6466a8febb -- tests/unit/test_library.py)"
+      "Bash(git -C /Users/strophios/development/local-library diff 6b31d168c221553cc36d1d3252bc454a78ed92a8..4bec7a662adc1f032e90dad587246b6466a8febb -- tests/unit/test_library.py)",
+      "Bash(git -C /Users/strophios/development/local-library show d224a88:src/local_library/cli/add.py)",
+      "Bash(git -C /Users/strophios/development/local-library diff d224a88..HEAD -- src/local_library/cli/add.py)",
+      "Bash(1 --version d224a88)",
+      "Bash(git -C /Users/strophios/development/local-library stash:*)",
+      "Bash(git -C /Users/strophios/development/local-library checkout d224a88 -- src/local_library/cli/add.py)",
+      "Bash(git -C /Users/strophios/development/local-library checkout HEAD -- src/local_library/cli/add.py)",
+      "Bash(git -C /Users/strophios/development/local-library stash pop)",
+      "Bash(git -C /Users/strophios/development/local-library restore:*)",
+      "Bash(git -C /Users/strophios/development/local-library restore src/local_library/cli/add.py)",
+      "Bash(git -C /Users/strophios/development/local-library log --oneline d224a88e79ddc3dadd8601e5b9e9aa33ab00c114..0e0a5914967a41879c029b7215aa240223b510d7)",
+      "Bash(git -C /Users/strophios/development/local-library show d224a88e79ddc3dadd8601e5b9e9aa33ab00c114:src/local_library/cli/add.py)",
+      "Bash(unset GEMINI_API_KEY)",
+      "Bash(git -C /Users/strophios/development/local-library merge-base:*)",
+      "Bash(sqlite3:*)"
     ]
   },
   "outputStyle": "Explanatory"
