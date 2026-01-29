@@ -161,6 +161,7 @@ All commands accepting document IDs support both UUID (full or partial) and @cit
 
 - `uv run local-library add <path>` - Add a PDF to the library
 - `uv run local-library add <path> --metadata <csl-json-file>` - Add with bibliographic metadata
+- `uv run local-library add <path> --llm-extract` - Add with LLM-enhanced PDF extraction (requires GEMINI_API_KEY)
 - `uv run local-library list` - List all documents (use `--limit N` for pagination, `--all` for unlimited)
 - `uv run local-library show <id>` - Show document details
 - `uv run local-library delete <id>` - Delete a document
