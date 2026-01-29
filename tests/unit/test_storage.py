@@ -345,6 +345,37 @@ class TestUpdateDocumentStatus:
         assert retrieved is not None
         assert retrieved.status == DocumentStatus.NEEDS_REVIEW
 
+    def test_preserves_extracted_path_when_not_provided(
+        self, db_conn: sqlite3.Connection
+    ) -> None:
+        """update_document_status should preserve extracted_path when not explicitly set.
+
+        Regression test for bug where subsequent status updates would overwrite
+        extracted_path with NULL because the SQL used direct assignment instead
+        of COALESCE.
+        """
+        # Create document and set extracted_path via first status update
+        doc = create_document(db_conn, "/test.pdf", "hash", "/storage/hash.pdf")
+        doc = update_document_status(
+            db_conn,
+            doc.id,
+            DocumentStatus.READY,
+            extracted_path="/extracted/hash.md",
+        )
+        assert doc.extracted_path == "/extracted/hash.md"
+
+        # Update status WITHOUT specifying extracted_path
+        # This should preserve the existing value, not set it to NULL
+        updated = update_document_status(
+            db_conn,
+            doc.id,
+            DocumentStatus.NEEDS_REVIEW,
+            error_message="Low confidence extraction",
+        )
+
+        assert updated.extracted_path == "/extracted/hash.md"
+        assert updated.status == DocumentStatus.NEEDS_REVIEW
+
 
 class TestDeleteDocument:
     """Tests for delete_document function."""

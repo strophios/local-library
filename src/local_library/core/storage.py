@@ -439,11 +439,15 @@ def update_document_status(
     now = datetime.now(timezone.utc)
 
     try:
+        # Use COALESCE to preserve existing values when parameters are None
         cursor = conn.execute(
             """
             UPDATE documents
-            SET status = ?, extracted_path = ?, error_message = ?,
-                error_code = ?, updated_at = ?
+            SET status = ?,
+                extracted_path = COALESCE(?, extracted_path),
+                error_message = COALESCE(?, error_message),
+                error_code = COALESCE(?, error_code),
+                updated_at = ?
             WHERE id = ?
             """,
             (
