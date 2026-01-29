@@ -17,7 +17,7 @@ from local_library.cli.utils import resolve_identifier
 from local_library.core import Library, LookupError
 from local_library.core.models import Document, DocumentStatus
 from local_library.core.storage import get_connection, get_unique_citekey
-from local_library.ingestion.metadata import MetadataHandler
+from local_library.ingestion.metadata import MetadataHandler, generate_citekey
 
 console = Console()
 err_console = Console(stderr=True)
@@ -273,8 +273,7 @@ def update(
                     "Author/title/year changed. Regenerate citekey?",
                     default=False,
                 ):
-                    handler = MetadataHandler()
-                    new_citekey = handler.generate_citekey(new_csl)
+                    new_citekey = generate_citekey(new_csl)
                     # Ensure uniqueness
                     if new_citekey in all_citekeys and new_citekey != doc.citekey:
                         conn = get_connection()
