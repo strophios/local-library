@@ -446,3 +446,144 @@ class TestDeleteCommandCitekey:
 
         assert result.exit_code == 1
         assert "not found" in result.output.lower()
+
+
+class TestAddCommandLLMExtract:
+    """Tests for add command --llm-extract flag."""
+
+    def test_llm_extract_flag_accepted(self, mock_library: MagicMock, temp_dir: Path) -> None:
+        """add command should accept --llm-extract flag."""
+        pdf_path = temp_dir / "test.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4")
+
+        mock_doc = MagicMock()
+        mock_doc.id = "12345678-1234-1234-1234-123456789abc"
+        mock_doc.status = DocumentStatus.READY
+        mock_doc.storage_path = "/storage/test.pdf"
+        mock_doc.original_path = str(pdf_path)
+        mock_doc.content_hash = "abcd1234"
+        mock_doc.citekey = None
+        mock_doc.title = None
+        mock_doc.authors = None
+        mock_doc.issued_date = None
+
+        mock_library.add.return_value = AddResult(document=mock_doc)
+
+        result = runner.invoke(app, ["add", "--llm-extract", str(pdf_path)])
+
+        # Should succeed (or warn about missing API key, not error)
+        assert result.exit_code == 0
+
+    def test_llm_extract_warns_without_api_key(
+        self, mock_library: MagicMock, temp_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """add --llm-extract should warn when GEMINI_API_KEY is missing."""
+        # Ensure no API key
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+
+        pdf_path = temp_dir / "test.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4")
+
+        mock_doc = MagicMock()
+        mock_doc.id = "12345678-1234-1234-1234-123456789abc"
+        mock_doc.status = DocumentStatus.READY
+        mock_doc.storage_path = "/storage/test.pdf"
+        mock_doc.original_path = str(pdf_path)
+        mock_doc.content_hash = "abcd1234"
+        mock_doc.citekey = None
+        mock_doc.title = None
+        mock_doc.authors = None
+        mock_doc.issued_date = None
+
+        mock_library.add.return_value = AddResult(document=mock_doc)
+
+        result = runner.invoke(app, ["add", "--llm-extract", str(pdf_path)])
+
+        assert result.exit_code == 0
+        # Warning should be in stderr, but CliRunner captures both
+        assert "GEMINI_API_KEY" in result.output or "warning" in result.output.lower()
+
+    def test_llm_extract_no_warning_with_api_key(
+        self, mock_library: MagicMock, temp_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """add --llm-extract should not warn when GEMINI_API_KEY is present."""
+        monkeypatch.setenv("GEMINI_API_KEY", "test-api-key")
+
+        pdf_path = temp_dir / "test.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4")
+
+        mock_doc = MagicMock()
+        mock_doc.id = "12345678-1234-1234-1234-123456789abc"
+        mock_doc.status = DocumentStatus.READY
+        mock_doc.storage_path = "/storage/test.pdf"
+        mock_doc.original_path = str(pdf_path)
+        mock_doc.content_hash = "abcd1234"
+        mock_doc.citekey = None
+        mock_doc.title = None
+        mock_doc.authors = None
+        mock_doc.issued_date = None
+
+        mock_library.add.return_value = AddResult(document=mock_doc)
+
+        result = runner.invoke(app, ["add", "--llm-extract", str(pdf_path)])
+
+        assert result.exit_code == 0
+        # Should not contain warning about missing key
+        assert "GEMINI_API_KEY not set" not in result.output
+
+    def test_llm_flag_warns_without_api_key(
+        self, mock_library: MagicMock, temp_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """add --llm should warn when GEMINI_API_KEY is missing."""
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+
+        pdf_path = temp_dir / "test.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4")
+
+        mock_doc = MagicMock()
+        mock_doc.id = "12345678-1234-1234-1234-123456789abc"
+        mock_doc.status = DocumentStatus.READY
+        mock_doc.storage_path = "/storage/test.pdf"
+        mock_doc.original_path = str(pdf_path)
+        mock_doc.content_hash = "abcd1234"
+        mock_doc.citekey = None
+        mock_doc.title = None
+        mock_doc.authors = None
+        mock_doc.issued_date = None
+
+        mock_library.add.return_value = AddResult(document=mock_doc)
+
+        result = runner.invoke(app, ["add", "--llm", str(pdf_path)])
+
+        assert result.exit_code == 0
+        assert "GEMINI_API_KEY" in result.output or "warning" in result.output.lower()
+
+    def test_llm_extract_json_warning_format(
+        self, mock_library: MagicMock, temp_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """add --llm-extract --json should output JSON-formatted warning."""
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+        pdf_path = temp_dir / "test.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4")
+
+        mock_doc = MagicMock()
+        mock_doc.id = "12345678-1234-1234-1234-123456789abc"
+        mock_doc.status = DocumentStatus.READY
+        mock_doc.storage_path = "/storage/test.pdf"
+        mock_doc.original_path = str(pdf_path)
+        mock_doc.content_hash = "abcd1234"
+        mock_doc.citekey = None
+        mock_doc.title = None
+        mock_doc.authors = None
+        mock_doc.issued_date = None
+
+        mock_library.add.return_value = AddResult(document=mock_doc)
+
+        result = runner.invoke(app, ["add", "--llm-extract", "--json", str(pdf_path)])
+
+        assert result.exit_code == 0
+        # Warning should be JSON formatted
+        assert '"warning"' in result.output

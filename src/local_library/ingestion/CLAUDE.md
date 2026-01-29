@@ -1,6 +1,6 @@
 # Ingestion Domain
 
-Last verified: 2026-01-24
+Last verified: 2026-01-28
 
 ## Purpose
 
@@ -19,6 +19,7 @@ Handles content acquisition (getting files into the system), extraction (convert
   - TextMetadataExtractor.extract() returns TextExtractionResult with per-field confidence scores
   - Extraction confidence threshold (default 0.7) determines needs_review status
   - LLM fallback (when enabled) uses heuristic values as context hints
+  - PdfExtractor supports LLM-enhanced extraction via `llm_enabled` parameter (better tables, math, images when GEMINI_API_KEY available)
 - **Expects**: Source paths exist and are readable; temp directories provided by caller; markdown text for TextMetadataExtractor
 
 ## Dependencies
@@ -33,6 +34,7 @@ Handles content acquisition (getting files into the system), extraction (convert
 - **Content-agnostic FileAcquirer**: Handles any local file; MIME detection via `mimetypes` module
 - **URL rejection**: FileAcquirer rejects URLs (http://, https://, ftp://, file://) to defer to future UrlAcquirer
 - **Lazy Marker loading**: PdfExtractor defers model load until first extraction (saves startup time)
+- **PdfExtractor LLM mode**: When `llm_enabled=True` and GEMINI_API_KEY is set, configures Marker with `use_llm`, `redo_inline_math`, and `disable_image_extraction` (images become text descriptions). Falls back silently to standard extraction without API key.
 - **Quality validation**: ExtractionResult.validate() checks min length and printable ratio
 - **compute_storage_path**: Git-style `ab/cd/hash.ext` layout for content-addressable storage
 - **MetadataHandler**: Stateless CSL-JSON validation with citekey generation (internal, used by Library)
@@ -69,3 +71,4 @@ Handles content acquisition (getting files into the system), extraction (convert
 - TextMetadataExtractor preserves heuristic confidence even when LLM provides the value (for consistent needs_review determination)
 - Field extractors return FieldExtraction with value=None when extraction fails (not exceptions)
 - The `nameparser` library is used for robust author name parsing
+- PdfExtractor with `llm_enabled=True` sets GOOGLE_API_KEY from GEMINI_API_KEY at model load time (Marker's expected env var name)

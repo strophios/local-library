@@ -1,6 +1,6 @@
 # CLI Domain
 
-Last verified: 2026-01-27
+Last verified: 2026-01-28
 
 ## Purpose
 
@@ -15,6 +15,7 @@ Command-line interface for the local-library system. Provides user-facing comman
   - Validation errors in update/review re-open editor with error comments (no silent failures)
   - Editor detection: nvim > vim > $EDITOR fallback
   - PDF opens non-blocking; markdown opens blocking
+  - Both `--llm` and `--llm-extract` flags validate GEMINI_API_KEY early, warn and disable if missing
 - **Expects**: Library context manager for database access; editor available for update/review/open commands
 
 ## Dependencies
@@ -30,6 +31,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 - **Review as composition**: review command combines open --both + update (not separate implementation)
 - **Pagination via --limit/--all**: list defaults to 20 items; --all disables limit
 - **Non-blocking PDF opens**: Uses platform-native commands (open/xdg-open/start) via subprocess.Popen
+- **Early API key validation**: `--llm` and `--llm-extract` check GEMINI_API_KEY before Library instantiation; warn and gracefully disable features if missing
 
 ## Invariants
 

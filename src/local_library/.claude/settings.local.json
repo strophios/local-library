@@ -15,7 +15,9 @@
       "Bash(git diff:*)",
       "Bash(git rev-parse:*)",
       "Bash(test:*)",
-      "Bash(git -C \"/Users/strophios/development/local-library/\" rev-parse:*)"
+      "Bash(git -C \"/Users/strophios/development/local-library/\" rev-parse:*)",
+      "Bash(git stash:*)",
+      "Bash(python3:*)"
     ]
   }
 }

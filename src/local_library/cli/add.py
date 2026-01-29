@@ -3,6 +3,7 @@
 # pattern: Imperative Shell
 
 import json
+import os
 from pathlib import Path
 from typing import Annotated
 
@@ -19,6 +20,37 @@ from local_library.core import (
 
 console = Console()
 err_console = Console(stderr=True)
+
+
+def check_api_key_available(
+    env_var: str,
+    feature_name: str,
+    json_output: bool,
+) -> bool:
+    """Check if an API key environment variable is available.
+
+    Args:
+        env_var: Name of the environment variable to check
+        feature_name: Human-readable name of the feature (for warning message)
+        json_output: Whether to format warning as JSON
+
+    Returns:
+        True if the key is available, False otherwise (with warning output)
+    """
+    if os.environ.get(env_var):
+        return True
+
+    if json_output:
+        err_console.print(
+            json.dumps(
+                {
+                    "warning": f"{env_var} not set, {feature_name} disabled",
+                }
+            )
+        )
+    else:
+        err_console.print(f"[yellow]warning:[/yellow] {env_var} not set, {feature_name} disabled")
+    return False
 
 
 def add(
@@ -52,6 +84,13 @@ def add(
             help="LLM model for fallback (default: gemini-2.0-flash)",
         ),
     ] = "gemini/gemini-2.0-flash",
+    llm_extract: Annotated[
+        bool,
+        typer.Option(
+            "--llm-extract",
+            help="Enable Marker LLM extraction (tables, math, images). Requires GEMINI_API_KEY.",
+        ),
+    ] = False,
     json_output: Annotated[
         bool,
         typer.Option("--json", "-j", help="Output result as JSON"),
@@ -77,10 +116,20 @@ def add(
                 err_console.print(f"[red]error:[/red] invalid JSON in metadata file: {e}")
             raise typer.Exit(code=1) from None
 
+    # Early validation of API keys for LLM features
+    effective_llm = llm
+    effective_llm_extract = llm_extract
+
+    if llm or llm_extract:
+        if not check_api_key_available("GEMINI_API_KEY", "LLM features", json_output):
+            effective_llm = False
+            effective_llm_extract = False
+
     try:
         with Library(
-            text_extraction_llm_enabled=llm,
+            text_extraction_llm_enabled=effective_llm,
             text_extraction_llm_model=llm_model,
+            pdf_llm_enabled=effective_llm_extract,
         ) as lib:
             result = lib.add(str(path), force=force, metadata=metadata)
     except AcquisitionError as e:

@@ -478,3 +478,52 @@ class TestLibraryDelete:
             library.delete("nonexistent")
 
         assert exc_info.value.code == ErrorCode.NOT_FOUND
+
+
+class TestLibraryPdfLLMConfiguration:
+    """Tests for Library PDF LLM extraction configuration."""
+
+    def test_pdf_llm_enabled_default_false(self, temp_dir: Path) -> None:
+        """Library should default to pdf_llm_enabled=False."""
+        with Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+        ) as lib:
+            # Check the default PdfExtractor was created with llm_enabled=False
+            assert len(lib._extractors) == 1
+            extractor = lib._extractors[0]
+            assert isinstance(extractor, PdfExtractor)
+            assert extractor._llm_enabled is False
+
+    def test_pdf_llm_enabled_passed_to_extractor(self, temp_dir: Path) -> None:
+        """Library should pass pdf_llm_enabled=True to PdfExtractor."""
+        with Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            pdf_llm_enabled=True,
+        ) as lib:
+            # Check the PdfExtractor was created with llm_enabled=True
+            assert len(lib._extractors) == 1
+            extractor = lib._extractors[0]
+            assert isinstance(extractor, PdfExtractor)
+            assert extractor._llm_enabled is True
+
+    def test_custom_extractors_not_affected_by_pdf_llm_enabled(self, temp_dir: Path) -> None:
+        """Custom extractors should not be affected by pdf_llm_enabled."""
+        # Create a custom extractor with llm_enabled=False
+        custom_extractor = PdfExtractor(lazy_load=True, llm_enabled=False)
+
+        with Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            extractors=[custom_extractor],
+            pdf_llm_enabled=True,  # Should be ignored
+        ) as lib:
+            # Custom extractor should be used as-is
+            assert lib._extractors == [custom_extractor]
+            extractor = lib._extractors[0]
+            assert isinstance(extractor, PdfExtractor)
+            assert extractor._llm_enabled is False
