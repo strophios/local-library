@@ -1,6 +1,6 @@
 # CLI Domain
 
-Last verified: 2026-01-28
+Last verified: 2026-01-29
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 
 ## Contracts
 
-- **Exposes**: CLI commands (add, list, show, delete, open, update, review), identifier resolution utilities
+- **Exposes**: CLI commands (add, list, show, delete, open, update, review), zotero command group (import, collections), identifier resolution utilities
 - **Guarantees**:
   - All commands accepting document IDs support UUID (full or partial) and @citekey syntax
   - Failed citekey lookups provide fuzzy match suggestions (Levenshtein distance + prefix matching)
@@ -32,6 +32,9 @@ Command-line interface for the local-library system. Provides user-facing comman
 - **Pagination via --limit/--all**: list defaults to 20 items; --all disables limit
 - **Non-blocking PDF opens**: Uses platform-native commands (open/xdg-open/start) via subprocess.Popen
 - **Early API key validation**: `--llm` and `--llm-extract` check GEMINI_API_KEY before Library instantiation; warn and gracefully disable features if missing
+- **Zotero import as command group**: `zotero` subcommand groups Zotero-related operations; `import` subcommand handles batch import with progress tracking, `collections` lists available collections
+- **Citekey-based skip logic**: Batch import skips items whose citekey already exists in local-library (fast check); hash-based deduplication catches any that slip through
+- **Zotero directory detection**: Uses ZOTERO_DIR env var or platform-specific defaults (~/Zotero)
 
 ## Invariants
 
@@ -51,6 +54,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 - `open.py` - Open command with --pdf/--both flags, `find_editor()`
 - `update.py` - Update command with editor-based validation loop
 - `review.py` - Review command (open --both + update composition)
+- `zotero.py` - Zotero command group with `import` (batch import with progress) and `collections` (list collections)
 
 ## Gotchas
 

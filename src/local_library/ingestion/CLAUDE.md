@@ -1,6 +1,6 @@
 # Ingestion Domain
 
-Last verified: 2026-01-28
+Last verified: 2026-01-30
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Handles content acquisition (getting files into the system), extraction (convert
 
 ## Contracts
 
-- **Exposes**: ContentAcquirer protocol, ContentExtractor protocol, FileAcquirer, PdfExtractor, TextMetadataExtractor
+- **Exposes**: ContentAcquirer protocol, ContentExtractor protocol, FileAcquirer, PdfExtractor, TextMetadataExtractor, ZoteroReader (with ZoteroLibrary, ZoteroCollection, ZoteroItem, ZoteroAttachment dataclasses)
 - **Guarantees**:
   - `can_handle()` returns True only for sources/files the handler can process
   - Acquirers copy to temp location (never modify source)
@@ -43,6 +43,7 @@ Handles content acquisition (getting files into the system), extraction (convert
 - **Confidence-based workflow**: Fields below confidence threshold (default 0.7) trigger needs_review. LLM fallback (if enabled) uses heuristic candidates as context hints but preserves heuristic confidence scores.
 - **Lazy imports via `__getattr__`**: Ingestion package uses module-level `__getattr__` to defer imports until needed. Breaks circular dependency: ingestion → core.models → core.library → ingestion.base. Zotero module not exposed here to remain isolated.
 - **Zotero module isolation**: `zotero.py` uses Mixed pattern for LibraryJsonParser (I/O necessary to parse CSL-JSON; cannot be separated without complexity). Frozen dataclasses remain pure. Tests import directly via `from local_library.ingestion.zotero import ...` to avoid circular import chain.
+- **Multi-library support**: ZoteroReader supports filtering by library via `library_id` parameter on relevant methods. `get_personal_library()` returns the user's personal library (type='user'). Collections include `library_id` to support library-scoped queries.
 
 ## Invariants
 
@@ -58,7 +59,7 @@ Handles content acquisition (getting files into the system), extraction (convert
 - `pdf.py` - PdfExtractor (Marker wrapper with quality validation)
 - `metadata.py` - MetadataHandler (CSL-JSON validation, citekey generation, field extraction)
 - `text_extraction.py` - TextMetadataExtractor, LLMExtractor, field extractors (extract_title, extract_authors, extract_date, extract_doc_type), build_csl_json converter
-- `zotero.py` - ZoteroAttachment, ZoteroItem frozen dataclasses; LibraryJsonParser for CSL-JSON metadata access
+- `zotero.py` - ZoteroAttachment, ZoteroItem, ZoteroCollection, ZoteroLibrary frozen dataclasses; ZoteroReader facade; CollectionResolver for collection queries; LibraryResolver for multi-library support
 
 ## Gotchas
 
@@ -72,3 +73,5 @@ Handles content acquisition (getting files into the system), extraction (convert
 - Field extractors return FieldExtraction with value=None when extraction fails (not exceptions)
 - The `nameparser` library is used for robust author name parsing
 - PdfExtractor with `llm_enabled=True` passes `gemini_api_key` directly via Marker's config dict (avoids environment variable mutation)
+- ZoteroReader methods that accept `library_id=None` operate across all libraries when None; pass specific library_id to filter
+- ZoteroCollection.library_id links to Zotero's `libraries` table; personal library is typically libraryID=1 with type='user'

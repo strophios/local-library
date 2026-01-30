@@ -23,7 +23,9 @@ from local_library.core.errors import ErrorCode, ZoteroError
 
 __all__ = [
     "ZoteroAttachment",
+    "ZoteroCollection",
     "ZoteroItem",
+    "ZoteroLibrary",
     "ZoteroReader",
 ]
 
@@ -94,6 +96,59 @@ class ZoteroItem:
     def has_pdf(self) -> bool:
         """Check if this item has at least one PDF attachment."""
         return any(a.is_pdf() for a in self.attachments)
+
+
+@dataclass(frozen=True)
+class ZoteroCollection:
+    """A Zotero collection (folder for organizing items).
+
+    Represents a collection with its metadata and position in the
+    collection hierarchy.
+
+    Attributes:
+        collection_id: Zotero's internal numeric ID
+        name: Display name of the collection
+        key: Zotero's 8-character key (stable across syncs)
+        parent_id: Parent collection's ID (None for top-level)
+        library_id: Library this collection belongs to (1 = personal)
+    """
+
+    collection_id: int
+    name: str
+    key: str
+    parent_id: int | None
+    library_id: int
+
+    def is_top_level(self) -> bool:
+        """Check if this is a top-level collection (no parent)."""
+        return self.parent_id is None
+
+
+@dataclass(frozen=True)
+class ZoteroLibrary:
+    """A Zotero library (personal or group).
+
+    Represents a library with its type and optional group metadata.
+
+    Attributes:
+        library_id: Zotero's internal library ID (1 = personal library)
+        library_type: 'user' for personal, 'group' for group libraries
+        name: Display name (personal library name or group name)
+        editable: Whether the library is editable
+    """
+
+    library_id: int
+    library_type: str
+    name: str
+    editable: bool
+
+    def is_personal(self) -> bool:
+        """Check if this is the user's personal library."""
+        return self.library_type == "user"
+
+    def is_group(self) -> bool:
+        """Check if this is a group library."""
+        return self.library_type == "group"
 
 
 class LibraryJsonParser:
@@ -628,6 +683,306 @@ class AttachmentResolver:
         return attachments
 
 
+class CollectionResolver:
+    """Resolves Zotero collections and their item memberships.
+
+    Queries the Zotero SQLite database to list collections and
+    determine which items belong to each collection.
+
+    The Zotero schema:
+    - collections: collectionID, collectionName, parentCollectionID, key
+    - collectionItems: collectionID, itemID (many-to-many junction)
+    """
+
+    def __init__(self, db_manager: DatabaseManager, key_mapper: BbtKeyMapper) -> None:
+        """Initialize collection resolver.
+
+        Args:
+            db_manager: DatabaseManager providing database access
+            key_mapper: BbtKeyMapper for resolving itemID to citekey
+        """
+        self._db_manager = db_manager
+        self._key_mapper = key_mapper
+        self._collection_cache: dict[str, ZoteroCollection] | None = None
+
+    def _load_collections(self) -> dict[str, ZoteroCollection]:
+        """Load all collections from database, indexed by name.
+
+        Returns:
+            Dictionary mapping collection name to ZoteroCollection
+        """
+        conn = self._db_manager.get_connection(DatabaseManager.ZOTERO_DB)
+
+        cursor = conn.execute(
+            """
+            SELECT collectionID, collectionName, parentCollectionID, key, libraryID
+            FROM collections
+            """
+        )
+
+        collections = {}
+        for row in cursor:
+            collection = ZoteroCollection(
+                collection_id=row["collectionID"],
+                name=row["collectionName"],
+                key=row["key"],
+                parent_id=row["parentCollectionID"],
+                library_id=row["libraryID"],
+            )
+            collections[collection.name] = collection
+
+        return collections
+
+    def _ensure_loaded(self) -> dict[str, ZoteroCollection]:
+        """Ensure collection cache is loaded."""
+        if self._collection_cache is None:
+            self._collection_cache = self._load_collections()
+        return self._collection_cache
+
+    def list_collections(self, library_id: int | None = None) -> list[ZoteroCollection]:
+        """List collections, optionally filtered by library.
+
+        Args:
+            library_id: If provided, filter to collections in this library only
+
+        Returns:
+            List of ZoteroCollection objects sorted by name
+        """
+        collections = self._ensure_loaded()
+        result = collections.values()
+
+        if library_id is not None:
+            result = [c for c in result if c.library_id == library_id]
+
+        return sorted(result, key=lambda c: c.name.lower())
+
+    def get_collection(self, name: str) -> ZoteroCollection:
+        """Get a collection by name.
+
+        Args:
+            name: Collection name (case-sensitive)
+
+        Returns:
+            ZoteroCollection
+
+        Raises:
+            ZoteroError: If collection not found (ZOTERO_COLLECTION_NOT_FOUND)
+        """
+        collections = self._ensure_loaded()
+
+        if name not in collections:
+            raise ZoteroError(
+                message=f"collection not found: {name}",
+                code=ErrorCode.ZOTERO_COLLECTION_NOT_FOUND,
+                details={"name": name, "available": list(collections.keys())},
+            )
+
+        return collections[name]
+
+    def get_item_ids_in_collection(self, collection_id: int) -> list[int]:
+        """Get all item IDs in a collection.
+
+        Args:
+            collection_id: The collection's internal ID
+
+        Returns:
+            List of itemIDs in the collection
+        """
+        conn = self._db_manager.get_connection(DatabaseManager.ZOTERO_DB)
+
+        cursor = conn.execute(
+            """
+            SELECT itemID FROM collectionItems WHERE collectionID = ?
+            """,
+            (collection_id,),
+        )
+
+        return [row["itemID"] for row in cursor]
+
+    def get_citekeys_in_collection(self, collection_name: str) -> Iterator[str]:
+        """Get all citekeys for items in a collection.
+
+        Resolves item IDs to citekeys via Better BibTeX. Items without
+        citekeys (not in BBT) are silently skipped.
+
+        Args:
+            collection_name: Collection name (case-sensitive)
+
+        Yields:
+            Citekeys for items in the collection
+
+        Raises:
+            ZoteroError: If collection not found (ZOTERO_COLLECTION_NOT_FOUND)
+        """
+        collection = self.get_collection(collection_name)
+        item_ids = self.get_item_ids_in_collection(collection.collection_id)
+
+        # Get BBT database connection for reverse lookup
+        bbt_conn = self._db_manager.get_connection(DatabaseManager.BBT_DB)
+
+        for item_id in item_ids:
+            # Look up citekey from BBT
+            cursor = bbt_conn.execute(
+                "SELECT citationKey FROM citationkey WHERE itemID = ?",
+                (item_id,),
+            )
+            row = cursor.fetchone()
+            if row is not None:
+                yield row["citationKey"]
+
+
+class LibraryResolver:
+    """Resolves Zotero libraries and provides filtering.
+
+    Queries the Zotero SQLite database to list libraries and
+    determine which items belong to each library.
+
+    The Zotero schema:
+    - libraries: libraryID, type ('user' or 'group'), editable
+    - groups: groupID, libraryID, name (for group libraries)
+    """
+
+    # Personal library is always libraryID = 1
+    PERSONAL_LIBRARY_ID = 1
+
+    def __init__(self, db_manager: DatabaseManager) -> None:
+        """Initialize library resolver.
+
+        Args:
+            db_manager: DatabaseManager providing database access
+        """
+        self._db_manager = db_manager
+        self._library_cache: dict[int, ZoteroLibrary] | None = None
+
+    def _load_libraries(self) -> dict[int, ZoteroLibrary]:
+        """Load all libraries from database, indexed by libraryID.
+
+        Returns:
+            Dictionary mapping libraryID to ZoteroLibrary
+        """
+        conn = self._db_manager.get_connection(DatabaseManager.ZOTERO_DB)
+
+        # Load base library info
+        cursor = conn.execute(
+            """
+            SELECT libraryID, type, editable FROM libraries
+            """
+        )
+
+        libraries = {}
+        for row in cursor:
+            library_id = row["libraryID"]
+            library_type = row["type"]
+
+            # Personal library gets special name
+            if library_type == "user":
+                name = "My Library"
+            else:
+                name = f"Library {library_id}"  # Default, will be overwritten
+
+            libraries[library_id] = ZoteroLibrary(
+                library_id=library_id,
+                library_type=library_type,
+                name=name,
+                editable=bool(row["editable"]),
+            )
+
+        # Load group names for group libraries
+        cursor = conn.execute(
+            """
+            SELECT libraryID, name FROM groups
+            """
+        )
+
+        for row in cursor:
+            library_id = row["libraryID"]
+            if library_id in libraries:
+                # Replace with named version
+                old = libraries[library_id]
+                libraries[library_id] = ZoteroLibrary(
+                    library_id=old.library_id,
+                    library_type=old.library_type,
+                    name=row["name"],
+                    editable=old.editable,
+                )
+
+        return libraries
+
+    def _ensure_loaded(self) -> dict[int, ZoteroLibrary]:
+        """Ensure library cache is loaded."""
+        if self._library_cache is None:
+            self._library_cache = self._load_libraries()
+        return self._library_cache
+
+    def list_libraries(self) -> list[ZoteroLibrary]:
+        """List all libraries, personal first then groups alphabetically.
+
+        Returns:
+            List of ZoteroLibrary objects
+        """
+        libraries = self._ensure_loaded()
+
+        # Sort: personal library first, then groups by name
+        def sort_key(lib: ZoteroLibrary) -> tuple[int, str]:
+            return (0 if lib.is_personal() else 1, lib.name.lower())
+
+        return sorted(libraries.values(), key=sort_key)
+
+    def get_library(self, library_id: int) -> ZoteroLibrary:
+        """Get a library by ID.
+
+        Args:
+            library_id: The library's ID (1 for personal)
+
+        Returns:
+            ZoteroLibrary
+
+        Raises:
+            ZoteroError: If library not found (ZOTERO_LIBRARY_NOT_FOUND)
+        """
+        libraries = self._ensure_loaded()
+
+        if library_id not in libraries:
+            raise ZoteroError(
+                message=f"library not found: {library_id}",
+                code=ErrorCode.ZOTERO_LIBRARY_NOT_FOUND,
+                details={"library_id": library_id, "available": list(libraries.keys())},
+            )
+
+        return libraries[library_id]
+
+    def get_personal_library(self) -> ZoteroLibrary:
+        """Get the user's personal library.
+
+        Returns:
+            ZoteroLibrary for the personal library
+
+        Raises:
+            ZoteroError: If personal library not found
+        """
+        return self.get_library(self.PERSONAL_LIBRARY_ID)
+
+    def get_item_ids_in_library(self, library_id: int) -> list[int]:
+        """Get all item IDs in a library.
+
+        Args:
+            library_id: The library's ID
+
+        Returns:
+            List of itemIDs in the library
+        """
+        conn = self._db_manager.get_connection(DatabaseManager.ZOTERO_DB)
+
+        cursor = conn.execute(
+            """
+            SELECT itemID FROM items WHERE libraryID = ?
+            """,
+            (library_id,),
+        )
+
+        return [row["itemID"] for row in cursor]
+
+
 class ZoteroReader:
     """Read-only access to Zotero library data.
 
@@ -689,6 +1044,8 @@ class ZoteroReader:
         self._db_manager = DatabaseManager(zotero_dir, temp_dir=temp_dir)
         self._key_mapper = BbtKeyMapper(self._db_manager)
         self._attachment_resolver = AttachmentResolver(self._db_manager, zotero_dir)
+        self._collection_resolver = CollectionResolver(self._db_manager, self._key_mapper)
+        self._library_resolver = LibraryResolver(self._db_manager)
 
     def get_item(self, citekey: str) -> ZoteroItem:
         """Get complete item data for a citekey.
@@ -778,6 +1135,76 @@ class ZoteroReader:
                 details={"citekey": citekey, "source": "library.json"},
             )
         return metadata
+
+    def list_collections(self, library_id: int | None = None) -> list[ZoteroCollection]:
+        """List collections, optionally filtered by library.
+
+        Args:
+            library_id: If provided, filter to collections in this library only
+
+        Returns:
+            List of ZoteroCollection objects sorted by name
+        """
+        return self._collection_resolver.list_collections(library_id=library_id)
+
+    def list_citekeys_in_collection(self, collection_name: str) -> Iterator[str]:
+        """Iterate over citekeys in a specific collection.
+
+        Args:
+            collection_name: Collection name (case-sensitive)
+
+        Yields:
+            Citekeys for items in the collection
+
+        Raises:
+            ZoteroError: If collection not found (ZOTERO_COLLECTION_NOT_FOUND)
+        """
+        return self._collection_resolver.get_citekeys_in_collection(collection_name)
+
+    def list_libraries(self) -> list[ZoteroLibrary]:
+        """List all libraries (personal and group).
+
+        Returns:
+            List of ZoteroLibrary objects, personal first then groups
+        """
+        return self._library_resolver.list_libraries()
+
+    def get_personal_library(self) -> ZoteroLibrary:
+        """Get the user's personal library.
+
+        Returns:
+            ZoteroLibrary for the personal library
+        """
+        return self._library_resolver.get_personal_library()
+
+    def list_citekeys_in_library(self, library_id: int) -> Iterator[str]:
+        """Iterate over citekeys in a specific library.
+
+        Filters to items that belong to the specified library.
+        Items without citekeys (not in BBT) are silently skipped.
+
+        Args:
+            library_id: Library ID (1 for personal library)
+
+        Yields:
+            Citekeys for items in the library
+        """
+        # Get item IDs in this library
+        item_ids = set(self._library_resolver.get_item_ids_in_library(library_id))
+
+        # Get BBT connection for citekey lookup
+        bbt_conn = self._db_manager.get_connection(DatabaseManager.BBT_DB)
+
+        for item_id in item_ids:
+            cursor = bbt_conn.execute(
+                "SELECT citationKey FROM citationkey WHERE itemID = ?",
+                (item_id,),
+            )
+            row = cursor.fetchone()
+            if row is not None:
+                # Verify it's also in library.json
+                if self._json_parser.has_citekey(row["citationKey"]):
+                    yield row["citationKey"]
 
     def refresh(self) -> None:
         """Reload library.json from disk.

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-01-28
+Last verified: 2026-01-30
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -78,7 +78,8 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - CLI interface (add, list, show, delete, open, update, review commands)
 - @citekey identifier support with fuzzy matching suggestions
 - Pagination support (--limit, --all flags on list command)
-- Zotero read-only access: ZoteroReader facade with database and JSON export backends, BetterBibTeX citekey mapping, attachment resolution
+- Zotero read-only access: ZoteroReader facade with database and JSON export backends, BetterBibTeX citekey mapping, attachment resolution, collection and library filtering
+- **Batch import from Zotero**: `zotero import` command with library/collection filtering, dry-run mode, progress tracking, and continue-on-error (defaults to personal library)
 
 **Next milestones:** M5 (embedding pipeline). See `build_plan.md` for full details.
 
@@ -168,6 +169,9 @@ All commands accepting document IDs support both UUID (full or partial) and @cit
 - `uv run local-library open <id>` - Open extracted markdown in editor (use `--pdf` for PDF, `--both` for both)
 - `uv run local-library update <id>` - Edit document metadata in editor with validation loop
 - `uv run local-library review <id>` - Combined open + update workflow for NEEDS_REVIEW documents
+- `uv run local-library zotero import` - Batch import from Zotero (personal library by default; use `--library NAME`, `--collection NAME`, `--dry-run`)
+- `uv run local-library zotero collections` - List Zotero collections (personal library by default; use `--library NAME` or `--all-libraries`)
+- `uv run local-library zotero libraries` - List available Zotero libraries (personal and group)
 - `uv run pytest` - Run tests
 - `uv run ruff check` - Lint code
 - `uv run ruff format` - Format code

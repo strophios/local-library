@@ -10,9 +10,11 @@ from local_library.core.errors import ErrorCode, ZoteroError
 from local_library.ingestion.zotero import (
     AttachmentResolver,
     BbtKeyMapper,
+    CollectionResolver,
     DatabaseManager,
     LibraryJsonParser,
     ZoteroAttachment,
+    ZoteroCollection,
     ZoteroItem,
     ZoteroReader,
 )
@@ -1278,3 +1280,329 @@ class TestZoteroReader:
             # After refresh - visible
             reader.refresh()
             assert reader.has_item("new2024") is True
+
+
+class TestZoteroCollection:
+    """Tests for ZoteroCollection dataclass."""
+
+    def test_creates_frozen_dataclass(self) -> None:
+        """ZoteroCollection should be immutable."""
+        collection = ZoteroCollection(
+            collection_id=1,
+            name="My Collection",
+            key="COLL0001",
+            parent_id=None,
+            library_id=1,
+        )
+
+        with pytest.raises(AttributeError):
+            collection.name = "Other"  # type: ignore[misc]
+
+    def test_is_top_level_true_for_no_parent(self) -> None:
+        """is_top_level should return True when parent_id is None."""
+        collection = ZoteroCollection(
+            collection_id=1,
+            name="Top Level",
+            key="TOP00001",
+            parent_id=None,
+            library_id=1,
+        )
+
+        assert collection.is_top_level() is True
+
+    def test_is_top_level_false_for_nested(self) -> None:
+        """is_top_level should return False when parent_id is set."""
+        collection = ZoteroCollection(
+            collection_id=2,
+            name="Nested",
+            key="NEST0001",
+            parent_id=1,
+            library_id=1,
+        )
+
+        assert collection.is_top_level() is False
+
+
+class TestCollectionResolver:
+    """Tests for CollectionResolver database queries."""
+
+    @pytest.fixture
+    def temp_dir(self, tmp_path: Path) -> Path:
+        """Provide a temporary directory for test files."""
+        return tmp_path
+
+    @pytest.fixture
+    def zotero_dir_with_collections(self, temp_dir: Path) -> Path:
+        """Create mock Zotero directory with collection data."""
+        zotero_path = temp_dir / "Zotero"
+        zotero_path.mkdir()
+
+        # Create zotero.sqlite with collections and items
+        zotero_db = zotero_path / "zotero.sqlite"
+        conn = sqlite3.connect(zotero_db)
+
+        # Items table
+        conn.execute("""
+            CREATE TABLE items (
+                itemID INTEGER PRIMARY KEY,
+                key TEXT NOT NULL
+            )
+        """)
+        conn.execute("INSERT INTO items (itemID, key) VALUES (100, 'ITEM0001')")
+        conn.execute("INSERT INTO items (itemID, key) VALUES (200, 'ITEM0002')")
+        conn.execute("INSERT INTO items (itemID, key) VALUES (300, 'ITEM0003')")
+
+        # Collections table
+        conn.execute("""
+            CREATE TABLE collections (
+                collectionID INTEGER PRIMARY KEY,
+                collectionName TEXT NOT NULL,
+                parentCollectionID INTEGER,
+                key TEXT NOT NULL,
+                libraryID INTEGER NOT NULL DEFAULT 1
+            )
+        """)
+        conn.execute("INSERT INTO collections VALUES (1, 'Research Papers', NULL, 'COLL0001', 1)")
+        conn.execute("INSERT INTO collections VALUES (2, 'Books', NULL, 'COLL0002', 1)")
+        conn.execute("INSERT INTO collections VALUES (3, 'ML Papers', 1, 'COLL0003', 1)")
+
+        # collectionItems junction table
+        conn.execute("""
+            CREATE TABLE collectionItems (
+                collectionID INTEGER,
+                itemID INTEGER,
+                PRIMARY KEY (collectionID, itemID)
+            )
+        """)
+        # Research Papers has items 100 and 200
+        conn.execute("INSERT INTO collectionItems VALUES (1, 100)")
+        conn.execute("INSERT INTO collectionItems VALUES (1, 200)")
+        # Books has item 300
+        conn.execute("INSERT INTO collectionItems VALUES (2, 300)")
+        # ML Papers (nested) has item 200
+        conn.execute("INSERT INTO collectionItems VALUES (3, 200)")
+
+        conn.commit()
+        conn.close()
+
+        # Create better-bibtex.sqlite with citekey mappings
+        bbt_db = zotero_path / "better-bibtex.sqlite"
+        conn = sqlite3.connect(bbt_db)
+        conn.execute("""
+            CREATE TABLE citationkey (
+                itemID INTEGER PRIMARY KEY,
+                citationKey TEXT NOT NULL
+            )
+        """)
+        conn.execute("INSERT INTO citationkey VALUES (100, 'smith2023')")
+        conn.execute("INSERT INTO citationkey VALUES (200, 'jones2022')")
+        conn.execute("INSERT INTO citationkey VALUES (300, 'brown2021')")
+        conn.commit()
+        conn.close()
+
+        return zotero_path
+
+    @pytest.fixture
+    def collection_resolver(self, zotero_dir_with_collections: Path) -> CollectionResolver:
+        """Provide CollectionResolver for tests."""
+        db_manager = DatabaseManager(zotero_dir_with_collections)
+        key_mapper = BbtKeyMapper(db_manager)
+        resolver = CollectionResolver(db_manager, key_mapper)
+        yield resolver
+        db_manager.close()
+
+    def test_list_collections_returns_all(self, collection_resolver: CollectionResolver) -> None:
+        """list_collections should return all collections."""
+        collections = collection_resolver.list_collections()
+
+        assert len(collections) == 3
+        names = [c.name for c in collections]
+        assert "Research Papers" in names
+        assert "Books" in names
+        assert "ML Papers" in names
+
+    def test_list_collections_sorted_by_name(self, collection_resolver: CollectionResolver) -> None:
+        """list_collections should return collections sorted by name."""
+        collections = collection_resolver.list_collections()
+
+        names = [c.name for c in collections]
+        assert names == sorted(names, key=str.lower)
+
+    def test_get_collection_returns_correct_data(
+        self, collection_resolver: CollectionResolver
+    ) -> None:
+        """get_collection should return correct collection data."""
+        collection = collection_resolver.get_collection("Research Papers")
+
+        assert collection.collection_id == 1
+        assert collection.name == "Research Papers"
+        assert collection.key == "COLL0001"
+        assert collection.parent_id is None
+
+    def test_get_collection_raises_for_unknown(
+        self, collection_resolver: CollectionResolver
+    ) -> None:
+        """get_collection should raise error for unknown collection."""
+        with pytest.raises(ZoteroError) as exc_info:
+            collection_resolver.get_collection("Nonexistent")
+
+        assert exc_info.value.code == ErrorCode.ZOTERO_COLLECTION_NOT_FOUND
+
+    def test_get_item_ids_in_collection(self, collection_resolver: CollectionResolver) -> None:
+        """get_item_ids_in_collection should return correct item IDs."""
+        item_ids = collection_resolver.get_item_ids_in_collection(1)
+
+        assert set(item_ids) == {100, 200}
+
+    def test_get_citekeys_in_collection(self, collection_resolver: CollectionResolver) -> None:
+        """get_citekeys_in_collection should return citekeys for items."""
+        citekeys = list(collection_resolver.get_citekeys_in_collection("Research Papers"))
+
+        assert set(citekeys) == {"smith2023", "jones2022"}
+
+    def test_get_citekeys_in_nested_collection(
+        self, collection_resolver: CollectionResolver
+    ) -> None:
+        """get_citekeys_in_collection should work for nested collections."""
+        citekeys = list(collection_resolver.get_citekeys_in_collection("ML Papers"))
+
+        assert citekeys == ["jones2022"]
+
+    def test_empty_collection_returns_empty_list(self, zotero_dir_with_collections: Path) -> None:
+        """Empty collection should return empty citekey list."""
+        # Add empty collection
+        zotero_db = zotero_dir_with_collections / "zotero.sqlite"
+        conn = sqlite3.connect(zotero_db)
+        conn.execute("INSERT INTO collections VALUES (4, 'Empty Collection', NULL, 'COLL0004', 1)")
+        conn.commit()
+        conn.close()
+
+        db_manager = DatabaseManager(zotero_dir_with_collections)
+        key_mapper = BbtKeyMapper(db_manager)
+        resolver = CollectionResolver(db_manager, key_mapper)
+
+        try:
+            citekeys = list(resolver.get_citekeys_in_collection("Empty Collection"))
+            assert citekeys == []
+        finally:
+            db_manager.close()
+
+
+class TestZoteroReaderCollections:
+    """Tests for ZoteroReader collection methods."""
+
+    @pytest.fixture
+    def temp_dir(self, tmp_path: Path) -> Path:
+        """Provide a temporary directory for test files."""
+        return tmp_path
+
+    @pytest.fixture
+    def complete_zotero_dir_with_collections(self, temp_dir: Path) -> Path:
+        """Create complete Zotero directory with collections."""
+        zotero_path = temp_dir / "Zotero"
+        zotero_path.mkdir()
+
+        # Create library.json
+        library_json = [
+            {
+                "id": "smith2023",
+                "citation-key": "smith2023",
+                "type": "article-journal",
+                "title": "A Sample Paper",
+            },
+            {
+                "id": "jones2022",
+                "citation-key": "jones2022",
+                "type": "book",
+                "title": "A Sample Book",
+            },
+        ]
+        with open(zotero_path / "library.json", "w") as f:
+            json.dump(library_json, f)
+
+        # Create zotero.sqlite
+        zotero_db = zotero_path / "zotero.sqlite"
+        conn = sqlite3.connect(zotero_db)
+
+        conn.execute("CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT)")
+        conn.execute("INSERT INTO items VALUES (100, 'ITEM0001')")
+        conn.execute("INSERT INTO items VALUES (200, 'ITEM0002')")
+
+        conn.execute("""
+            CREATE TABLE collections (
+                collectionID INTEGER PRIMARY KEY,
+                collectionName TEXT NOT NULL,
+                parentCollectionID INTEGER,
+                key TEXT NOT NULL,
+                libraryID INTEGER NOT NULL DEFAULT 1
+            )
+        """)
+        conn.execute("INSERT INTO collections VALUES (1, 'Papers', NULL, 'COLL0001', 1)")
+        conn.execute("INSERT INTO collections VALUES (2, 'Books', NULL, 'COLL0002', 1)")
+
+        conn.execute("""
+            CREATE TABLE collectionItems (
+                collectionID INTEGER,
+                itemID INTEGER
+            )
+        """)
+        conn.execute("INSERT INTO collectionItems VALUES (1, 100)")
+        conn.execute("INSERT INTO collectionItems VALUES (2, 200)")
+
+        # Attachments table (empty - no attachments needed for collection tests)
+        conn.execute("""
+            CREATE TABLE itemAttachments (
+                itemID INTEGER,
+                sourceItemID INTEGER,
+                path TEXT,
+                contentType TEXT,
+                linkMode INTEGER
+            )
+        """)
+
+        conn.commit()
+        conn.close()
+
+        # Create better-bibtex.sqlite
+        bbt_db = zotero_path / "better-bibtex.sqlite"
+        conn = sqlite3.connect(bbt_db)
+        conn.execute("""
+            CREATE TABLE citationkey (
+                itemID INTEGER PRIMARY KEY,
+                citationKey TEXT NOT NULL
+            )
+        """)
+        conn.execute("INSERT INTO citationkey VALUES (100, 'smith2023')")
+        conn.execute("INSERT INTO citationkey VALUES (200, 'jones2022')")
+        conn.commit()
+        conn.close()
+
+        return zotero_path
+
+    def test_list_collections_via_reader(self, complete_zotero_dir_with_collections: Path) -> None:
+        """ZoteroReader.list_collections should expose collection listing."""
+        with ZoteroReader(complete_zotero_dir_with_collections) as reader:
+            collections = reader.list_collections()
+
+        assert len(collections) == 2
+        assert any(c.name == "Papers" for c in collections)
+        assert any(c.name == "Books" for c in collections)
+
+    def test_list_citekeys_in_collection_via_reader(
+        self, complete_zotero_dir_with_collections: Path
+    ) -> None:
+        """ZoteroReader.list_citekeys_in_collection should filter by collection."""
+        with ZoteroReader(complete_zotero_dir_with_collections) as reader:
+            citekeys = list(reader.list_citekeys_in_collection("Papers"))
+
+        assert citekeys == ["smith2023"]
+
+    def test_list_citekeys_in_collection_raises_for_unknown(
+        self, complete_zotero_dir_with_collections: Path
+    ) -> None:
+        """list_citekeys_in_collection should raise for unknown collection."""
+        with ZoteroReader(complete_zotero_dir_with_collections) as reader:
+            with pytest.raises(ZoteroError) as exc_info:
+                list(reader.list_citekeys_in_collection("Nonexistent"))
+
+        assert exc_info.value.code == ErrorCode.ZOTERO_COLLECTION_NOT_FOUND

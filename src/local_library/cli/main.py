@@ -11,6 +11,7 @@ from local_library.cli import open as open_cmd
 from local_library.cli import review as review_cmd
 from local_library.cli import show as show_cmd
 from local_library.cli import update as update_cmd
+from local_library.cli import zotero as zotero_cmd
 
 # Create Typer app
 app = typer.Typer(
@@ -27,6 +28,7 @@ app.command(name="delete")(delete_cmd.delete)
 app.command(name="open")(open_cmd.open_doc)
 app.command(name="update")(update_cmd.update)
 app.command(name="review")(review_cmd.review)
+app.add_typer(zotero_cmd.app, name="zotero")
 
 
 def main() -> None:

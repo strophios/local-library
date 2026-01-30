@@ -345,9 +345,7 @@ class TestUpdateDocumentStatus:
         assert retrieved is not None
         assert retrieved.status == DocumentStatus.NEEDS_REVIEW
 
-    def test_preserves_extracted_path_when_not_provided(
-        self, db_conn: sqlite3.Connection
-    ) -> None:
+    def test_preserves_extracted_path_when_not_provided(self, db_conn: sqlite3.Connection) -> None:
         """update_document_status should preserve extracted_path when not explicitly set.
 
         Regression test for bug where subsequent status updates would overwrite
