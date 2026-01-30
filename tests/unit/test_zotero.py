@@ -827,7 +827,7 @@ class TestAttachmentResolver:
         conn.execute("""
             CREATE TABLE itemAttachments (
                 itemID INTEGER PRIMARY KEY,
-                sourceItemID INTEGER,
+                parentItemID INTEGER,
                 linkMode INTEGER,
                 contentType TEXT,
                 path TEXT
@@ -968,7 +968,7 @@ class TestAttachmentResolver:
         conn.execute("INSERT INTO items VALUES (201, 'LINKED01')")
         conn.execute("""
             CREATE TABLE itemAttachments (
-                itemID INTEGER, sourceItemID INTEGER,
+                itemID INTEGER, parentItemID INTEGER,
                 linkMode INTEGER, contentType TEXT, path TEXT
             )
         """)
@@ -1012,7 +1012,7 @@ class TestAttachmentResolver:
         conn.execute("INSERT INTO items VALUES (301, 'NULLATT1')")
         conn.execute("""
             CREATE TABLE itemAttachments (
-                itemID INTEGER, sourceItemID INTEGER,
+                itemID INTEGER, parentItemID INTEGER,
                 linkMode INTEGER, contentType TEXT, path TEXT
             )
         """)
@@ -1106,7 +1106,7 @@ class TestZoteroReader:
         conn.execute("INSERT INTO items VALUES (200, 'JONES001')")  # Parent (no att)
         conn.execute("""
             CREATE TABLE itemAttachments (
-                itemID INTEGER, sourceItemID INTEGER,
+                itemID INTEGER, parentItemID INTEGER,
                 linkMode INTEGER, contentType TEXT, path TEXT
             )
         """)
@@ -1553,7 +1553,7 @@ class TestZoteroReaderCollections:
         conn.execute("""
             CREATE TABLE itemAttachments (
                 itemID INTEGER,
-                sourceItemID INTEGER,
+                parentItemID INTEGER,
                 path TEXT,
                 contentType TEXT,
                 linkMode INTEGER

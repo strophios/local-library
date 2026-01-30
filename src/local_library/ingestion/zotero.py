@@ -597,7 +597,7 @@ class AttachmentResolver:
         conn = self._db_manager.get_connection(DatabaseManager.ZOTERO_DB)
 
         # Query attachments with their keys
-        # sourceItemID links attachment to parent item
+        # parentItemID links attachment to parent item (renamed from sourceItemID in Zotero 7+)
         # itemID is the attachment's own ID (for its key lookup)
         cursor = conn.execute(
             """
@@ -609,7 +609,7 @@ class AttachmentResolver:
                 ia.linkMode
             FROM itemAttachments ia
             JOIN items i ON ia.itemID = i.itemID
-            WHERE ia.sourceItemID = ?
+            WHERE ia.parentItemID = ?
             """,
             (item_id,),
         )
