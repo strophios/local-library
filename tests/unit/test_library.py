@@ -479,6 +479,28 @@ class TestLibraryDelete:
 
         assert exc_info.value.code == ErrorCode.NOT_FOUND
 
+    def test_delete_cleans_up_empty_parent_directories(
+        self, library_with_doc: tuple[Library, str, Path]
+    ) -> None:
+        """delete() should remove empty parent directories after file deletion."""
+        library, doc_id, storage_path = library_with_doc
+
+        # Verify the git-style directory structure exists (e.g., ab/cd/hash.pdf)
+        # storage_path is something like: storage_dir/ab/cd/abcdef...pdf
+        parent_dir = storage_path.parent  # e.g., storage_dir/ab/cd
+        grandparent_dir = parent_dir.parent  # e.g., storage_dir/ab
+        assert parent_dir.exists()
+        assert grandparent_dir.exists()
+
+        library.delete(doc_id, delete_files=True)
+
+        # After deletion, empty parent directories should be removed
+        assert not storage_path.exists()
+        assert not parent_dir.exists()
+        assert not grandparent_dir.exists()
+        # But the root storage_dir should still exist
+        assert library._storage_dir.exists()
+
 
 class TestLibraryPdfLLMConfiguration:
     """Tests for Library PDF LLM extraction configuration."""

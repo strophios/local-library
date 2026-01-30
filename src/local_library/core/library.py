@@ -50,6 +50,35 @@ from local_library.ingestion.text_extraction import (
 )
 
 
+def _cleanup_empty_parents(path: Path, stop_at: Path) -> None:
+    """Remove empty parent directories up to (but not including) stop_at.
+
+    Walks up the directory tree from path's parent, removing each empty
+    directory until reaching stop_at or encountering a non-empty directory.
+
+    Also removes .DS_Store files (macOS Finder metadata) since they don't
+    represent meaningful content and would otherwise prevent cleanup.
+
+    Args:
+        path: The file that was deleted (starts cleanup from its parent)
+        stop_at: Root directory to stop at (will not be removed)
+    """
+    for parent in path.parents:
+        if parent == stop_at or not parent.is_relative_to(stop_at):
+            break
+        # Remove .DS_Store if it's the only thing preventing cleanup
+        ds_store = parent / ".DS_Store"
+        if ds_store.exists():
+            try:
+                ds_store.unlink()
+            except OSError:
+                pass  # Best effort
+        try:
+            parent.rmdir()  # Only succeeds if directory is empty
+        except OSError:
+            break  # Directory not empty or other issue, stop climbing
+
+
 class Library:
     """Orchestrates document acquisition, extraction, and storage.
 
@@ -620,15 +649,17 @@ class Library:
         doc = self.get(doc_id)
 
         if delete_files:
-            # Delete storage file
+            # Delete storage file and clean up empty parent directories
             storage_path = Path(doc.storage_path)
             if storage_path.exists():
                 storage_path.unlink()
+                _cleanup_empty_parents(storage_path, self._storage_dir)
 
-            # Delete extracted file
+            # Delete extracted file and clean up empty parent directories
             if doc.extracted_path:
                 extracted_path = Path(doc.extracted_path)
                 if extracted_path.exists():
                     extracted_path.unlink()
+                    _cleanup_empty_parents(extracted_path, self._extracted_dir)
 
         return delete_document(self._conn, doc.id)
