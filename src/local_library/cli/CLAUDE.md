@@ -1,6 +1,6 @@
 # CLI Domain
 
-Last verified: 2026-01-29
+Last verified: 2026-01-30
 
 ## Purpose
 
@@ -34,6 +34,8 @@ Command-line interface for the local-library system. Provides user-facing comman
 - **Early API key validation**: `--llm` and `--llm-extract` check GEMINI_API_KEY before Library instantiation; warn and gracefully disable features if missing
 - **Zotero import as command group**: `zotero` subcommand groups Zotero-related operations; `import` subcommand handles batch import with progress tracking, `collections` lists available collections
 - **Citekey-based skip logic**: Batch import skips items whose citekey already exists in local-library (fast check); hash-based deduplication catches any that slip through
+- **Zotero citekey preservation**: Import passes Zotero's citekey to Library.add() to preserve BetterBibTeX citekeys; enables accurate deduplication on subsequent imports
+- **Batched Library recreation**: Import recreates Library every EXTRACTION_BATCH_SIZE (50) extractions to release Marker's native resources (PyTorch, multiprocessing). Defensive measure for very large imports
 - **Zotero directory detection**: Uses ZOTERO_DIR env var or platform-specific defaults (~/Zotero)
 
 ## Invariants
@@ -63,3 +65,4 @@ Command-line interface for the local-library system. Provides user-facing comman
 - Citekey uniqueness checked against all_citekeys before save
 - update_metadata() extracts indexed fields from CSL-JSON automatically
 - Review command requires extracted_path to exist (fails early if missing)
+- **Rich + Marker conflict**: Rich's progress bar must be stopped during PDF extraction. Marker's multiprocessing conflicts with Rich's terminal state on macOS, causing Objective-C runtime errors or heap corruption. Import stops progress before extraction, restarts after.

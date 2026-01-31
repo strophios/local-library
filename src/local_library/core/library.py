@@ -224,6 +224,7 @@ class Library:
         source: str,
         force: bool = False,
         metadata: dict[str, Any] | None = None,
+        citekey: str | None = None,
     ) -> AddResult:
         """Add a document to the library.
 
@@ -243,6 +244,8 @@ class Library:
             source: Path to the source file
             force: If True, create failed record for inaccessible files
             metadata: Optional CSL-JSON metadata dict
+            citekey: Optional citekey to use (bypasses generation from metadata).
+                    Useful when importing from external systems like Zotero.
 
         Returns:
             AddResult containing the document and duplicate status
@@ -333,7 +336,7 @@ class Library:
             # Process metadata
             if metadata:
                 # Explicit metadata provided
-                doc = self._process_metadata(doc, metadata)
+                doc = self._process_metadata(doc, metadata, citekey=citekey)
             elif self._text_extractor:
                 # Extract metadata from text
                 doc = self._process_text_extraction(doc, result.text)
@@ -403,12 +406,16 @@ class Library:
 
         return AddResult(document=doc)
 
-    def _process_metadata(self, doc: Document, metadata: dict[str, Any]) -> Document:
+    def _process_metadata(
+        self, doc: Document, metadata: dict[str, Any], citekey: str | None = None
+    ) -> Document:
         """Process and store metadata for a document.
 
         Args:
             doc: The document to update
             metadata: CSL-JSON metadata dict
+            citekey: Optional citekey to use instead of generating from metadata.
+                    When provided, bypasses MetadataHandler's citekey generation.
 
         Returns:
             Updated document with metadata
@@ -419,8 +426,11 @@ class Library:
         # Process metadata through handler
         result = self._metadata_handler.process(metadata)
 
+        # Use provided citekey if given, otherwise use generated one
+        effective_citekey = citekey if citekey is not None else result.citekey
+
         # Get unique citekey (handle collisions)
-        unique_citekey = get_unique_citekey(self._conn, result.citekey)
+        unique_citekey = get_unique_citekey(self._conn, effective_citekey)
 
         # Update document with metadata
         return update_document_metadata(

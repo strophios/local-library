@@ -1,6 +1,6 @@
 # Core Domain
 
-Last verified: 2026-01-28
+Last verified: 2026-01-30
 
 ## Purpose
 
@@ -16,6 +16,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
   - All errors inherit LocalLibraryError with ErrorCode for programmatic handling
   - Library dispatches to appropriate handler via `can_handle()` protocol
   - Library.add() accepts optional CSL-JSON metadata; validates and stores with collision-free citekeys
+  - Library.add() accepts optional citekey parameter to preserve external citekeys (e.g., from Zotero); bypasses citekey generation when provided
   - Library.add() extracts metadata from text when no explicit metadata provided (if text_extraction_enabled)
   - Documents with low-confidence extraction are set to NEEDS_REVIEW status
   - Library accepts `pdf_llm_enabled` parameter to enable Marker LLM-enhanced extraction for PDFs
@@ -38,6 +39,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 - **Protocol dispatch**: `_find_acquirer()` and `_find_extractor()` iterate handlers, first `can_handle()` wins
 - **Lazy Library import**: `core.__init__` uses `__getattr__` to defer Library import until first access. Breaks circular dependency: `core.__init__` -> `core.library` -> `ingestion.pdf` -> `core.errors`. Eager imports for models/errors remain since they don't cause cycles.
 - **Citekey collision handling**: `get_unique_citekey()` appends suffixes (a, b, c...) to ensure uniqueness
+- **Citekey preservation**: Library.add() accepts optional `citekey` parameter that bypasses generation. Used when importing from external systems (Zotero) to preserve existing citekeys for deduplication
 - **Text extraction integration**: Library._process_text_extraction() handles metadata extraction from document text, sets NEEDS_REVIEW when confidence is low
 - **Citekey lookup**: Library.get_by_citekey() returns Document or None; Library.get_all_citekeys() returns all non-null citekeys
 - **Metadata updates**: Library.update_metadata() allows updating status, citekey, and csl_json with automatic indexed field extraction

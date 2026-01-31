@@ -39,6 +39,13 @@ app = typer.Typer(
 console = Console()
 err_console = Console(stderr=True)
 
+# Batch size for Library recreation during import.
+# Defensive measure against resource accumulation in Marker's native code
+# (PyTorch, multiprocessing). After this many extractions, the Library is
+# closed and recreated to release resources. Set conservatively high since
+# the primary crash issue (Rich + Marker conflict) is handled separately.
+EXTRACTION_BATCH_SIZE = 50
+
 
 def get_default_zotero_dir() -> Path | None:
     """Get the default Zotero data directory based on environment or platform.
@@ -380,7 +387,12 @@ def _import_items(
     llm_extract: bool,
     json_output: bool,
 ) -> None:
-    """Import items from Zotero with progress tracking."""
+    """Import items from Zotero with progress tracking.
+
+    Uses batched Library creation to prevent memory accumulation in Marker's
+    native code. After EXTRACTION_BATCH_SIZE extractions, the Library is
+    closed and recreated to release PyTorch/multiprocessing resources.
+    """
     stats = {
         "added": 0,
         "skipped_existing": 0,
@@ -391,18 +403,31 @@ def _import_items(
     failures: list[dict] = []
 
     try:
-        with Library(pdf_llm_enabled=llm_extract) as lib:
+        # Get existing citekeys (quick operation, no extraction)
+        with Library() as lib:
             existing_citekeys = set(lib.get_all_citekeys())
 
-            # Progress display for non-JSON mode
-            if json_output:
-                _import_items_json(
-                    reader, citekeys, existing_citekeys, lib, continue_on_error, stats, failures
-                )
-            else:
-                _import_items_rich(
-                    reader, citekeys, existing_citekeys, lib, continue_on_error, stats, failures
-                )
+        # Progress display for non-JSON mode
+        if json_output:
+            _import_items_json(
+                reader,
+                citekeys,
+                existing_citekeys,
+                llm_extract,
+                continue_on_error,
+                stats,
+                failures,
+            )
+        else:
+            _import_items_rich(
+                reader,
+                citekeys,
+                existing_citekeys,
+                llm_extract,
+                continue_on_error,
+                stats,
+                failures,
+            )
     finally:
         reader.close()
 
@@ -437,12 +462,22 @@ def _import_items_rich(
     reader: ZoteroReader,
     citekeys: list[str],
     existing_citekeys: set[str],
-    lib: Library,
+    llm_extract: bool,
     continue_on_error: bool,
     stats: dict,
     failures: list,
 ) -> None:
-    """Import items with Rich progress bar."""
+    """Import items with Rich progress bar.
+
+    Creates a new Library every EXTRACTION_BATCH_SIZE items to prevent
+    memory accumulation in Marker's native code.
+
+    IMPORTANT: Rich's progress bar must be stopped during PDF extraction.
+    Marker uses multiprocessing which conflicts with Rich's terminal state
+    on macOS, causing Objective-C runtime errors ("bad weak table") or
+    heap corruption. We stop the progress bar before extraction and
+    restart it after.
+    """
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -454,36 +489,104 @@ def _import_items_rich(
     ) as progress:
         task = progress.add_task("Importing...", total=len(citekeys))
 
-        for citekey in citekeys:
-            progress.update(task, description=f"@{citekey[:20]}...")
+        lib: Library | None = None
+        items_since_restart = 0
 
-            result = _process_single_item(
-                reader, citekey, existing_citekeys, lib, continue_on_error, stats, failures
-            )
+        try:
+            for citekey in citekeys:
+                progress.update(task, description=f"@{citekey[:20]}...")
 
-            if result == "abort":
-                break
+                # Create or recreate Library as needed
+                if lib is None or items_since_restart >= EXTRACTION_BATCH_SIZE:
+                    if lib is not None:
+                        lib.close()
+                    lib = Library(pdf_llm_enabled=llm_extract)
+                    items_since_restart = 0
 
-            progress.advance(task)
+                # Check if this item will need extraction (not a skip)
+                will_extract = (
+                    citekey not in existing_citekeys
+                    and _item_has_pdf(reader, citekey)
+                )
+
+                # Stop progress bar during extraction to avoid conflict with
+                # Marker's multiprocessing on macOS
+                if will_extract:
+                    progress.stop()
+
+                result = _process_single_item(
+                    reader, citekey, existing_citekeys, lib, continue_on_error, stats, failures
+                )
+
+                # Restart progress bar after extraction
+                if will_extract:
+                    progress.start()
+
+                # Only count items that actually triggered extraction
+                if result == "extracted":
+                    items_since_restart += 1
+
+                if result == "abort":
+                    break
+
+                progress.advance(task)
+        finally:
+            if lib is not None:
+                lib.close()
 
 
 def _import_items_json(
     reader: ZoteroReader,
     citekeys: list[str],
     existing_citekeys: set[str],
-    lib: Library,
+    llm_extract: bool,
     continue_on_error: bool,
     stats: dict,
     failures: list,
 ) -> None:
-    """Import items in JSON mode (no progress display)."""
-    for citekey in citekeys:
-        result = _process_single_item(
-            reader, citekey, existing_citekeys, lib, continue_on_error, stats, failures
-        )
+    """Import items in JSON mode (no progress display).
 
-        if result == "abort":
-            break
+    Creates a new Library every EXTRACTION_BATCH_SIZE items to prevent
+    memory accumulation in Marker's native code.
+    """
+    lib: Library | None = None
+    items_since_restart = 0
+
+    try:
+        for citekey in citekeys:
+            # Create or recreate Library as needed
+            if lib is None or items_since_restart >= EXTRACTION_BATCH_SIZE:
+                if lib is not None:
+                    lib.close()
+                lib = Library(pdf_llm_enabled=llm_extract)
+                items_since_restart = 0
+
+            result = _process_single_item(
+                reader, citekey, existing_citekeys, lib, continue_on_error, stats, failures
+            )
+
+            # Only count items that actually triggered extraction
+            if result == "extracted":
+                items_since_restart += 1
+
+            if result == "abort":
+                break
+    finally:
+        if lib is not None:
+            lib.close()
+
+
+def _item_has_pdf(reader: ZoteroReader, citekey: str) -> bool:
+    """Check if a Zotero item has a PDF attachment that exists.
+
+    Used to determine if extraction will be needed (for progress bar handling).
+    """
+    try:
+        item = reader.get_item(citekey)
+        pdfs = item.pdf_attachments()
+        return bool(pdfs) and pdfs[0].path.exists()
+    except ZoteroError:
+        return False
 
 
 def _process_single_item(
@@ -498,7 +601,9 @@ def _process_single_item(
     """Process a single Zotero item for import.
 
     Returns:
-        "continue" to keep processing, "abort" to stop
+        "continue" - item processed without extraction (skipped or duplicate)
+        "extracted" - PDF extraction was performed (counts toward batch limit)
+        "abort" - error occurred and should stop processing
     """
     # Skip if citekey already exists
     if citekey in existing_citekeys:
@@ -531,29 +636,31 @@ def _process_single_item(
             return "abort"
         return "continue"
 
-    # Import the PDF with metadata
+    # Import the PDF with metadata, preserving Zotero's citekey
     try:
-        result = lib.add(str(pdf.path), metadata=item.csl_json)
+        result = lib.add(str(pdf.path), metadata=item.csl_json, citekey=citekey)
 
         if result.is_duplicate:
             stats["skipped_duplicate"] += 1
+            return "continue"  # No extraction happened
         else:
             stats["added"] += 1
             existing_citekeys.add(citekey)  # Track newly added
+            return "extracted"  # Extraction was performed
 
     except (AcquisitionError, MetadataError) as e:
         stats["failed"] += 1
         failures.append({"citekey": citekey, "error": e.message})
         if not continue_on_error:
             return "abort"
+        return "continue"
     except (ExtractionError, QualityError) as e:
-        # Document was created but extraction failed
+        # Document was created but extraction failed - still counts as extraction attempt
         stats["failed"] += 1
         failures.append({"citekey": citekey, "error": f"extraction failed: {e.message}"})
         if not continue_on_error:
             return "abort"
-
-    return "continue"
+        return "extracted"  # Extraction was attempted (counts toward batch limit)
 
 
 @app.command(name="libraries")
