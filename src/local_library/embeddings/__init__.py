@@ -30,6 +30,10 @@ def __getattr__(name: str) -> object:
         from local_library.embeddings.chunking import estimate_token_count
 
         return estimate_token_count
+    elif name == "NomicEmbedder":
+        from local_library.embeddings.nomic import NomicEmbedder
+
+        return NomicEmbedder
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -42,6 +46,7 @@ __all__ = [
     "ChunkEmbedding",
     # Implementations
     "MarkdownChunker",
+    "NomicEmbedder",
     # Utilities
     "estimate_token_count",
 ]
