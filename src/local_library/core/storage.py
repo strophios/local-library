@@ -13,6 +13,7 @@ from uuid import UUID
 
 from local_library.core.errors import ErrorCode, LookupError, StorageError
 from local_library.core.models import Document, DocumentStatus, EmbeddingStatus
+from local_library.core.vec_extension import load_vec_extension, create_vec0_table
 
 # Schema version for migrations
 SCHEMA_VERSION = 3
@@ -40,6 +41,18 @@ CREATE TABLE IF NOT EXISTS documents (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS chunks (
+    chunk_id TEXT PRIMARY KEY,
+    doc_id TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    section TEXT,
+    char_start INTEGER,
+    char_end INTEGER,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (doc_id) REFERENCES documents(id) ON DELETE CASCADE
+);
 """
 
 SCHEMA_INDEXES = """
@@ -49,6 +62,7 @@ CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
 CREATE INDEX IF NOT EXISTS idx_documents_citekey ON documents(citekey);
 CREATE INDEX IF NOT EXISTS idx_documents_title ON documents(title);
 CREATE INDEX IF NOT EXISTS idx_documents_issued_date ON documents(issued_date);
+CREATE INDEX IF NOT EXISTS idx_chunks_doc_id ON chunks(doc_id);
 """
 
 SCHEMA = SCHEMA_TABLES + SCHEMA_INDEXES
@@ -93,6 +107,43 @@ def transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
         raise
 
 
+def _create_fts5_and_triggers(conn: sqlite3.Connection) -> None:
+    """Create FTS5 table and triggers for chunks.
+
+    Helper to avoid duplication between init_schema and migration.
+    """
+    # Create FTS5 table for full-text search on chunks
+    conn.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+            text,
+            content='chunks',
+            content_rowid='rowid'
+        )
+    """)
+
+    # Create triggers to keep FTS5 in sync with chunks table
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS chunks_fts_insert AFTER INSERT ON chunks BEGIN
+            INSERT INTO chunks_fts(rowid, text) VALUES (NEW.rowid, NEW.text);
+        END
+    """)
+
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS chunks_fts_delete AFTER DELETE ON chunks BEGIN
+            INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', OLD.rowid, OLD.text);
+        END
+    """)
+
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS chunks_fts_update AFTER UPDATE ON chunks BEGIN
+            INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', OLD.rowid, OLD.text);
+            INSERT INTO chunks_fts(rowid, text) VALUES (NEW.rowid, NEW.text);
+        END
+    """)
+
+    conn.commit()
+
+
 def init_schema(conn: sqlite3.Connection) -> None:
     """Initialize the database schema.
 
@@ -113,6 +164,11 @@ def init_schema(conn: sqlite3.Connection) -> None:
         # New database: set to current schema version
         conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
         conn.commit()
+        # Create FTS5 table and triggers for new databases
+        _create_fts5_and_triggers(conn)
+        # Create vec0 table if available
+        if load_vec_extension(conn):
+            create_vec0_table(conn, "chunk_vectors", dimensions=768, distance_metric="cosine")
     elif row["version"] < SCHEMA_VERSION:
         # Step 3: Run migration before creating indexes (migration adds columns)
         migrate_schema(conn)
@@ -198,41 +254,14 @@ def _migrate_v2_to_v3(conn: sqlite3.Connection) -> None:
         )
     """)
 
-    # Create index on doc_id for efficient document-scoped queries
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_chunks_doc_id ON chunks(doc_id)"
-    )
-
-    # Create FTS5 table for full-text search on chunks
-    conn.execute("""
-        CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
-            text,
-            content='chunks',
-            content_rowid='rowid'
-        )
-    """)
-
-    # Create triggers to keep FTS5 in sync with chunks table
-    conn.execute("""
-        CREATE TRIGGER IF NOT EXISTS chunks_fts_insert AFTER INSERT ON chunks BEGIN
-            INSERT INTO chunks_fts(rowid, text) VALUES (NEW.rowid, NEW.text);
-        END
-    """)
-
-    conn.execute("""
-        CREATE TRIGGER IF NOT EXISTS chunks_fts_delete AFTER DELETE ON chunks BEGIN
-            INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', OLD.rowid, OLD.text);
-        END
-    """)
-
-    conn.execute("""
-        CREATE TRIGGER IF NOT EXISTS chunks_fts_update AFTER UPDATE ON chunks BEGIN
-            INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', OLD.rowid, OLD.text);
-            INSERT INTO chunks_fts(rowid, text) VALUES (NEW.rowid, NEW.text);
-        END
-    """)
-
     conn.commit()
+
+    # Create FTS5 and triggers
+    _create_fts5_and_triggers(conn)
+
+    # Create vec0 table for chunk embeddings (only if sqlite-vec is available)
+    if load_vec_extension(conn):
+        create_vec0_table(conn, "chunk_vectors", dimensions=768, distance_metric="cosine")
 
 
 def _row_to_document(row: sqlite3.Row) -> Document:
