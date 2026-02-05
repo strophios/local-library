@@ -108,9 +108,7 @@ class TestNomicEmbedderWithMocks:
     ) -> None:
         """embed_query should prepend 'search_query: ' to text."""
         # For single text, encode returns shape (768,)
-        mock_model.encode = MagicMock(
-            return_value=np.random.randn(768).astype(np.float32)
-        )
+        mock_model.encode = MagicMock(return_value=np.random.randn(768).astype(np.float32))
 
         embedder_with_mock.embed_query("What is machine learning?")
 
@@ -122,9 +120,7 @@ class TestNomicEmbedderWithMocks:
         self, embedder_with_mock: NomicEmbedder, mock_model
     ) -> None:
         """embed_query should return a 1D array of shape (768,)."""
-        mock_model.encode = MagicMock(
-            return_value=np.random.randn(768).astype(np.float32)
-        )
+        mock_model.encode = MagicMock(return_value=np.random.randn(768).astype(np.float32))
 
         result = embedder_with_mock.embed_query("Test query")
 
@@ -151,9 +147,7 @@ class TestNomicEmbedderWithMocks:
         result = embedder_with_mock.embed_texts([])
         assert result.shape == (0, 768)
 
-    def test_embeddings_are_float32(
-        self, embedder_with_mock: NomicEmbedder
-    ) -> None:
+    def test_embeddings_are_float32(self, embedder_with_mock: NomicEmbedder) -> None:
         """All returned embeddings should be float32."""
         chunks = [Chunk.create(uuid4(), 0, "Test")]
 
@@ -167,7 +161,10 @@ class TestNomicEmbedderErrorHandling:
 
     def test_model_load_failure_raises_embedding_error(self) -> None:
         """Failed model loading should raise EmbeddingError."""
-        with patch("sentence_transformers.SentenceTransformer", side_effect=Exception("Model not found")):
+        with patch(
+            "sentence_transformers.SentenceTransformer",
+            side_effect=Exception("Model not found"),
+        ):
             embedder = NomicEmbedder(lazy_load=True)
 
             with pytest.raises(EmbeddingError) as exc_info:
@@ -219,18 +216,14 @@ class TestNomicEmbedderIntegration:
 
         assert embedding.shape == (768,)
 
-    def test_normalized_embeddings_have_unit_norm(
-        self, real_embedder: NomicEmbedder
-    ) -> None:
+    def test_normalized_embeddings_have_unit_norm(self, real_embedder: NomicEmbedder) -> None:
         """Normalized embeddings should have L2 norm close to 1."""
         embedding = real_embedder.embed_query("Test query")
 
         norm = np.linalg.norm(embedding)
         assert abs(norm - 1.0) < 0.01  # Allow small floating point error
 
-    def test_similar_texts_have_similar_embeddings(
-        self, real_embedder: NomicEmbedder
-    ) -> None:
+    def test_similar_texts_have_similar_embeddings(self, real_embedder: NomicEmbedder) -> None:
         """Semantically similar texts should have similar embeddings."""
         emb1 = real_embedder.embed_query("machine learning algorithms")
         emb2 = real_embedder.embed_query("ML models and algorithms")

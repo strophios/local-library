@@ -2,7 +2,7 @@
 
 # pattern: Imperative Shell (requires model loading and GPU/CPU inference)
 
-from typing import Callable
+from collections.abc import Callable
 
 import numpy as np
 from numpy.typing import NDArray
@@ -126,7 +126,7 @@ class NomicEmbedder:
 
             # Wrap in ChunkEmbedding objects
             results = []
-            for chunk, embedding in zip(chunks, embeddings):
+            for chunk, embedding in zip(chunks, embeddings, strict=True):
                 chunk_emb = ChunkEmbedding(
                     chunk=chunk,
                     embedding=embedding.astype(np.float32),
