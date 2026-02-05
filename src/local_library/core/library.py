@@ -429,6 +429,7 @@ class Library:
         8. Extract text content
         9. Process metadata (if provided)
         10. Update record status
+        11. Embed document (if embed_on_add=True and sqlite-vec available)
 
         Args:
             source: Path to the source file
@@ -542,6 +543,16 @@ class Library:
             )
             # Re-raise so caller knows extraction failed
             raise
+
+        # Embed the document (if enabled and sqlite-vec available)
+        if self._embed_on_add:
+            try:
+                self.embed(str(doc.id))
+            except Exception:
+                # Embedding failure is non-fatal for add()
+                # Document is still usable, just not searchable via vectors
+                # Status remains PENDING, can retry via `local-library embed`
+                pass
 
         return AddResult(document=doc)
 
