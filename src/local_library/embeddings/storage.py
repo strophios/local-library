@@ -239,12 +239,11 @@ class EmbeddingStorage:
                        c.text, c.section, c.char_start, c.char_end, c.created_at
                 FROM chunk_vectors cv
                 JOIN chunks c ON cv.chunk_id = c.chunk_id
-                WHERE cv.embedding MATCH ?
+                WHERE cv.embedding MATCH ? AND k = ?
                   AND c.doc_id IN ({placeholders})
                 ORDER BY cv.distance
-                LIMIT ?
                 """,
-                [query_blob] + [str(d) for d in doc_ids] + [limit],
+                [query_blob, limit] + [str(d) for d in doc_ids],
             )
         else:
             cursor = self._conn.execute(
@@ -253,9 +252,8 @@ class EmbeddingStorage:
                        c.text, c.section, c.char_start, c.char_end, c.created_at
                 FROM chunk_vectors cv
                 JOIN chunks c ON cv.chunk_id = c.chunk_id
-                WHERE cv.embedding MATCH ?
+                WHERE cv.embedding MATCH ? AND k = ?
                 ORDER BY cv.distance
-                LIMIT ?
                 """,
                 [query_blob, limit],
             )
