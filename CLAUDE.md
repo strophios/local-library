@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-01-30
+Last verified: 2026-02-04
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -52,9 +52,9 @@ Each document record contains:
 
 Development follows a **pipeline-first, layer-complete** approach documented in `build_philosophy.md`. The key insight: pipeline stages (vertical data flow) and architectural layers (horizontal concerns) are orthogonal. Build along the pipeline for rapid feedback; implement layers completely when touched.
 
-### Current Status: M1-M4 + M3b Complete (Record Storage + Extraction + Metadata + Zotero Reader + Text Extraction)
+### Current Status: M1-M5 Complete (Record Storage + Extraction + Metadata + Zotero Reader + Text Extraction + Embedding Pipeline)
 
-Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), M3b (text-based metadata extraction), and M4 (Zotero read-only access) are implemented. The system can:
+Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), M3b (text-based metadata extraction), M4 (Zotero read-only access), and M5 (embedding pipeline) are implemented. The system can:
 - Ingest local PDF files via CLI (`local-library add <path>`)
 - Accept explicit CSL-JSON metadata (`--metadata <file>`)
 - Extract text to markdown via Marker
@@ -65,6 +65,9 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - Store documents in content-addressable storage with SQLite metadata
 - Query, list, and delete documents via CLI
 - Read items, attachments, and metadata from Zotero library (via database or BetterBibTeX JSON export)
+- **Compute and store embeddings for semantic search** (`local-library embed`)
+- **Chunk documents using section-aware markdown splitting**
+- **Store 768-dimensional vectors in sqlite-vec for similarity search**
 
 **Implemented:**
 - PDF ingestion from local filesystem
@@ -80,8 +83,13 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - Pagination support (--limit, --all flags on list command)
 - Zotero read-only access: ZoteroReader facade with database and JSON export backends, BetterBibTeX citekey mapping, attachment resolution, collection and library filtering
 - **Batch import from Zotero**: `zotero import` command with library/collection filtering, dry-run mode, progress tracking, and continue-on-error (defaults to personal library)
+- **Embedding pipeline**: Section-aware chunking via LangChain, 768-dim vectors via nomic-embed-text-v1.5, sqlite-vec storage
+- **CLI embed command**: `local-library embed` with --pending, --all, --force options
+- **Automatic embedding on add**: Documents embedded by default (--skip-embed to disable)
+- **Embedding status tracking**: PENDING, CURRENT, STALE lifecycle
+- **Cascade deletion**: Embeddings deleted when parent document deleted
 
-**Next milestones:** M5 (embedding pipeline). See `build_plan.md` for full details.
+**Next milestones:** M6 (search interface). See `build_plan.md` for full details.
 
 **Deferred to later phases:** M3c (API metadata enrichment), web content ingestion, Zotero sync, citation tooling, auto-tagging, note management, Neovim plugin. See `future_roadmap.md` for full details.
 
@@ -98,9 +106,10 @@ Four horizontal concerns cut across the system:
 
 - **Web extraction**: trafilatura, readability-lxml
 - **PDF extraction**: Marker (primary), olmOCR (for scanned historical documents on remote GPU)
-- **Embeddings**: nomic-embed-text-v1.5 (local, 1024 dims, 8192 context)
+- **Chunking**: langchain-text-splitters (MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter)
+- **Embeddings**: sentence-transformers with nomic-embed-text-v1.5 (768 dims, 8192 context)
+- **Vector storage**: sqlite-vec v0.1.6+ (vec0 virtual tables for k-NN search)
 - **Metadata**: CrossRef API, GROBID (for academic PDFs), Open Graph tags (for web)
-- **Vector storage**: sqlite-vec (v0.1.6+), SQLite FTS5 for hybrid search
 - **LLM interface**: Custom RAGInterface + LiteLLM for provider abstraction
 - **Citations**: citeproc-py against CSL-JSON
 
@@ -172,6 +181,10 @@ All commands accepting document IDs support both UUID (full or partial) and @cit
 - `uv run local-library zotero import` - Batch import from Zotero (personal library by default; use `--library NAME`, `--collection NAME`, `--dry-run`)
 - `uv run local-library zotero collections` - List Zotero collections (personal library by default; use `--library NAME` or `--all-libraries`)
 - `uv run local-library zotero libraries` - List available Zotero libraries (personal and group)
+- `uv run local-library embed <id>` - Embed a single document
+- `uv run local-library embed --pending` - Embed all documents needing embedding
+- `uv run local-library embed --all --force` - Re-embed all documents
+- `uv run local-library add <path> --skip-embed` - Add without automatic embedding
 - `uv run pytest` - Run tests
 - `uv run ruff check` - Lint code
 - `uv run ruff format` - Format code
@@ -187,6 +200,11 @@ src/local_library/
 │   ├── errors.py        # Exception hierarchy with ErrorCode (Functional Core)
 │   ├── storage.py       # SQLite CRUD operations (Imperative Shell)
 │   └── library.py       # Library orchestrator (Imperative Shell)
+├── embeddings/          # Domain: chunking, embedding, vector storage
+│   ├── base.py          # Protocols: Chunker, Embedder; Models: Chunk, ChunkEmbedding
+│   ├── chunking.py      # MarkdownChunker (LangChain splitters)
+│   ├── nomic.py         # NomicEmbedder (sentence-transformers)
+│   └── storage.py       # EmbeddingStorage (sqlite-vec operations)
 ├── ingestion/           # Domain: content acquisition and extraction
 │   ├── base.py          # Protocols: ContentAcquirer, ContentExtractor
 │   ├── file.py          # FileAcquirer implementation
@@ -206,7 +224,7 @@ src/local_library/
     └── utils.py         # Shared utilities (identifier resolution, fuzzy matching)
 ```
 
-See `src/local_library/core/CLAUDE.md`, `src/local_library/ingestion/CLAUDE.md`, and `src/local_library/cli/CLAUDE.md` for domain contracts.
+See `src/local_library/core/CLAUDE.md`, `src/local_library/embeddings/CLAUDE.md`, `src/local_library/ingestion/CLAUDE.md`, and `src/local_library/cli/CLAUDE.md` for domain contracts.
 
 ## Background Documentation
 
