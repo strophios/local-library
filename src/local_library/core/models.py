@@ -19,6 +19,14 @@ class DocumentStatus(str, Enum):
     NEEDS_REVIEW = "needs_review"  # Extraction succeeded but confidence is low
 
 
+class EmbeddingStatus(str, Enum):
+    """Embedding state of a document."""
+
+    PENDING = "pending"  # No embeddings yet (new document or embedding failed)
+    CURRENT = "current"  # Embeddings match current extracted text
+    STALE = "stale"  # Extracted text changed; embeddings need refresh
+
+
 @dataclass(frozen=True)
 class Document:
     """A document record in the library.
@@ -47,6 +55,8 @@ class Document:
     error_message: str | None = None
     error_code: str | None = None
 
+    embedding_status: EmbeddingStatus = EmbeddingStatus.PENDING  # Embedding state
+
     @classmethod
     def create_pending(
         cls,
@@ -62,6 +72,7 @@ class Document:
             content_hash=content_hash,
             storage_path=storage_path,
             status=DocumentStatus.PENDING,
+            embedding_status=EmbeddingStatus.PENDING,
             created_at=now,
             updated_at=now,
         )

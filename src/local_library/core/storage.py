@@ -12,10 +12,11 @@ from typing import Any
 from uuid import UUID
 
 from local_library.core.errors import ErrorCode, LookupError, StorageError
-from local_library.core.models import Document, DocumentStatus
+from local_library.core.models import Document, DocumentStatus, EmbeddingStatus
+from local_library.core.vec_extension import create_vec0_table, load_vec_extension
 
 # Schema version for migrations
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 SCHEMA_TABLES = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -36,8 +37,21 @@ CREATE TABLE IF NOT EXISTS documents (
     issued_date TEXT,
     error_message TEXT,
     error_code TEXT,
+    embedding_status TEXT DEFAULT 'pending',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS chunks (
+    chunk_id TEXT PRIMARY KEY,
+    doc_id TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    section TEXT,
+    char_start INTEGER,
+    char_end INTEGER,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (doc_id) REFERENCES documents(id) ON DELETE CASCADE
 );
 """
 
@@ -48,6 +62,7 @@ CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
 CREATE INDEX IF NOT EXISTS idx_documents_citekey ON documents(citekey);
 CREATE INDEX IF NOT EXISTS idx_documents_title ON documents(title);
 CREATE INDEX IF NOT EXISTS idx_documents_issued_date ON documents(issued_date);
+CREATE INDEX IF NOT EXISTS idx_chunks_doc_id ON chunks(doc_id);
 """
 
 SCHEMA = SCHEMA_TABLES + SCHEMA_INDEXES
@@ -92,6 +107,43 @@ def transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
         raise
 
 
+def _create_fts5_and_triggers(conn: sqlite3.Connection) -> None:
+    """Create FTS5 table and triggers for chunks.
+
+    Helper to avoid duplication between init_schema and migration.
+    """
+    # Create FTS5 table for full-text search on chunks
+    conn.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+            text,
+            content='chunks',
+            content_rowid='rowid'
+        )
+    """)
+
+    # Create triggers to keep FTS5 in sync with chunks table
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS chunks_fts_insert AFTER INSERT ON chunks BEGIN
+            INSERT INTO chunks_fts(rowid, text) VALUES (NEW.rowid, NEW.text);
+        END
+    """)
+
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS chunks_fts_delete AFTER DELETE ON chunks BEGIN
+            INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', OLD.rowid, OLD.text);
+        END
+    """)
+
+    conn.execute("""
+        CREATE TRIGGER IF NOT EXISTS chunks_fts_update AFTER UPDATE ON chunks BEGIN
+            INSERT INTO chunks_fts(chunks_fts, rowid, text) VALUES('delete', OLD.rowid, OLD.text);
+            INSERT INTO chunks_fts(rowid, text) VALUES (NEW.rowid, NEW.text);
+        END
+    """)
+
+    conn.commit()
+
+
 def init_schema(conn: sqlite3.Connection) -> None:
     """Initialize the database schema.
 
@@ -112,6 +164,11 @@ def init_schema(conn: sqlite3.Connection) -> None:
         # New database: set to current schema version
         conn.execute("INSERT INTO schema_version (version) VALUES (?)", (SCHEMA_VERSION,))
         conn.commit()
+        # Create FTS5 table and triggers for new databases
+        _create_fts5_and_triggers(conn)
+        # Create vec0 table if available
+        if load_vec_extension(conn):
+            create_vec0_table(conn, "chunk_vectors", dimensions=768, distance_metric="cosine")
     elif row["version"] < SCHEMA_VERSION:
         # Step 3: Run migration before creating indexes (migration adds columns)
         migrate_schema(conn)
@@ -135,6 +192,9 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
     if current_version < 2:
         # Migration to v2: Add indexed metadata columns
         _migrate_v1_to_v2(conn)
+
+    if current_version < 3:
+        _migrate_v2_to_v3(conn)
 
     # Update schema version
     conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
@@ -164,6 +224,44 @@ def _migrate_v1_to_v2(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _migrate_v2_to_v3(conn: sqlite3.Connection) -> None:
+    """Migrate from schema v2 to v3: add embedding support.
+
+    Adds embedding_status column to documents table.
+    Creates chunks table, chunk_vectors vec0 table, and chunks_fts FTS5 table.
+    """
+    # Check if embedding_status column already exists (idempotent)
+    cursor = conn.execute("PRAGMA table_info(documents)")
+    existing_columns = {row["name"] for row in cursor.fetchall()}
+
+    if "embedding_status" not in existing_columns:
+        conn.execute("ALTER TABLE documents ADD COLUMN embedding_status TEXT DEFAULT 'pending'")
+
+    # Create chunks table for storing chunk metadata and text
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS chunks (
+            chunk_id TEXT PRIMARY KEY,
+            doc_id TEXT NOT NULL,
+            chunk_index INTEGER NOT NULL,
+            text TEXT NOT NULL,
+            section TEXT,
+            char_start INTEGER,
+            char_end INTEGER,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (doc_id) REFERENCES documents(id) ON DELETE CASCADE
+        )
+    """)
+
+    conn.commit()
+
+    # Create FTS5 and triggers
+    _create_fts5_and_triggers(conn)
+
+    # Create vec0 table for chunk embeddings (only if sqlite-vec is available)
+    if load_vec_extension(conn):
+        create_vec0_table(conn, "chunk_vectors", dimensions=768, distance_metric="cosine")
+
+
 def _row_to_document(row: sqlite3.Row) -> Document:
     """Convert a database row to a Document object."""
     csl_json = None
@@ -184,6 +282,11 @@ def _row_to_document(row: sqlite3.Row) -> Document:
         issued_date=row["issued_date"],
         error_message=row["error_message"],
         error_code=row["error_code"],
+        embedding_status=(
+            EmbeddingStatus(row["embedding_status"])
+            if row["embedding_status"]
+            else EmbeddingStatus.PENDING
+        ),
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(row["updated_at"]),
     )

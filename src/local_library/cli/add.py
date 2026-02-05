@@ -91,6 +91,13 @@ def add(
             help="Enable Marker LLM extraction (tables, math, images). Requires GEMINI_API_KEY.",
         ),
     ] = False,
+    skip_embed: Annotated[
+        bool,
+        typer.Option(
+            "--skip-embed",
+            help="Skip automatic embedding after extraction",
+        ),
+    ] = False,
     json_output: Annotated[
         bool,
         typer.Option("--json", "-j", help="Output result as JSON"),
@@ -103,6 +110,10 @@ def add(
 
     Optionally provide CSL-JSON metadata with --metadata for bibliographic
     information like title, authors, and publication date.
+
+    By default, documents are automatically embedded after extraction for
+    semantic search. Use --skip-embed to disable this (useful for batch
+    operations where you'll run `local-library embed --pending` afterwards).
     """
     # Load metadata if provided
     metadata = None
@@ -130,6 +141,7 @@ def add(
             text_extraction_llm_enabled=effective_llm,
             text_extraction_llm_model=llm_model,
             pdf_llm_enabled=effective_llm_extract,
+            embed_on_add=not skip_embed,
         ) as lib:
             result = lib.add(str(path), force=force, metadata=metadata)
     except AcquisitionError as e:

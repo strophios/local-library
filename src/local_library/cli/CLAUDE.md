@@ -1,6 +1,6 @@
 # CLI Domain
 
-Last verified: 2026-01-30
+Last verified: 2026-02-05
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 
 ## Contracts
 
-- **Exposes**: CLI commands (add, list, show, delete, open, update, review), zotero command group (import, collections), identifier resolution utilities
+- **Exposes**: CLI commands (add, list, show, delete, open, update, review, embed), zotero command group (import, collections), identifier resolution utilities
 - **Guarantees**:
   - All commands accepting document IDs support UUID (full or partial) and @citekey syntax
   - Failed citekey lookups provide fuzzy match suggestions (Levenshtein distance + prefix matching)
@@ -16,6 +16,8 @@ Command-line interface for the local-library system. Provides user-facing comman
   - Editor detection: nvim > vim > $EDITOR fallback
   - PDF opens non-blocking; markdown opens blocking
   - Both `--llm` and `--llm-extract` flags validate GEMINI_API_KEY early, warn and disable if missing
+  - embed command requires sqlite-vec; fails gracefully with helpful error if unavailable
+  - --skip-embed flag available on add and zotero import for batch workflows
 - **Expects**: Library context manager for database access; editor available for update/review/open commands
 
 ## Dependencies
@@ -37,6 +39,9 @@ Command-line interface for the local-library system. Provides user-facing comman
 - **Zotero citekey preservation**: Import passes Zotero's citekey to Library.add() to preserve BetterBibTeX citekeys; enables accurate deduplication on subsequent imports
 - **Batched Library recreation**: Import recreates Library every EXTRACTION_BATCH_SIZE (50) extractions to release Marker's native resources (PyTorch, multiprocessing). Defensive measure for very large imports
 - **Zotero directory detection**: Uses ZOTERO_DIR env var or platform-specific defaults (~/Zotero)
+- **Embed command modes**: Three orthogonal modes (single doc, --pending, --all) with mutual exclusivity validation; --force re-embeds existing; --dry-run non-destructive
+- **Skip embed flags**: --skip-embed on add/zotero import defers embedding to separate batch operation for faster ingestion; allows bulk embedding in single batch call
+- **Batch error logging**: Batch embedding catches exceptions and logs them to stderr per-document for visibility; --json output suppresses per-document logs but includes final count
 
 ## Invariants
 
@@ -56,6 +61,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 - `open.py` - Open command with --pdf/--both flags, `find_editor()`
 - `update.py` - Update command with editor-based validation loop
 - `review.py` - Review command (open --both + update composition)
+- `embed.py` - Embed command with --pending, --all, --force, --dry-run options
 - `zotero.py` - Zotero command group with `import` (batch import with progress) and `collections` (list collections)
 
 ## Gotchas
