@@ -11,7 +11,7 @@ from numpy.typing import NDArray
 
 from local_library.core.errors import EmbeddingError, ErrorCode
 from local_library.core.models import EmbeddingStatus
-from local_library.core.vec_extension import load_vec_extension, require_vec_extension
+from local_library.core.vec_extension import require_vec_extension
 from local_library.embeddings.base import Chunk, ChunkEmbedding
 
 

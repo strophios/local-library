@@ -23,7 +23,6 @@ from local_library.embeddings.storage import (
     update_embedding_status,
 )
 
-
 # Skip all tests in this module if sqlite-vec is not available
 pytestmark = pytest.mark.skipif(
     not is_vec_available(),
@@ -66,9 +65,7 @@ def make_chunk_embedding(doc_id, index: int = 0, text: str = "Test text") -> Chu
 class TestEmbeddingStorage:
     """Tests for EmbeddingStorage class."""
 
-    def test_store_single_embedding(
-        self, storage: EmbeddingStorage, sample_doc
-    ) -> None:
+    def test_store_single_embedding(self, storage: EmbeddingStorage, sample_doc) -> None:
         """Should store a single chunk and embedding."""
         _, doc_id = sample_doc
         emb = make_chunk_embedding(doc_id)
@@ -77,9 +74,7 @@ class TestEmbeddingStorage:
 
         assert storage.get_chunk_count(doc_id) == 1
 
-    def test_store_multiple_embeddings(
-        self, storage: EmbeddingStorage, sample_doc
-    ) -> None:
+    def test_store_multiple_embeddings(self, storage: EmbeddingStorage, sample_doc) -> None:
         """Should store multiple chunks and embeddings."""
         _, doc_id = sample_doc
         embeddings = [
@@ -96,9 +91,7 @@ class TestEmbeddingStorage:
         """Storing empty list should not raise."""
         storage.store_embeddings([])  # Should not raise
 
-    def test_get_chunks_by_document(
-        self, storage: EmbeddingStorage, sample_doc
-    ) -> None:
+    def test_get_chunks_by_document(self, storage: EmbeddingStorage, sample_doc) -> None:
         """Should retrieve chunks in order."""
         _, doc_id = sample_doc
         embeddings = [
@@ -115,9 +108,7 @@ class TestEmbeddingStorage:
         assert chunks[0].text == "First"
         assert chunks[1].text == "Second"
 
-    def test_has_embeddings_true(
-        self, storage: EmbeddingStorage, sample_doc
-    ) -> None:
+    def test_has_embeddings_true(self, storage: EmbeddingStorage, sample_doc) -> None:
         """has_embeddings should return True when embeddings exist."""
         _, doc_id = sample_doc
         storage.store_embeddings([make_chunk_embedding(doc_id)])
@@ -128,9 +119,7 @@ class TestEmbeddingStorage:
         """has_embeddings should return False when no embeddings."""
         assert storage.has_embeddings(uuid4()) is False
 
-    def test_delete_by_document(
-        self, storage: EmbeddingStorage, sample_doc
-    ) -> None:
+    def test_delete_by_document(self, storage: EmbeddingStorage, sample_doc) -> None:
         """Should delete all chunks for a document."""
         _, doc_id = sample_doc
         embeddings = [
@@ -153,9 +142,7 @@ class TestEmbeddingStorage:
 class TestVectorSearch:
     """Tests for vector similarity search."""
 
-    def test_search_returns_results(
-        self, storage: EmbeddingStorage, sample_doc
-    ) -> None:
+    def test_search_returns_results(self, storage: EmbeddingStorage, sample_doc) -> None:
         """search_similar should return matching chunks."""
         _, doc_id = sample_doc
 
@@ -170,9 +157,7 @@ class TestVectorSearch:
         assert len(results) == 1
         assert results[0][0].chunk_id == chunk.chunk_id
 
-    def test_search_returns_distance(
-        self, storage: EmbeddingStorage, sample_doc
-    ) -> None:
+    def test_search_returns_distance(self, storage: EmbeddingStorage, sample_doc) -> None:
         """search_similar should return distance for each result."""
         _, doc_id = sample_doc
         chunk = Chunk.create(doc_id, 0, "Test")
@@ -186,9 +171,7 @@ class TestVectorSearch:
         # Same vector should have very small distance
         assert distance < 0.01
 
-    def test_search_respects_limit(
-        self, storage: EmbeddingStorage, sample_doc
-    ) -> None:
+    def test_search_respects_limit(self, storage: EmbeddingStorage, sample_doc) -> None:
         """search_similar should respect limit parameter."""
         _, doc_id = sample_doc
         embeddings = [make_chunk_embedding(doc_id, i, f"Chunk {i}") for i in range(10)]
@@ -230,9 +213,7 @@ class TestVectorSearch:
 class TestEmbeddingStatusFunctions:
     """Tests for embedding status helper functions."""
 
-    def test_update_embedding_status(
-        self, db_conn: sqlite3.Connection, sample_doc
-    ) -> None:
+    def test_update_embedding_status(self, db_conn: sqlite3.Connection, sample_doc) -> None:
         """update_embedding_status should update document's embedding_status."""
         doc, doc_id = sample_doc
 
@@ -241,9 +222,7 @@ class TestEmbeddingStatusFunctions:
         updated = get_document_by_id(db_conn, doc_id)
         assert updated.embedding_status == EmbeddingStatus.CURRENT
 
-    def test_get_documents_needing_embedding_pending(
-        self, db_conn: sqlite3.Connection
-    ) -> None:
+    def test_get_documents_needing_embedding_pending(self, db_conn: sqlite3.Connection) -> None:
         """Should return documents with PENDING embedding status."""
         # Create a READY document (default embedding_status is PENDING)
         doc = create_document(db_conn, "/test.pdf", "hash123", "/storage/hash123.pdf")
