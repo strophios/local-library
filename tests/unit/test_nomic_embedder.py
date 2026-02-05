@@ -172,7 +172,9 @@ class TestNomicEmbedderErrorHandling:
             with pytest.raises(EmbeddingError) as exc_info:
                 embedder._load_model()
 
-            assert exc_info.value.code == ErrorCode.EMBEDDING_MODEL_LOAD_FAILED
+            error = exc_info.value
+            assert isinstance(error, EmbeddingError)  # Type guard
+            assert error.code == ErrorCode.EMBEDDING_MODEL_LOAD_FAILED
 
     def test_encode_failure_raises_embedding_error(self) -> None:
         """Failed encoding should raise EmbeddingError."""
@@ -186,7 +188,9 @@ class TestNomicEmbedderErrorHandling:
         with pytest.raises(EmbeddingError) as exc_info:
             embedder.embed_chunks(chunks)
 
-        assert exc_info.value.code == ErrorCode.EMBEDDING_COMPUTATION_FAILED
+        error = exc_info.value
+        assert isinstance(error, EmbeddingError)  # Type guard
+        assert error.code == ErrorCode.EMBEDDING_COMPUTATION_FAILED
 
 
 # Mark slow tests that actually load the model

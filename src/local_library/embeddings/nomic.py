@@ -106,7 +106,8 @@ class NomicEmbedder:
             return []
 
         self._load_model()
-        assert self._model is not None  # Narrowing for type checker
+        # _load_model() guarantees self._model is set; narrowing for type checker
+        assert self._model is not None
 
         try:
             # Prepend document prefix to each chunk
@@ -158,7 +159,8 @@ class NomicEmbedder:
             EmbeddingError: If embedding computation fails
         """
         self._load_model()
-        assert self._model is not None  # Narrowing for type checker
+        # _load_model() guarantees self._model is set; narrowing for type checker
+        assert self._model is not None
 
         try:
             # Prepend query prefix
@@ -199,7 +201,8 @@ class NomicEmbedder:
             return np.array([], dtype=np.float32).reshape(0, 768)
 
         self._load_model()
-        assert self._model is not None  # Narrowing for type checker
+        # _load_model() guarantees self._model is set; narrowing for type checker
+        assert self._model is not None
 
         try:
             # Apply prefix if provided
