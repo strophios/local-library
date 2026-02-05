@@ -184,6 +184,13 @@ def import_from_zotero(
             help="Enable Marker LLM extraction (tables, math, images). Requires GEMINI_API_KEY.",
         ),
     ] = False,
+    skip_embed: Annotated[
+        bool,
+        typer.Option(
+            "--skip-embed",
+            help="Skip automatic embedding (run `local-library embed --pending` afterwards)",
+        ),
+    ] = False,
     json_output: Annotated[
         bool,
         typer.Option("--json", "-j", help="Output results as JSON."),
@@ -196,6 +203,9 @@ def import_from_zotero(
     hash) are automatically skipped.
 
     Requires Better BibTeX extension for citekey mapping and library.json export.
+
+    Use --skip-embed for large imports and run `local-library embed --pending`
+    afterwards for batch embedding.
     """
     # Resolve Zotero directory
     effective_zotero_dir = zotero_dir or get_default_zotero_dir()
@@ -302,6 +312,7 @@ def import_from_zotero(
         citekeys=citekeys,
         continue_on_error=continue_on_error,
         llm_extract=effective_llm_extract,
+        skip_embed=skip_embed,
         json_output=json_output,
     )
 
@@ -385,6 +396,7 @@ def _import_items(
     citekeys: list[str],
     continue_on_error: bool,
     llm_extract: bool,
+    skip_embed: bool,
     json_output: bool,
 ) -> None:
     """Import items from Zotero with progress tracking.
@@ -414,6 +426,7 @@ def _import_items(
                 citekeys,
                 existing_citekeys,
                 llm_extract,
+                skip_embed,
                 continue_on_error,
                 stats,
                 failures,
@@ -424,6 +437,7 @@ def _import_items(
                 citekeys,
                 existing_citekeys,
                 llm_extract,
+                skip_embed,
                 continue_on_error,
                 stats,
                 failures,
@@ -463,6 +477,7 @@ def _import_items_rich(
     citekeys: list[str],
     existing_citekeys: set[str],
     llm_extract: bool,
+    skip_embed: bool,
     continue_on_error: bool,
     stats: dict,
     failures: list,
@@ -500,7 +515,7 @@ def _import_items_rich(
                 if lib is None or items_since_restart >= EXTRACTION_BATCH_SIZE:
                     if lib is not None:
                         lib.close()
-                    lib = Library(pdf_llm_enabled=llm_extract)
+                    lib = Library(pdf_llm_enabled=llm_extract, embed_on_add=not skip_embed)
                     items_since_restart = 0
 
                 # Check if this item will need extraction (not a skip)
@@ -540,6 +555,7 @@ def _import_items_json(
     citekeys: list[str],
     existing_citekeys: set[str],
     llm_extract: bool,
+    skip_embed: bool,
     continue_on_error: bool,
     stats: dict,
     failures: list,
@@ -558,7 +574,7 @@ def _import_items_json(
             if lib is None or items_since_restart >= EXTRACTION_BATCH_SIZE:
                 if lib is not None:
                     lib.close()
-                lib = Library(pdf_llm_enabled=llm_extract)
+                lib = Library(pdf_llm_enabled=llm_extract, embed_on_add=not skip_embed)
                 items_since_restart = 0
 
             result = _process_single_item(
