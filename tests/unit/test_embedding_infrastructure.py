@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from local_library.core.errors import EmbeddingError, ErrorCode
-from local_library.core.models import Document, DocumentStatus, EmbeddingStatus
+from local_library.core.models import Document, EmbeddingStatus
 from local_library.core.storage import (
     SCHEMA_VERSION,
     create_document,
@@ -158,10 +158,8 @@ class TestVecExtension:
         conn.close()
 
     @pytest.mark.skipif(not is_vec_available(), reason="sqlite-vec not available")
-    def test_require_vec_extension_raises_on_failure(self) -> None:
-        """require_vec_extension should raise EmbeddingError if unavailable."""
-        # This test only makes sense if we can mock the failure
-        # For now, just verify it doesn't raise when available
+    def test_require_vec_extension_succeeds_when_available(self) -> None:
+        """require_vec_extension should not raise when extension is available."""
         conn = sqlite3.connect(":memory:")
         require_vec_extension(conn)  # Should not raise
         conn.close()
@@ -178,6 +176,18 @@ class TestVecExtension:
             "SELECT name FROM sqlite_master WHERE type='table' AND name='test_vectors'"
         )
         assert cursor.fetchone() is not None
+        conn.close()
+
+    @pytest.mark.skipif(not is_vec_available(), reason="sqlite-vec not available")
+    def test_create_vec0_table_invalid_metric(self) -> None:
+        """create_vec0_table should raise EmbeddingError for invalid distance metric."""
+        conn = sqlite3.connect(":memory:")
+        load_vec_extension(conn)
+
+        with pytest.raises(EmbeddingError) as exc_info:
+            create_vec0_table(conn, "test_vectors", distance_metric="invalid")
+
+        assert exc_info.value.code == ErrorCode.EMBEDDING_STORAGE_FAILED
         conn.close()
 
     @pytest.mark.skipif(not is_vec_available(), reason="sqlite-vec not available")

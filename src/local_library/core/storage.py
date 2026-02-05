@@ -13,7 +13,7 @@ from uuid import UUID
 
 from local_library.core.errors import ErrorCode, LookupError, StorageError
 from local_library.core.models import Document, DocumentStatus, EmbeddingStatus
-from local_library.core.vec_extension import load_vec_extension, create_vec0_table
+from local_library.core.vec_extension import create_vec0_table, load_vec_extension
 
 # Schema version for migrations
 SCHEMA_VERSION = 3
@@ -284,7 +284,11 @@ def _row_to_document(row: sqlite3.Row) -> Document:
         issued_date=row["issued_date"],
         error_message=row["error_message"],
         error_code=row["error_code"],
-        embedding_status=EmbeddingStatus(row["embedding_status"]) if row["embedding_status"] else EmbeddingStatus.PENDING,
+        embedding_status=(
+            EmbeddingStatus(row["embedding_status"])
+            if row["embedding_status"]
+            else EmbeddingStatus.PENDING
+        ),
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(row["updated_at"]),
     )

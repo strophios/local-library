@@ -3,7 +3,6 @@
 # pattern: Imperative Shell
 
 import sqlite3
-from typing import Callable
 
 from local_library.core.errors import EmbeddingError, ErrorCode
 
