@@ -22,6 +22,14 @@ def __getattr__(name: str) -> object:
         from local_library.embeddings.base import ChunkEmbedding
 
         return ChunkEmbedding
+    elif name == "MarkdownChunker":
+        from local_library.embeddings.chunking import MarkdownChunker
+
+        return MarkdownChunker
+    elif name == "estimate_token_count":
+        from local_library.embeddings.chunking import estimate_token_count
+
+        return estimate_token_count
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -32,4 +40,8 @@ __all__ = [
     # Data models
     "Chunk",
     "ChunkEmbedding",
+    # Implementations
+    "MarkdownChunker",
+    # Utilities
+    "estimate_token_count",
 ]
