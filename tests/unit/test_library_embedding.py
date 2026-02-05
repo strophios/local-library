@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from local_library.core.errors import EmbeddingError
 from local_library.core.library import Library
 from local_library.core.models import DocumentStatus, EmbeddingStatus
 from local_library.core.storage import get_document_by_id

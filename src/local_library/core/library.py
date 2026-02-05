@@ -49,7 +49,6 @@ from local_library.ingestion.text_extraction import (
     build_csl_json,
 )
 from local_library.core.vec_extension import is_vec_available, load_vec_extension
-from local_library.embeddings.base import ChunkEmbedding
 from local_library.embeddings.chunking import MarkdownChunker
 from local_library.embeddings.nomic import NomicEmbedder
 from local_library.embeddings.storage import (
@@ -167,7 +166,12 @@ class Library:
         self._embed_on_add = embed_on_add and is_vec_available()
         self._embedding_batch_size = embedding_batch_size
         self._chunker = MarkdownChunker() if self._embed_on_add else None
-        self._embedder = NomicEmbedder(batch_size=embedding_batch_size, lazy_load=True) if self._embed_on_add else None
+        if self._embed_on_add:
+            self._embedder = NomicEmbedder(
+                batch_size=embedding_batch_size, lazy_load=True
+            )
+        else:
+            self._embedder = None
         self._embedding_storage = None  # Lazy init when needed
 
     @property
@@ -347,7 +351,7 @@ class Library:
                 results["embedded"] += 1
                 results["chunks"] += chunk_count
 
-            except Exception as e:
+            except Exception:
                 results["failed"] += 1
                 # Update status to PENDING on failure (will retry later)
                 update_embedding_status(self._conn, doc_id, EmbeddingStatus.PENDING)
