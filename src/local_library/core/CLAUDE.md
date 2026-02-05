@@ -1,6 +1,6 @@
 # Core Domain
 
-Last verified: 2026-01-30
+Last verified: 2026-02-04
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 
 ## Contracts
 
-- **Exposes**: Document, DocumentStatus (PENDING, READY, FAILED, NEEDS_REVIEW), AddResult, FieldExtraction, TextExtractionResult, ErrorCode hierarchy (including MetadataError, ZoteroError), Library class (with get_by_citekey, get_all_citekeys, update_metadata), storage functions
+- **Exposes**: Document, DocumentStatus (PENDING, READY, FAILED, NEEDS_REVIEW), EmbeddingStatus (PENDING, CURRENT, STALE), AddResult, FieldExtraction, TextExtractionResult, ErrorCode hierarchy (including MetadataError, ZoteroError, EmbeddingError), Library class (with get_by_citekey, get_all_citekeys, update_metadata), storage functions, vec_extension module
 - **Guarantees**:
   - Document.id is UUID, globally unique
   - Document.content_hash is SHA-256, content-addressable
@@ -20,6 +20,8 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
   - Library.add() extracts metadata from text when no explicit metadata provided (if text_extraction_enabled)
   - Documents with low-confidence extraction are set to NEEDS_REVIEW status
   - Library accepts `pdf_llm_enabled` parameter to enable Marker LLM-enhanced extraction for PDFs
+  - EmbeddingStatus tracks embedding lifecycle (PENDING → CURRENT, CURRENT → STALE on re-extraction, STALE → CURRENT on re-embed)
+  - sqlite-vec extension loaded conditionally; library functions without it for document storage (graceful degradation)
 - **Expects**: Sources handled by at least one registered acquirer; files handled by at least one extractor
 
 ## Dependencies
@@ -43,6 +45,9 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 - **Text extraction integration**: Library._process_text_extraction() handles metadata extraction from document text, sets NEEDS_REVIEW when confidence is low
 - **Citekey lookup**: Library.get_by_citekey() returns Document or None; Library.get_all_citekeys() returns all non-null citekeys
 - **Metadata updates**: Library.update_metadata() allows updating status, citekey, and csl_json with automatic indexed field extraction
+- **EmbeddingStatus enum**: Tracks embedding state separately from DocumentStatus (orthogonal concerns)
+- **Conditional sqlite-vec**: Extension loaded only when available; graceful degradation allows library to function for document storage even without vector search
+- **Cascade deletion**: Chunks and embeddings deleted via ON DELETE CASCADE foreign key when parent document deleted
 
 ## Invariants
 
@@ -55,10 +60,11 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 
 ## Key Files
 
-- `models.py` - Document, AcquisitionResult, ExtractionResult, AddResult, FieldExtraction, TextExtractionResult
-- `errors.py` - ErrorCode enum, exception hierarchy (includes ACQUISITION_*, EXTRACTION_*, METADATA_*, ZOTERO_* codes)
-- `storage.py` - SQLite CRUD (get_connection, init_schema, create/get/update/delete)
+- `models.py` - Document, AcquisitionResult, ExtractionResult, AddResult, FieldExtraction, TextExtractionResult, EmbeddingStatus
+- `errors.py` - ErrorCode enum, exception hierarchy (includes ACQUISITION_*, EXTRACTION_*, METADATA_*, ZOTERO_*, EMBEDDING_* codes)
+- `storage.py` - SQLite CRUD (get_connection, init_schema, create/get/update/delete), schema v3 with chunks and FTS5
 - `library.py` - Library orchestrator (add, get, get_by_citekey, get_all_citekeys, list, delete, update_metadata) with handler dispatch and text extraction integration
+- `vec_extension.py` - sqlite-vec extension loading, vec0 table creation, availability checking
 
 ## Gotchas
 
