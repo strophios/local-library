@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
+from local_library.core.errors import ErrorCode, ExtractionError
 from local_library.core.library import Library
 from local_library.core.models import DocumentStatus, EmbeddingStatus
 from local_library.core.storage import get_document_by_id
@@ -83,23 +84,35 @@ class TestLibraryEmbedConfig:
 class TestLibraryEmbed:
     """Tests for Library.embed() method."""
 
-    def test_embed_not_ready_raises(self, library_with_embed: Library) -> None:
+    def test_embed_not_ready_raises(self, library_with_embed: Library, temp_dir: Path) -> None:
         """embed() should raise for non-READY documents."""
+        # Create a mock PDF file in temp directory
+        temp_pdf = temp_dir / "mock.pdf"
+        temp_pdf.write_bytes(b"%PDF-1.0\n")
+
         # Create a PENDING document (mock the acquirer)
-        with patch.object(library_with_embed._acquirers[0], "validate"):
-            with patch.object(library_with_embed._acquirers[0], "acquire") as mock_acq:
+        acquirer = library_with_embed._acquirers[0]
+        extractor = library_with_embed._extractors[0]
+
+        with patch.object(acquirer, "validate"):
+            with patch.object(acquirer, "acquire") as mock_acq:
                 mock_acq.return_value = MagicMock(
                     content_hash="hash123",
-                    temp_path=Path("/tmp/test.pdf"),
+                    temp_path=temp_pdf,
                     original_path="/test.pdf",
                 )
-                # This will fail during extraction, leaving doc in PENDING
-                with pytest.raises(Exception):
-                    library_with_embed.add("/test.pdf")
+                # Mock extractor to raise ExtractionError
+                with patch.object(extractor, "can_handle", return_value=True):
+                    with patch.object(extractor, "extract_and_validate") as mock_extract:
+                        mock_extract.side_effect = ExtractionError(
+                            "failed to extract",
+                            ErrorCode.EXTRACTION_EMPTY_OUTPUT,
+                        )
+                        # This will fail during extraction
+                        with pytest.raises(ExtractionError):
+                            library_with_embed.add("/test.pdf")
 
-    def test_embed_with_mocked_pipeline(
-        self, library_with_embed: Library, temp_dir: Path
-    ) -> None:
+    def test_embed_with_mocked_pipeline(self, library_with_embed: Library, temp_dir: Path) -> None:
         """embed() should work with mocked extraction and embedding."""
         # Create a READY document manually
         from local_library.core.storage import create_document, update_document_status
@@ -139,9 +152,7 @@ class TestLibraryEmbed:
         assert count > 0
         mock_embedder.embed_chunks.assert_called_once()
 
-    def test_embed_updates_status(
-        self, library_with_embed: Library, temp_dir: Path
-    ) -> None:
+    def test_embed_updates_status(self, library_with_embed: Library, temp_dir: Path) -> None:
         """embed() should update embedding_status to CURRENT."""
         from local_library.core.storage import create_document, update_document_status
 
@@ -197,9 +208,7 @@ class TestLibraryDeleteCascade:
     """Tests for embedding cascade on delete."""
 
     @pytest.mark.skipif(not is_vec_available(), reason="sqlite-vec not available")
-    def test_delete_removes_embeddings(
-        self, library_with_embed: Library, temp_dir: Path
-    ) -> None:
+    def test_delete_removes_embeddings(self, library_with_embed: Library, temp_dir: Path) -> None:
         """delete() should remove embeddings."""
         from local_library.core.storage import create_document, update_document_status
         from local_library.embeddings.base import Chunk, ChunkEmbedding

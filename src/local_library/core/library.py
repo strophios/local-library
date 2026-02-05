@@ -5,8 +5,9 @@
 import shutil
 import sqlite3
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 from uuid import UUID
 
 from local_library.config import (
@@ -40,14 +41,6 @@ from local_library.core.storage import (
     update_document_metadata,
     update_document_status,
 )
-from local_library.ingestion.base import ContentAcquirer, ContentExtractor, compute_storage_path
-from local_library.ingestion.file import FileAcquirer
-from local_library.ingestion.metadata import MetadataHandler
-from local_library.ingestion.pdf import PdfExtractor
-from local_library.ingestion.text_extraction import (
-    TextMetadataExtractor,
-    build_csl_json,
-)
 from local_library.core.vec_extension import is_vec_available, load_vec_extension
 from local_library.embeddings.chunking import MarkdownChunker
 from local_library.embeddings.nomic import NomicEmbedder
@@ -55,6 +48,14 @@ from local_library.embeddings.storage import (
     EmbeddingStorage,
     get_documents_needing_embedding,
     update_embedding_status,
+)
+from local_library.ingestion.base import ContentAcquirer, ContentExtractor, compute_storage_path
+from local_library.ingestion.file import FileAcquirer
+from local_library.ingestion.metadata import MetadataHandler
+from local_library.ingestion.pdf import PdfExtractor
+from local_library.ingestion.text_extraction import (
+    TextMetadataExtractor,
+    build_csl_json,
 )
 
 
@@ -167,9 +168,7 @@ class Library:
         self._embedding_batch_size = embedding_batch_size
         self._chunker = MarkdownChunker() if self._embed_on_add else None
         if self._embed_on_add:
-            self._embedder = NomicEmbedder(
-                batch_size=embedding_batch_size, lazy_load=True
-            )
+            self._embedder = NomicEmbedder(batch_size=embedding_batch_size, lazy_load=True)
         else:
             self._embedder = None
         self._embedding_storage = None  # Lazy init when needed
