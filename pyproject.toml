@@ -66,4 +66,5 @@ markers = [
     "contract: Transition/contract tests",
     "integration: End-to-end integration tests",
     "extraction: PDF extraction quality and accuracy tests",
+    "slow: Slow tests that load ML models or process large data",
 ]
