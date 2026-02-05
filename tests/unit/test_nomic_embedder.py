@@ -4,6 +4,8 @@ Note: Tests that require actual model loading are marked with @pytest.mark.slow
 and can be skipped in CI with `pytest -m "not slow"`.
 """
 
+# pattern: N/A (test file)
+
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
