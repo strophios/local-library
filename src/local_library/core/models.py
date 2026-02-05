@@ -55,6 +55,8 @@ class Document:
     error_message: str | None = None
     error_code: str | None = None
 
+    embedding_status: EmbeddingStatus = EmbeddingStatus.PENDING  # Embedding state
+
     @classmethod
     def create_pending(
         cls,
@@ -70,6 +72,7 @@ class Document:
             content_hash=content_hash,
             storage_path=storage_path,
             status=DocumentStatus.PENDING,
+            embedding_status=EmbeddingStatus.PENDING,
             created_at=now,
             updated_at=now,
         )
