@@ -22,7 +22,9 @@ err_console = Console(stderr=True)
 def embed(
     identifier: Annotated[
         str | None,
-        typer.Argument(help="Document ID (UUID or @citekey) to embed. Omit for --pending or --all."),
+        typer.Argument(
+            help="Document ID (UUID or @citekey) to embed. Omit for --pending or --all."
+        ),
     ] = None,
     pending: Annotated[
         bool,
@@ -82,7 +84,9 @@ def embed(
     # Validate arguments
     if identifier and (pending or all_docs):
         if json_output:
-            err_console.print(json.dumps({"error": "cannot specify identifier with --pending or --all"}))
+            err_console.print(
+                json.dumps({"error": "cannot specify identifier with --pending or --all"})
+            )
         else:
             err_console.print("[red]error:[/red] cannot specify identifier with --pending or --all")
         raise typer.Exit(code=1)
@@ -128,13 +132,17 @@ def _embed_single(
 
     if dry_run:
         if json_output:
-            console.print(json.dumps({
-                "dry_run": True,
-                "id": str(doc.id),
-                "citekey": doc.citekey,
-                "embedding_status": doc.embedding_status.value,
-                "would_embed": force or doc.embedding_status != EmbeddingStatus.CURRENT,
-            }))
+            console.print(
+                json.dumps(
+                    {
+                        "dry_run": True,
+                        "id": str(doc.id),
+                        "citekey": doc.citekey,
+                        "embedding_status": doc.embedding_status.value,
+                        "would_embed": force or doc.embedding_status != EmbeddingStatus.CURRENT,
+                    }
+                )
+            )
         else:
             status = doc.embedding_status.value
             action = "would re-embed" if force else "would embed"
@@ -150,12 +158,16 @@ def _embed_single(
     chunk_count = lib.embed(str(doc.id), force=force)
 
     if json_output:
-        console.print(json.dumps({
-            "id": str(doc.id),
-            "citekey": doc.citekey,
-            "chunks_embedded": chunk_count,
-            "embedding_status": "current",
-        }))
+        console.print(
+            json.dumps(
+                {
+                    "id": str(doc.id),
+                    "citekey": doc.citekey,
+                    "chunks_embedded": chunk_count,
+                    "embedding_status": "current",
+                }
+            )
+        )
     else:
         if chunk_count > 0:
             console.print(f"[green]embedded[/green]: {doc.id}")
@@ -188,11 +200,15 @@ def _embed_batch(
 
     if dry_run:
         if json_output:
-            console.print(json.dumps({
-                "dry_run": True,
-                "documents_to_embed": len(doc_ids),
-                "mode": "all" if all_docs else "pending",
-            }))
+            console.print(
+                json.dumps(
+                    {
+                        "dry_run": True,
+                        "documents_to_embed": len(doc_ids),
+                        "mode": "all" if all_docs else "pending",
+                    }
+                )
+            )
         else:
             console.print(f"[dim]dry run:[/dim] would embed {len(doc_ids)} documents")
         return
@@ -214,7 +230,7 @@ def _embed_batch(
                 chunk_count = lib.embed(str(doc_id), force=force)
                 results["embedded"] += 1
                 results["chunks"] += chunk_count
-            except Exception:
+            except Exception:  # noqa: BLE001
                 results["failed"] += 1
 
         console.print(json.dumps(results))
@@ -231,11 +247,16 @@ def _embed_batch(
                     chunk_count = lib.embed(str(doc_id), force=force)
                     results["embedded"] += 1
                     results["chunks"] += chunk_count
-                except Exception as e:
+                except Exception:  # noqa: BLE001
                     results["failed"] += 1
 
                 progress.update(task, completed=i + 1)
 
-        console.print(f"[green]embedded[/green]: {results['embedded']} documents ({results['chunks']} chunks)")
-        if results["failed"] > 0:
-            console.print(f"[yellow]failed[/yellow]: {results['failed']} documents")
+        embedded_count = results["embedded"]
+        total_chunks = results["chunks"]
+        failed_count = results["failed"]
+        console.print(
+            f"[green]embedded[/green]: {embedded_count} documents ({total_chunks} chunks)"
+        )
+        if failed_count > 0:
+            console.print(f"[yellow]failed[/yellow]: {failed_count} documents")
