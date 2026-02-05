@@ -145,6 +145,7 @@ class TestProtocols:
         class NotAnEmbedder:
             def embed_chunks(self, chunks):
                 return []
+
             # Missing embed_query
 
         assert not isinstance(NotAnEmbedder(), Embedder)

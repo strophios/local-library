@@ -90,9 +90,7 @@ class ChunkEmbedding:
     def __post_init__(self) -> None:
         """Validate embedding dimensions."""
         if self.embedding.shape != (768,):
-            raise ValueError(
-                f"embedding must be 768-dimensional, got shape {self.embedding.shape}"
-            )
+            raise ValueError(f"embedding must be 768-dimensional, got shape {self.embedding.shape}")
 
     @property
     def chunk_id(self) -> str:
