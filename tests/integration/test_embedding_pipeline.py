@@ -179,9 +179,7 @@ class TestEmbeddingPipelineIntegration:
             doc = get_document_by_id(lib.conn, doc_id)
             assert doc.embedding_status == EmbeddingStatus.CURRENT
 
-    def test_delete_cascades_embeddings(
-        self, integration_library: Library, temp_dir: Path
-    ) -> None:
+    def test_delete_cascades_embeddings(self, integration_library: Library, temp_dir: Path) -> None:
         """Deleting a document should remove its embeddings."""
         lib = integration_library
         from local_library.core.storage import create_document, update_document_status
@@ -192,9 +190,7 @@ class TestEmbeddingPipelineIntegration:
         storage_file.parent.mkdir(parents=True, exist_ok=True)
         storage_file.write_bytes(b"fake pdf")
 
-        doc = create_document(
-            lib.conn, "/cascade.pdf", "hash_cascade", str(storage_file)
-        )
+        doc = create_document(lib.conn, "/cascade.pdf", "hash_cascade", str(storage_file))
 
         extracted_path = temp_dir / "extracted/cascade.md"
         extracted_path.parent.mkdir(parents=True, exist_ok=True)
@@ -273,9 +269,7 @@ class TestEmbeddingPipelineIntegration:
 class TestEdgeCases:
     """Tests for edge cases and error handling."""
 
-    def test_embed_empty_document(
-        self, integration_library: Library, temp_dir: Path
-    ) -> None:
+    def test_embed_empty_document(self, integration_library: Library, temp_dir: Path) -> None:
         """Embedding an empty document should succeed with 0 chunks."""
         lib = integration_library
         from local_library.core.storage import create_document, update_document_status
