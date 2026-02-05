@@ -188,6 +188,7 @@ class TestLibraryEmbed:
 
         # Check status updated
         updated = get_document_by_id(library_with_embed.conn, doc.id)
+        assert updated is not None, "Document should exist after embedding"
         assert updated.embedding_status == EmbeddingStatus.CURRENT
 
 
@@ -239,6 +240,7 @@ class TestLibraryDeleteCascade:
 
         # Add some embeddings
         storage = library_with_embed._get_embedding_storage()
+        assert storage is not None, "EmbeddingStorage should be available when sqlite-vec is loaded"
         chunk = Chunk.create(doc.id, 0, "Test chunk")
         embedding = np.random.randn(768).astype(np.float32)
         storage.store_embeddings([ChunkEmbedding(chunk=chunk, embedding=embedding)])
@@ -249,4 +251,6 @@ class TestLibraryDeleteCascade:
         library_with_embed.delete(str(doc.id))
 
         # Embeddings should be gone
+        storage = library_with_embed._get_embedding_storage()
+        assert storage is not None, "EmbeddingStorage should be available when sqlite-vec is loaded"
         assert not storage.has_embeddings(doc.id)
