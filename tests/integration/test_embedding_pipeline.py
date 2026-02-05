@@ -1,7 +1,7 @@
 """Integration tests for the complete embedding pipeline."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -11,12 +11,14 @@ from local_library.core.models import DocumentStatus, EmbeddingStatus
 from local_library.core.storage import get_document_by_id
 from local_library.core.vec_extension import is_vec_available
 
-
 # Skip all tests if sqlite-vec is not available
-pytestmark = pytest.mark.skipif(
-    not is_vec_available(),
-    reason="sqlite-vec extension not available",
-)
+pytestmark = [
+    pytest.mark.embedding,
+    pytest.mark.skipif(
+        not is_vec_available(),
+        reason="sqlite-vec extension not available",
+    ),
+]
 
 
 @pytest.fixture
@@ -222,7 +224,6 @@ class TestEmbeddingPipelineIntegration:
         """Re-embedding with force should replace existing embeddings."""
         lib = integration_library
         from local_library.core.storage import create_document, update_document_status
-        from local_library.embeddings.storage import update_embedding_status
 
         # Create document
         doc = create_document(
