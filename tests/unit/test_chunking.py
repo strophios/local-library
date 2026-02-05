@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from local_library.embeddings.base import Chunk, Chunker
+from local_library.embeddings.base import Chunker
 from local_library.embeddings.chunking import MarkdownChunker, estimate_token_count
 
 
@@ -165,10 +165,7 @@ Content here.
     def test_custom_headers_to_split_on(self) -> None:
         """Should respect custom headers_to_split_on parameter."""
         # Only split on H1
-        chunker = MarkdownChunker(
-            chunk_size=5000,
-            headers_to_split_on=[("#", "H1")]
-        )
+        chunker = MarkdownChunker(chunk_size=5000, headers_to_split_on=[("#", "H1")])
         doc_id = uuid4()
         text = """# Part 1
 
