@@ -53,6 +53,14 @@ class ErrorCode(str, Enum):
     ZOTERO_COLLECTION_NOT_FOUND = "ZOTERO_COLLECTION_NOT_FOUND"
     ZOTERO_LIBRARY_NOT_FOUND = "ZOTERO_LIBRARY_NOT_FOUND"
 
+    # Embedding errors
+    EMBEDDING_EXTENSION_UNAVAILABLE = "EMBEDDING_EXTENSION_UNAVAILABLE"
+    EMBEDDING_MODEL_LOAD_FAILED = "EMBEDDING_MODEL_LOAD_FAILED"
+    EMBEDDING_COMPUTATION_FAILED = "EMBEDDING_COMPUTATION_FAILED"
+    EMBEDDING_STORAGE_FAILED = "EMBEDDING_STORAGE_FAILED"
+    EMBEDDING_CHUNK_FAILED = "EMBEDDING_CHUNK_FAILED"
+    EMBEDDING_DOCUMENT_NOT_READY = "EMBEDDING_DOCUMENT_NOT_READY"
+
 
 class LocalLibraryError(Exception):
     """Base exception for all local-library errors."""
@@ -110,5 +118,11 @@ class MetadataError(LocalLibraryError):
 
 class ZoteroError(LocalLibraryError):
     """Error during Zotero data access."""
+
+    pass
+
+
+class EmbeddingError(LocalLibraryError):
+    """Error during embedding operations (chunking, computation, storage)."""
 
     pass
