@@ -66,5 +66,6 @@ markers = [
     "contract: Transition/contract tests",
     "integration: End-to-end integration tests",
     "extraction: PDF extraction quality and accuracy tests",
+    "embedding: Embedding pipeline tests requiring sqlite-vec",
     "slow: Slow tests that load ML models or process large data",
 ]
