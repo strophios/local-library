@@ -128,7 +128,7 @@ def _embed_single(
     json_output: bool,
 ) -> None:
     """Embed a single document."""
-    doc = resolve_identifier(lib, identifier)
+    doc = resolve_identifier(identifier, lib)
 
     if dry_run:
         if json_output:
@@ -247,8 +247,9 @@ def _embed_batch(
                     chunk_count = lib.embed(str(doc_id), force=force)
                     results["embedded"] += 1
                     results["chunks"] += chunk_count
-                except Exception:  # noqa: BLE001
+                except Exception as e:  # noqa: BLE001
                     results["failed"] += 1
+                    err_console.print(f"[dim]failed: {doc_id}: {e}[/dim]")
 
                 progress.update(task, completed=i + 1)
 
