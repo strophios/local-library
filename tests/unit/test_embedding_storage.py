@@ -220,6 +220,7 @@ class TestEmbeddingStatusFunctions:
         update_embedding_status(db_conn, doc_id, EmbeddingStatus.CURRENT)
 
         updated = get_document_by_id(db_conn, doc_id)
+        assert updated is not None, "Document should exist"
         assert updated.embedding_status == EmbeddingStatus.CURRENT
 
     def test_get_documents_needing_embedding_pending(self, db_conn: sqlite3.Connection) -> None:

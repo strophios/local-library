@@ -80,7 +80,7 @@ class EmbeddingStorage:
                 )
 
                 # Insert into chunk_vectors vec0 table
-                vector_blob = serialize_float32(emb.embedding)
+                vector_blob = serialize_float32(emb.embedding)  # type: ignore[arg-type]  # numpy arrays accepted at runtime
                 self._conn.execute(
                     """
                     INSERT INTO chunk_vectors (chunk_id, embedding)
@@ -228,7 +228,7 @@ class EmbeddingStorage:
         """
         from sqlite_vec import serialize_float32
 
-        query_blob = serialize_float32(query_embedding)
+        query_blob = serialize_float32(query_embedding)  # type: ignore[arg-type]  # numpy arrays accepted at runtime
 
         if doc_ids:
             # Filter by specific documents
