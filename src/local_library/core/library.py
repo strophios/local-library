@@ -791,6 +791,12 @@ class Library:
 
         Returns:
             Updated Document
+
+        Note:
+            If CSL-JSON is updated, this does not affect embeddings.
+            Embeddings are tied to extracted text, not metadata.
+            Re-extraction (which updates extracted_path) should mark
+            embeddings as STALE via _mark_embeddings_stale().
         """
         # Extract indexed fields from CSL-JSON if provided
         title = None
