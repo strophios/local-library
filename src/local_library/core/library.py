@@ -6,7 +6,7 @@ import shutil
 import sqlite3
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from uuid import UUID
 
 from local_library.config import (
@@ -23,7 +23,7 @@ from local_library.core.errors import (
     MetadataError,
     QualityError,
 )
-from local_library.core.models import AddResult, Document, DocumentStatus
+from local_library.core.models import AddResult, Document, DocumentStatus, EmbeddingStatus
 from local_library.core.storage import (
     create_document,
     delete_document,
@@ -47,6 +47,15 @@ from local_library.ingestion.pdf import PdfExtractor
 from local_library.ingestion.text_extraction import (
     TextMetadataExtractor,
     build_csl_json,
+)
+from local_library.core.vec_extension import is_vec_available, load_vec_extension
+from local_library.embeddings.base import ChunkEmbedding
+from local_library.embeddings.chunking import MarkdownChunker
+from local_library.embeddings.nomic import NomicEmbedder
+from local_library.embeddings.storage import (
+    EmbeddingStorage,
+    get_documents_needing_embedding,
+    update_embedding_status,
 )
 
 
@@ -98,6 +107,8 @@ class Library:
         text_extraction_llm_model: str = "gemini/gemini-2.0-flash",
         text_extraction_confidence_threshold: float = 0.7,
         pdf_llm_enabled: bool = False,
+        embed_on_add: bool = True,
+        embedding_batch_size: int = 32,
     ) -> None:
         """Initialize the library.
 
@@ -113,6 +124,8 @@ class Library:
             text_extraction_confidence_threshold: Confidence threshold (default: 0.7)
             pdf_llm_enabled: Whether to use Marker's LLM-enhanced PDF extraction (default: False).
                             Enables better table, math, and image handling. Requires GEMINI_API_KEY.
+            embed_on_add: Whether to embed documents during add() (default: True).
+            embedding_batch_size: Batch size for embedding computation (default: 32).
         """
         # Use defaults from config if not specified
         self._db_path = db_path or get_database_path()
@@ -150,6 +163,13 @@ class Library:
         self._conn = get_connection(self._db_path)
         init_schema(self._conn)
 
+        # Initialize embedding components (if sqlite-vec available)
+        self._embed_on_add = embed_on_add and is_vec_available()
+        self._embedding_batch_size = embedding_batch_size
+        self._chunker = MarkdownChunker() if self._embed_on_add else None
+        self._embedder = NomicEmbedder(batch_size=embedding_batch_size, lazy_load=True) if self._embed_on_add else None
+        self._embedding_storage = None  # Lazy init when needed
+
     @property
     def conn(self) -> sqlite3.Connection:
         """Get the database connection."""
@@ -166,6 +186,176 @@ class Library:
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         """Context manager exit."""
         self.close()
+
+    def _get_embedding_storage(self) -> EmbeddingStorage | None:
+        """Get or create EmbeddingStorage instance.
+
+        Returns:
+            EmbeddingStorage if sqlite-vec available, None otherwise
+        """
+        if not is_vec_available():
+            return None
+
+        if self._embedding_storage is None:
+            load_vec_extension(self._conn)
+            self._embedding_storage = EmbeddingStorage(self._conn)
+
+        return self._embedding_storage
+
+    def _mark_embeddings_stale(self, doc_id: UUID) -> None:
+        """Mark document's embeddings as stale.
+
+        Called when extracted text changes and embeddings need refresh.
+
+        Args:
+            doc_id: Document UUID
+        """
+        if is_vec_available():
+            update_embedding_status(self._conn, doc_id, EmbeddingStatus.STALE)
+
+    def embed(self, doc_id: str, force: bool = False) -> int:
+        """Embed a single document.
+
+        Loads extracted text, chunks it, computes embeddings, and stores them.
+        Updates embedding status to CURRENT on success.
+
+        Args:
+            doc_id: Document ID (full UUID or partial)
+            force: Re-embed even if embeddings exist (default: False)
+
+        Returns:
+            Number of chunks embedded
+
+        Raises:
+            LookupError: If document not found
+            EmbeddingError: If embedding fails or sqlite-vec unavailable
+        """
+        from local_library.core.errors import EmbeddingError, ErrorCode
+
+        storage = self._get_embedding_storage()
+        if storage is None:
+            raise EmbeddingError(
+                "sqlite-vec extension not available",
+                ErrorCode.EMBEDDING_EXTENSION_UNAVAILABLE,
+            )
+
+        # Get document
+        doc = self.get(doc_id)
+
+        # Check if document is ready
+        if doc.status != DocumentStatus.READY and doc.status != DocumentStatus.NEEDS_REVIEW:
+            raise EmbeddingError(
+                f"document not ready for embedding: status={doc.status.value}",
+                ErrorCode.EMBEDDING_DOCUMENT_NOT_READY,
+                details={"doc_id": str(doc.id), "status": doc.status.value},
+            )
+
+        # Check if already embedded (unless force)
+        if not force and doc.embedding_status == EmbeddingStatus.CURRENT:
+            return 0
+
+        # Delete existing embeddings if re-embedding
+        if storage.has_embeddings(doc.id):
+            storage.delete_by_document(doc.id)
+
+        # Load extracted text
+        if not doc.extracted_path:
+            raise EmbeddingError(
+                "document has no extracted text",
+                ErrorCode.EMBEDDING_DOCUMENT_NOT_READY,
+                details={"doc_id": str(doc.id)},
+            )
+
+        extracted_path = Path(doc.extracted_path)
+        if not extracted_path.exists():
+            raise EmbeddingError(
+                f"extracted file not found: {doc.extracted_path}",
+                ErrorCode.EMBEDDING_DOCUMENT_NOT_READY,
+                details={"doc_id": str(doc.id), "path": doc.extracted_path},
+            )
+
+        text = extracted_path.read_text(encoding="utf-8")
+
+        # Chunk the text
+        if self._chunker is None:
+            self._chunker = MarkdownChunker()
+        chunks = self._chunker.chunk(doc.id, text)
+
+        if not chunks:
+            # No chunks produced - update status but return 0
+            update_embedding_status(self._conn, doc.id, EmbeddingStatus.CURRENT)
+            return 0
+
+        # Compute embeddings
+        if self._embedder is None:
+            self._embedder = NomicEmbedder(batch_size=self._embedding_batch_size, lazy_load=True)
+        embeddings = self._embedder.embed_chunks(chunks)
+
+        # Store embeddings
+        storage.store_embeddings(embeddings)
+
+        # Update status
+        update_embedding_status(self._conn, doc.id, EmbeddingStatus.CURRENT)
+
+        return len(embeddings)
+
+    def embed_all(
+        self,
+        force: bool = False,
+        progress_callback: Callable | None = None,
+    ) -> dict[str, int]:
+        """Embed all documents that need embedding.
+
+        Processes documents with PENDING or STALE embedding status.
+
+        Args:
+            force: Re-embed all READY documents regardless of status
+            progress_callback: Optional callback(current, total, doc_id) for progress
+
+        Returns:
+            Dict with 'embedded' count and 'failed' count
+
+        Raises:
+            EmbeddingError: If sqlite-vec unavailable
+        """
+        from local_library.core.errors import EmbeddingError, ErrorCode
+
+        storage = self._get_embedding_storage()
+        if storage is None:
+            raise EmbeddingError(
+                "sqlite-vec extension not available",
+                ErrorCode.EMBEDDING_EXTENSION_UNAVAILABLE,
+            )
+
+        # Get documents to embed
+        if force:
+            # Get all READY documents
+            docs = list_documents(self._conn, status=DocumentStatus.READY)
+            doc_ids = [doc.id for doc in docs]
+        else:
+            doc_ids = get_documents_needing_embedding(self._conn)
+
+        results = {"embedded": 0, "failed": 0, "chunks": 0}
+        total = len(doc_ids)
+
+        for i, doc_id in enumerate(doc_ids):
+            try:
+                if progress_callback:
+                    progress_callback(i, total, str(doc_id))
+
+                chunk_count = self.embed(str(doc_id), force=force)
+                results["embedded"] += 1
+                results["chunks"] += chunk_count
+
+            except Exception as e:
+                results["failed"] += 1
+                # Update status to PENDING on failure (will retry later)
+                update_embedding_status(self._conn, doc_id, EmbeddingStatus.PENDING)
+
+        if progress_callback:
+            progress_callback(total, total, None)
+
+        return results
 
     def _find_acquirer(self, source: str) -> ContentAcquirer:
         """Find an acquirer that can handle the given source.
@@ -671,5 +861,10 @@ class Library:
                 if extracted_path.exists():
                     extracted_path.unlink()
                     _cleanup_empty_parents(extracted_path, self._extracted_dir)
+
+        # Delete embeddings (cascade)
+        storage = self._get_embedding_storage()
+        if storage:
+            storage.delete_by_document(doc.id)
 
         return delete_document(self._conn, doc.id)
