@@ -519,10 +519,7 @@ def _import_items_rich(
                     items_since_restart = 0
 
                 # Check if this item will need extraction (not a skip)
-                will_extract = (
-                    citekey not in existing_citekeys
-                    and _item_has_pdf(reader, citekey)
-                )
+                will_extract = citekey not in existing_citekeys and _item_has_pdf(reader, citekey)
 
                 # Stop progress bar during extraction to avoid conflict with
                 # Marker's multiprocessing on macOS

@@ -235,9 +235,7 @@ def _migrate_v2_to_v3(conn: sqlite3.Connection) -> None:
     existing_columns = {row["name"] for row in cursor.fetchall()}
 
     if "embedding_status" not in existing_columns:
-        conn.execute(
-            "ALTER TABLE documents ADD COLUMN embedding_status TEXT DEFAULT 'pending'"
-        )
+        conn.execute("ALTER TABLE documents ADD COLUMN embedding_status TEXT DEFAULT 'pending'")
 
     # Create chunks table for storing chunk metadata and text
     conn.execute("""
