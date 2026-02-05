@@ -19,6 +19,14 @@ class DocumentStatus(str, Enum):
     NEEDS_REVIEW = "needs_review"  # Extraction succeeded but confidence is low
 
 
+class EmbeddingStatus(str, Enum):
+    """Embedding state of a document."""
+
+    PENDING = "pending"  # No embeddings yet (new document or embedding failed)
+    CURRENT = "current"  # Embeddings match current extracted text
+    STALE = "stale"  # Extracted text changed; embeddings need refresh
+
+
 @dataclass(frozen=True)
 class Document:
     """A document record in the library.
