@@ -8,7 +8,7 @@ Handles document chunking, embedding computation, and vector storage for semanti
 
 ## Contracts
 
-- **Exposes**: Chunker protocol, Embedder protocol, Chunk dataclass, ChunkEmbedding dataclass, MarkdownChunker (Phase 3), NomicEmbedder (Phase 4), EmbeddingStorage (Phase 5)
+- **Exposes**: `Chunker protocol, Embedder protocol`, `Chunk dataclass, ChunkEmbedding dataclass`, `MarkdownChunker, NomicEmbedder, EmbeddingStorage`, `update_embedding_status, get_documents_needing_embedding, estimate_token_count`
 - **Guarantees**:
   - `Chunk` is frozen/immutable with auto-generated UUID and UTC timestamp
   - `ChunkEmbedding` validates 768-dimensional vectors on creation
@@ -44,14 +44,16 @@ Handles document chunking, embedding computation, and vector storage for semanti
 ## Key Files
 
 - `base.py` - Chunk, ChunkEmbedding dataclasses; Chunker, Embedder protocols
-- `chunking.py` - MarkdownChunker implementation (Phase 3)
-- `nomic.py` - NomicEmbedder implementation (Phase 4)
-- `storage.py` - EmbeddingStorage CRUD operations (Phase 5)
+- `chunking.py` - MarkdownChunker (section-aware markdown splitting)
+- `nomic.py` - NomicEmbedder (nomic-embed-text-v1.5 via sentence-transformers)
+- `storage.py` - EmbeddingStorage (sqlite-vec CRUD), status functions
 
 ## Gotchas
 
-- nomic-embed-text requires `trust_remote_code=True` when loading via sentence-transformers
-- Task prefixes must be prepended manually (sentence-transformers doesn't auto-prepend)
-- sqlite-vec requires `serialize_float32()` for vector insertion
-- ChunkEmbedding raises ValueError if embedding isn't exactly 768 dimensions
-- Model download happens on first embed call (~262 MB, cached to ~/.cache/huggingface/)
+- nomic-embed-text requires `trust_remote_code=True`
+- Task prefixes must be prepended manually
+- sqlite-vec requires `serialize_float32()` for insertion
+- ChunkEmbedding validates 768 dimensions on creation
+- Model download (~262 MB) happens on first embed
+- EmbeddingStorage requires sqlite-vec loaded; use `require_vec_extension()` first
+- `search_similar()` returns (Chunk, distance) tuples sorted by distance ascending
