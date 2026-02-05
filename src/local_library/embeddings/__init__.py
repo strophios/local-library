@@ -34,6 +34,18 @@ def __getattr__(name: str) -> object:
         from local_library.embeddings.nomic import NomicEmbedder
 
         return NomicEmbedder
+    elif name == "EmbeddingStorage":
+        from local_library.embeddings.storage import EmbeddingStorage
+
+        return EmbeddingStorage
+    elif name == "update_embedding_status":
+        from local_library.embeddings.storage import update_embedding_status
+
+        return update_embedding_status
+    elif name == "get_documents_needing_embedding":
+        from local_library.embeddings.storage import get_documents_needing_embedding
+
+        return get_documents_needing_embedding
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -47,6 +59,9 @@ __all__ = [
     # Implementations
     "MarkdownChunker",
     "NomicEmbedder",
+    "EmbeddingStorage",
     # Utilities
     "estimate_token_count",
+    "update_embedding_status",
+    "get_documents_needing_embedding",
 ]
