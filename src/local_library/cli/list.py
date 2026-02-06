@@ -112,6 +112,10 @@ def list_docs(
         DocumentStatus.FAILED: "red",
         DocumentStatus.NEEDS_REVIEW: "yellow bold",
     }
+    # Abbreviate long status values for table display
+    status_label = {
+        DocumentStatus.NEEDS_REVIEW: "review",
+    }
     embed_status_style = {
         EmbeddingStatus.PENDING: "yellow",
         EmbeddingStatus.CURRENT: "green",
@@ -121,12 +125,13 @@ def list_docs(
     for doc in docs[:display_limit]:
         short_id = str(doc.id)[:8]
         style = status_style.get(doc.status, "white")
+        label = status_label.get(doc.status, doc.status.value)
         embed_style = embed_status_style.get(doc.embedding_status, "white")
 
         table.add_row(
             short_id,
             doc.citekey or "",
-            f"[{style}]{doc.status.value}[/{style}]",
+            f"[{style}]{label}[/{style}]",
             _truncate(doc.title, 40),
             _truncate(doc.authors, 25),
             f"[{embed_style}]{doc.embedding_status.value}[/{embed_style}]",

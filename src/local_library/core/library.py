@@ -42,13 +42,6 @@ from local_library.core.storage import (
     update_document_status,
 )
 from local_library.core.vec_extension import is_vec_available, load_vec_extension
-from local_library.embeddings.chunking import MarkdownChunker
-from local_library.embeddings.nomic import NomicEmbedder
-from local_library.embeddings.storage import (
-    EmbeddingStorage,
-    get_documents_needing_embedding,
-    update_embedding_status,
-)
 from local_library.ingestion.base import ContentAcquirer, ContentExtractor, compute_storage_path
 from local_library.ingestion.file import FileAcquirer
 from local_library.ingestion.metadata import MetadataHandler
@@ -164,13 +157,13 @@ class Library:
         init_schema(self._conn)
 
         # Initialize embedding components (if sqlite-vec available)
+        # Chunker and embedder are created lazily on first use (in embed/embed_all)
+        # to avoid importing heavy ML libraries (torch, transformers, langchain)
+        # at Library construction time.
         self._embed_on_add = embed_on_add and is_vec_available()
         self._embedding_batch_size = embedding_batch_size
-        self._chunker = MarkdownChunker() if self._embed_on_add else None
-        if self._embed_on_add:
-            self._embedder = NomicEmbedder(batch_size=embedding_batch_size, lazy_load=True)
-        else:
-            self._embedder = None
+        self._chunker = None
+        self._embedder = None
         self._embedding_storage = None  # Lazy init when needed
 
     @property
@@ -190,7 +183,7 @@ class Library:
         """Context manager exit."""
         self.close()
 
-    def _get_embedding_storage(self) -> EmbeddingStorage | None:
+    def _get_embedding_storage(self):
         """Get or create EmbeddingStorage instance.
 
         Returns:
@@ -200,6 +193,8 @@ class Library:
             return None
 
         if self._embedding_storage is None:
+            from local_library.embeddings.storage import EmbeddingStorage
+
             load_vec_extension(self._conn)
             self._embedding_storage = EmbeddingStorage(self._conn)
 
@@ -214,6 +209,8 @@ class Library:
             doc_id: Document UUID
         """
         if is_vec_available():
+            from local_library.embeddings.storage import update_embedding_status
+
             update_embedding_status(self._conn, doc_id, EmbeddingStatus.STALE)
 
     def embed(self, doc_id: str, force: bool = False) -> int:
@@ -234,6 +231,9 @@ class Library:
             EmbeddingError: If embedding fails or sqlite-vec unavailable
         """
         from local_library.core.errors import EmbeddingError, ErrorCode
+        from local_library.embeddings.chunking import MarkdownChunker
+        from local_library.embeddings.nomic import NomicEmbedder
+        from local_library.embeddings.storage import update_embedding_status
 
         storage = self._get_embedding_storage()
         if storage is None:
@@ -322,6 +322,10 @@ class Library:
             EmbeddingError: If sqlite-vec unavailable
         """
         from local_library.core.errors import EmbeddingError, ErrorCode
+        from local_library.embeddings.storage import (
+            get_documents_needing_embedding,
+            update_embedding_status,
+        )
 
         storage = self._get_embedding_storage()
         if storage is None:

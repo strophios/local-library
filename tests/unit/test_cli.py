@@ -8,7 +8,7 @@ from typer.testing import CliRunner
 
 from local_library.cli.main import app
 from local_library.core import ErrorCode, LookupError
-from local_library.core.models import AddResult, DocumentStatus
+from local_library.core.models import AddResult, DocumentStatus, EmbeddingStatus
 
 runner = CliRunner()
 
@@ -132,6 +132,7 @@ class TestListCommand:
         mock_doc = MagicMock()
         mock_doc.id = "12345678-1234-1234-1234-123456789abc"
         mock_doc.status = DocumentStatus.READY
+        mock_doc.embedding_status = EmbeddingStatus.PENDING
         mock_doc.citekey = "TestDoc2024"
         mock_doc.title = "Test Document"
         mock_doc.authors = "Test Author"
@@ -167,6 +168,7 @@ class TestListCommand:
         mock_doc = MagicMock()
         mock_doc.id = "12345678-1234-1234-1234-123456789abc"
         mock_doc.status = DocumentStatus.READY
+        mock_doc.embedding_status = EmbeddingStatus.PENDING
         mock_doc.citekey = "Smith2023"
         mock_doc.title = "Test Document"
         mock_doc.authors = "John Smith"
@@ -270,6 +272,7 @@ class TestListCommandEnhanced:
         mock_doc = MagicMock()
         mock_doc.id = "12345678-1234-1234-1234-123456789abc"
         mock_doc.status = DocumentStatus.READY
+        mock_doc.embedding_status = EmbeddingStatus.PENDING
         mock_doc.citekey = "Smith2023"
         mock_doc.title = "Test Document"
         mock_doc.authors = "John Smith"
@@ -290,6 +293,7 @@ class TestListCommandEnhanced:
         mock_doc = MagicMock()
         mock_doc.id = "12345678-1234-1234-1234-123456789abc"
         mock_doc.status = DocumentStatus.NEEDS_REVIEW
+        mock_doc.embedding_status = EmbeddingStatus.PENDING
         mock_doc.citekey = "Smith2023"
         mock_doc.title = "Test Document"
         mock_doc.authors = "John Smith"
@@ -302,7 +306,8 @@ class TestListCommandEnhanced:
         result = runner.invoke(app, ["list"])
 
         assert result.exit_code == 0
-        assert "needs_review" in result.output
+        # Status displayed as abbreviated "review" in table (fits 80-col terminals)
+        assert "review" in result.output
 
     def test_list_filter_needs_review(self, mock_library: MagicMock) -> None:
         """list command should filter by needs_review status."""
@@ -325,6 +330,7 @@ class TestListCommandPagination:
             mock_doc = MagicMock()
             mock_doc.id = f"1234567{i}-1234-1234-1234-123456789abc"
             mock_doc.status = DocumentStatus.READY
+            mock_doc.embedding_status = EmbeddingStatus.PENDING
             mock_doc.citekey = f"Author202{i}"
             mock_doc.title = f"Document {i}"
             mock_doc.authors = f"Author {i}"
@@ -349,6 +355,7 @@ class TestListCommandPagination:
             mock_doc = MagicMock()
             mock_doc.id = f"1234567{i}-1234-1234-1234-123456789abc"
             mock_doc.status = DocumentStatus.READY
+            mock_doc.embedding_status = EmbeddingStatus.PENDING
             mock_doc.citekey = f"Author202{i}"
             mock_doc.title = f"Document {i}"
             mock_doc.authors = f"Author {i}"
@@ -371,6 +378,7 @@ class TestListCommandPagination:
             mock_doc = MagicMock()
             mock_doc.id = f"1234567{i}-1234-1234-1234-123456789abc"
             mock_doc.status = DocumentStatus.READY
+            mock_doc.embedding_status = EmbeddingStatus.PENDING
             mock_doc.citekey = f"Author202{i}"
             mock_doc.title = f"Document {i}"
             mock_doc.authors = f"Author {i}"

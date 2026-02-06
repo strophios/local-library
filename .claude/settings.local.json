@@ -89,7 +89,8 @@
       "Bash(git -C /Users/strophios/development/local-library diff e02b880 HEAD --stat)",
       "Bash(git -C /Users/strophios/development/local-library diff CLAUDE.md src/local_library/embeddings/CLAUDE.md)",
       "Bash(git -C /Users/strophios/development/local-library add CLAUDE.md src/local_library/embeddings/CLAUDE.md)",
-      "Bash(git -C /Users/strophios/development/local-library commit -m \"$\\(cat <<''EOF''\ndocs: update CLAUDE.md freshness dates after M5 implementation review\n\nVerified contracts in all CLAUDE.md files against M5 embedding pipeline\nimplementation. All contracts accurate; only freshness dates needed update.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+      "Bash(git -C /Users/strophios/development/local-library commit -m \"$\\(cat <<''EOF''\ndocs: update CLAUDE.md freshness dates after M5 implementation review\n\nVerified contracts in all CLAUDE.md files against M5 embedding pipeline\nimplementation. All contracts accurate; only freshness dates needed update.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(tput:*)"
     ]
   },
   "outputStyle": "Explanatory"
