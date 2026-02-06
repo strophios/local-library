@@ -79,7 +79,17 @@
       "Bash(git -C /Users/strophios/development/local-library show d224a88e79ddc3dadd8601e5b9e9aa33ab00c114:src/local_library/cli/add.py)",
       "Bash(unset GEMINI_API_KEY)",
       "Bash(git -C /Users/strophios/development/local-library merge-base:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(git -C /Users/strophios/development/local-library log --all --oneline)",
+      "Bash(git -C /Users/strophios/development/local-library show 9bc97c2 --stat)",
+      "Bash(git -C /Users/strophios/development/local-library show:*)",
+      "Bash(git -C /Users/strophios/development/local-library diff HEAD -- docs/design-plans/)",
+      "Bash(git show:*)",
+      "Bash(git -C /Users/strophios/development/local-library diff --name-only e02b880 HEAD)",
+      "Bash(git -C /Users/strophios/development/local-library diff e02b880 HEAD --stat)",
+      "Bash(git -C /Users/strophios/development/local-library diff CLAUDE.md src/local_library/embeddings/CLAUDE.md)",
+      "Bash(git -C /Users/strophios/development/local-library add CLAUDE.md src/local_library/embeddings/CLAUDE.md)",
+      "Bash(git -C /Users/strophios/development/local-library commit -m \"$\\(cat <<''EOF''\ndocs: update CLAUDE.md freshness dates after M5 implementation review\n\nVerified contracts in all CLAUDE.md files against M5 embedding pipeline\nimplementation. All contracts accurate; only freshness dates needed update.\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   },
   "outputStyle": "Explanatory"

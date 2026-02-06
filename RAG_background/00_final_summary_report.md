@@ -230,6 +230,8 @@ Convert extracted markdown into vector representations. Requirements: <500ms que
 
 ### Recommendation: nomic-embed-text (Local)
 
+> **Note (Feb 2026)**: This recommendation was reviewed against newer models including Qwen3-Embedding, BGE-M3, and E5-mistral-7b. The conclusion: nomic-embed-text-v1.5 remains the right choice for this project due to its explicit task prefix support, LoCo performance, and production maturity. See `embedding_approaches_report.md` § "Addendum: 2026-02 Model Landscape Review" for full analysis.
+
 **Why nomic-embed-text over OpenAI APIs?**
 
 The core question is: does the ~2.3 percentage point advantage of OpenAI text-embedding-3-large (64.6% vs 62.28%) justify the API dependency and ongoing costs?

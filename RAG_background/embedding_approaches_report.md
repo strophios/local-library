@@ -510,3 +510,191 @@ Before implementing, document:
 
 ### Token Estimation
 - [Token Count Estimation Guide](https://www.linkedin.com/pulse/how-estimate-text-length-a4-pages-from-token-count-albert-jeremy-n0iwc)
+
+---
+
+## Addendum: 2026-02 Model Landscape Review
+
+*Added: February 2026*
+
+This addendum documents a review of the embedding model landscape to verify that nomic-embed-text-v1.5 remains the appropriate choice given newer alternatives.
+
+### Models Evaluated
+
+| Model | Params | Dims | Context | MTEB Score | M1 Pro Feasibility |
+|-------|--------|------|---------|------------|-------------------|
+| **nomic-embed-text-v1.5** | 137M | 768 | 8192 | 62.39% | Excellent |
+| **BGE-M3** | 568M | 1024 | 8192 | ~68% | Good |
+| **E5-mistral-7b-instruct** | 7B | 4096 | 32K | ~66% | Marginal |
+| **Qwen3-Embedding-0.6B** | 600M | 1024 | 8192 | ~66%* | Good |
+| **Qwen3-Embedding-8B** | 8B | 1024 | 8192 | **70.58%** | Poor (16GB+ RAM) |
+
+*Qwen3-0.6B: "only lags behind Gemini-Embedding" per Qwen team benchmarks.
+
+### Analysis by Candidate
+
+#### E5-mistral-7b-instruct — ❌ Not Suitable
+
+- **Problem**: 7B parameters with 4096-dimensional embeddings
+- **Latency**: 187-221ms on GPU; 10x slower than sub-1B models
+- **M1 Reality**: Would struggle severely on CPU/MPS; may not fit in 16GB with full context
+- **Verdict**: Designed for GPU clusters, not laptop inference
+
+**Source**: [E5-mistral-7b-instruct on HuggingFace](https://huggingface.co/intfloat/e5-mistral-7b-instruct)
+
+#### Qwen3-Embedding-8B — ❌ Not Suitable
+
+- **Problem**: Requires ~16GB just for FP16 weights
+- **Performance**: State-of-the-art (70.58% MTEB multilingual), but unusable on target hardware
+- **Verdict**: Overkill for corpus size; hardware mismatch
+
+**Source**: [Qwen3 Hardware Requirements](https://www.hardware-corner.net/guides/qwen3-hardware-requirements/)
+
+#### Qwen3-Embedding-0.6B — ⚠️ Viable Alternative
+
+**Pros**:
+- Only ~1.2GB RAM for FP16 weights
+- 80-120 tokens/sec on M1/M2 with MLX optimization
+- 8192 token context
+- Multilingual (100+ languages)
+- 10-15x faster inference than larger models
+
+**Cons**:
+- Newer model (June 2025) — less battle-tested than nomic
+- No explicit `clustering:` prefix (uses instruction-tuning instead)
+- Would require rearchitecting dual-embedding strategy
+
+**Source**: [Qwen3-Embedding-0.6B on HuggingFace](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B)
+
+#### BGE-M3 — ⚠️ Strong Alternative
+
+**Pros**:
+- Higher retrieval accuracy (~72% vs ~57% in Pinecone RAG benchmark)
+- Multi-functionality: dense + sparse + multi-vector in one model
+- Native hybrid retrieval support (could simplify RRF implementation)
+- <30ms latency achievable with optimization
+- 8192 token context
+
+**Cons**:
+- 568M params (4x larger than nomic)
+- 1024 dims (33% more storage than nomic's 768)
+- No explicit `clustering:` prefix — would need separate embedding strategy for auto-tagging
+- Slower batch embedding than nomic
+
+**Source**: [BGE-M3 on HuggingFace](https://huggingface.co/BAAI/bge-m3), [NV-Embed vs BGE-M3 vs Nomic Comparison](https://ai-marketinglabs.com/lab-experiments/nv-embed-vs-bge-m3-vs-nomic-picking-the-right-embeddings-for-pinecone-rag)
+
+### Decision: Retain nomic-embed-text-v1.5
+
+**Rationale**:
+
+1. **Architectural fit**: The planned dual-embedding strategy (Section 3.4) relies on nomic's explicit task prefixes (`search_document:`, `search_query:`, `clustering:`). BGE-M3 and Qwen3 use instruction-tuning instead, which would require redesigning the embedding approach.
+
+2. **LoCo performance**: nomic-embed-text scores 85.53% on the LoCo (long context) benchmark vs 82.40% for OpenAI text-embedding-3-small. This is particularly relevant for academic papers where full-section context matters.
+
+3. **Production maturity**: nomic-embed-text-v1.5 has 35M+ downloads on HuggingFace and extensive production usage. Qwen3-Embedding is only ~8 months old.
+
+4. **Diminishing returns**: For ~30K vectors with brute-force search, the quality difference between 62% and 68% MTEB is likely smaller than other factors (chunking strategy, prompt engineering, hybrid search tuning).
+
+5. **Smallest footprint**: 137M parameters means fastest batch embedding (~3 hours for full corpus) and lowest memory pressure during inference.
+
+### Future Reconsideration Triggers
+
+Revisit this decision if:
+
+- **Retrieval quality proves insufficient** after M5-M6 implementation → Consider BGE-M3 (similar context window, native sparse retrieval could simplify hybrid search)
+- **Multilingual content becomes important** → Consider Qwen3-Embedding-0.6B or nomic-embed-text-v2
+- **Qwen3-Embedding matures** (12+ months production usage, broader community adoption) → Re-evaluate for potential quality gains
+
+### Advanced Retrieval Techniques: Late Chunking & Hierarchical Retrieval
+
+This section evaluates whether alternative embedding models (BGE-M3, Qwen3) would provide advantages for advanced retrieval patterns.
+
+#### Late Chunking
+
+**What it is**: Instead of chunking text first and embedding each chunk independently, late chunking embeds the full document via the transformer, then mean-pools token embeddings within chunk boundaries. This allows chunks to inherit context from the full document.
+
+**Key finding**: nomic-embed-text already supports late chunking. Per the [Jina late-chunking paper](https://arxiv.org/html/2409.04701v3):
+
+> "Late chunking isn't exclusive to jina-embeddings-v3 or v2. It's a fairly generic approach that can be applied to any long-context embedding model that uses mean pooling. For example, nomic-v1 supports it too."
+
+The [Jina late-chunking implementation](https://github.com/jina-ai/late-chunking) explicitly supports nomic alongside Jina's own models.
+
+| Model | Late Chunking Support | Context Window |
+|-------|----------------------|----------------|
+| nomic-embed-text-v1.5 | ✓ (mean pooling) | 8192 |
+| BGE-M3 | ✓ (mean pooling) | 8192 |
+| Qwen3-Embedding-0.6B | ✓ (mean pooling) | 8192 |
+
+**Important finding from BAAI (BGE-M3 developers)**: "Splitting the entire document into multiple chunks often can improve retrieval performance, and a chunk size of 512 is typically sufficient." In their experiments, [BGE-M3 with 512-token chunks outperformed BGE-M3 with full 8192-token single embeddings](https://huggingface.co/BAAI/bge-m3/discussions/59).
+
+**Conclusion**: No advantage from switching models. Late chunking works equally well with nomic.
+
+#### Hierarchical Document Summary → Chunks Retrieval
+
+**What it is**: A two-stage retrieval pattern where:
+1. LLM-generated document summaries are embedded alongside chunks
+2. Query first searches summaries to find relevant documents
+3. Then searches chunks within those documents
+
+This prevents "document concentration" where top-k results all come from one document. See [Ragie's implementation](https://www.ragie.ai/blog/advanced-rag-with-document-summarization).
+
+**Model considerations**:
+
+| Aspect | nomic-v1.5 | BGE-M3 | Qwen3-0.6B |
+|--------|------------|--------|------------|
+| Basic hierarchical retrieval | ✓ Works | ✓ Works | ✓ Works |
+| Multi-vector (ColBERT-style) | ❌ | ✓ Native | ❌ |
+| Native reranker | ❌ | ❌ | ✓ Qwen3-Reranker |
+
+**BGE-M3's potential advantage**: Its [ColBERT-style multi-vector retrieval](https://huggingface.co/BAAI/bge-m3) stores token-level embeddings for fine-grained matching. This could theoretically improve document-level and chunk-level retrieval differentiation.
+
+**The catch**: Multi-vector storage is ~100x more expensive than dense-only, and search is more complex. Overkill for a personal library.
+
+**Qwen3's potential advantage**: The Qwen3 series includes [dedicated reranker models](https://milvus.io/blog/hands-on-rag-with-qwen3-embedding-and-reranking-models-using-milvus.md) (cross-encoders) for final-stage reranking.
+
+**The catch**: Rerankers are separate components that work with any embeddings. You don't need to switch embedding models to use Qwen3-Reranker.
+
+**Conclusion**: Hierarchical retrieval is model-agnostic. The pattern works fine with nomic:
+
+```python
+# Hierarchical retrieval with nomic
+summary_embedding = model.encode("search_document: " + document_summary)
+chunk_embedding = model.encode("search_document: " + chunk_text)
+query_embedding = model.encode("search_query: " + user_query)
+
+# Stage 1: Find relevant documents via summaries
+relevant_doc_ids = vector_search(query_embedding, summary_index, k=10)
+
+# Stage 2: Find relevant chunks within those documents
+relevant_chunks = vector_search(
+    query_embedding,
+    chunk_index,
+    filter={"doc_id": relevant_doc_ids},
+    k=20
+)
+```
+
+#### Summary: Advanced Techniques and Model Choice
+
+| Technique | nomic-v1.5 | BGE-M3 | Qwen3-0.6B | Winner |
+|-----------|------------|--------|------------|--------|
+| Late chunking | ✓ Full support | ✓ Full support | ✓ Full support | Tie |
+| Hierarchical retrieval | ✓ Works fine | ⚠️ Multi-vector could help | ✓ Works fine | BGE-M3 marginal |
+| Cross-encoder reranking | Separate model | Separate model | Native ecosystem | Qwen3 ecosystem |
+| Task prefixes for dual-use | ✓ `clustering:` | ❌ Instruction-tuning | ❌ Instruction-tuning | nomic |
+| Storage efficiency | Best (768 dims) | Worst if multi-vector | Medium (1024 dims) | nomic |
+
+**Recommendation**: Implement standard retrieval (section-aware chunking → nomic embeddings → hybrid search) first. Late chunking and hierarchical retrieval are enhancements that can be evaluated empirically once the basic pipeline is working. Neither requires changing embedding models.
+
+### References
+
+- [Qwen3 Embedding Blog](https://qwenlm.github.io/blog/qwen3-embedding/)
+- [nomic-embed-text-v1.5 on HuggingFace](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5)
+- [The Nomic Embedding Ecosystem](https://www.nomic.ai/blog/posts/embed-ecosystem)
+- [Best Open-Source Embedding Models 2026](https://www.bentoml.com/blog/a-guide-to-open-source-embedding-models)
+- [Open Source Embedding Models Benchmark](https://research.aimultiple.com/open-source-embedding-models/)
+- [Jina Late Chunking Paper](https://arxiv.org/html/2409.04701v3)
+- [Jina Late Chunking GitHub](https://github.com/jina-ai/late-chunking)
+- [BGE-M3 Long Context Discussion](https://huggingface.co/BAAI/bge-m3/discussions/59)
+- [Ragie Hierarchical Document Summarization](https://www.ragie.ai/blog/advanced-rag-with-document-summarization)
+- [Qwen3 RAG with Milvus](https://milvus.io/blog/hands-on-rag-with-qwen3-embedding-and-reranking-models-using-milvus.md)
