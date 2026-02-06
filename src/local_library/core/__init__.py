@@ -22,6 +22,7 @@ from local_library.core.models import (
     AddResult,
     Document,
     DocumentStatus,
+    EmbeddingStatus,
     ExtractionResult,
 )
 from local_library.core.storage import (
@@ -60,6 +61,7 @@ __all__ = [
     "MetadataError",
     # Models
     "DocumentStatus",
+    "EmbeddingStatus",
     "Document",
     "AcquisitionResult",
     "ExtractionResult",

@@ -194,20 +194,36 @@ To-do:
     - (maybe) A quality of life `review` command that would bundle opening an item's pdf and/or markdown together with the `update` flow. 
     - Update all item retrieval commands (i.e., `show` plus `open`, `update`, `compare`, `review`, if added) to be able to take citekey in addition to or instead of UUID. We might do this via an input convention rather than a pure heuristic or requiring a flag, something like "command assumes it's being passed a UUID unless the passed value starts with `@` (e.g., `show @Smith2017Attention`)". 
 
-1. Launch and external editor with a file to modify. 
-2. I think we use the system default for PDFs and (ideally) nvim for markdown (vim would also be acceptable). Side-by-side comparison is a quality of life feature for the moment, so I can be flexible to get it working. That said, I suppose a mild preference for terminal split aesthetically, but that may not be feasible with PDFs/markdown as the side-by-side. Frankly, just markdown in the existing terminal + PDF in new window would be fine, I think. 
-3. Terminal constraints: 
-    - I tend to use a full width window (240 columns), but we won't want to use the full width; maybe max 200?
-    - No particular color preferences, other than that we should use it effectively. 
-    - I think we'll want to default to just displaying a maximum number of rows (e.g., 10-15). Pagination might also be effective, I just don't want to ever be taking over a user's terminal in an inconvenient way. 
-4. The user should explicitly set status, probably within the same external editor call in which they edit the metadata. (Note that we should, of course, be validating their updates; including to the status field.)
-5. It's worth considering whether any changes to underlying storage/models would be warranted, but I think my default is to assume that we are unlikely to do so. And I don't think there are any fields that need to be editable, except (potentially) status, as just mentioned. Additionally, we should make sure to re-index any changed fields from the JSON blob (i.e., we don't want to accidentally have `update` allow the user to change the authors in the CSL-JSON blob, but not see that change reflected in the item's `author` field in the database). 
+
+Want to review the current RAG design, interrogate assumptions + choices (e.g., do we really prefer nomic over other options (like Qwen3, BGE, E5-mistral)). 
+Late chunking?
+Embed full documents and do a hierarchical search? to a vector similarity search to the summaries, use that to ID top documents, then return top 1-2 chunks from the top 4-5 documents, or something (see, e.g., [here](https://www.ragie.ai/blog/advanced-rag-with-document-summarization))
+
+eventually, we'll want a rigorous testing infrastructure to be able to "hyperparamter search" for the optimum embedding (and related) configuration
+
 
 at some point potentially adding search text of abstract (or search by LLM generated summary if no abstract?)
 
 at some point, get it to handle the entire CSL-JSON spec (and thus the entire blob it will get from Zotero when importing). not that it needs to index any more fields or anything, just that all the info should be there if provided, editable via update, and (maybe) we eventually expand what it is capable of extracting, etc.
 
 get zotero import working ahead of embedding pipeline?
+
+
+NOTE: importing the golden set from Zotero (20 pdfs) took ~40 minutes and errored on the final one (@Rideout2016), with the following error:
+
+
+Hey, are we currently checking extraction quality in the pipeline itself? 
+
+
+Hey, so who's my boss now? Who's running research + data? 
+What are we doing about grants?
+
+1. Dual embeddings: We should build only the RAG embeddings for the moment, but do so in a way that will facilitate the addition of the clustering embeddings later. 
+2. Embedding trigger: Embeddings should be computed on add by default. However, also having a separate CLI command will be useful to allow for 1) graceful error handling (if the embedding errors during add, we don't have to toss the whole add, we can just leave the embeddings empty and add them later); and, 2) allow for user triggered re-embedding on document update as a backstop for whatever the automated re-embedding workflow is (it may also make that workflow easier to implement). 
+3. Re-embedding workflow: An update would be any text extraction changes. We should consider implementing this as a database field that flags whether a particular document needs its embeddings updated, so that we neither lose track of cases where text and embeddings are out of sync, nor always have to re-embed immediately on text update (we can come back and do it later). 
+4. This is mentioned in the documentation, but I want to highlight (in line with my note about the dual embeddings), that we will eventually be making improvements to the embedding pipeline (definitely including the second set of clustering embeddings, probably including late-chunking, and possibly including hierarchical retrieval via summary search) and I would like our implementation now to make those improvements easier rather than harder. Likewise, we probably want to take a look at the @future_roadmap.md as there are some specific use cases and other system updates that we will want to be sure to design for, rather than against. 
+
+- [ ] Add a "FAILED" status to EmbeddingStatus?
 
 
 PCC Training questions: 
@@ -217,7 +233,7 @@ PCC Training questions:
     - they basically rerun the file each time (so they'll drop people if we drop the people from the file)
 - the IDs in the census tab are the IDs we provided and that's always true of any ID they show us
 
-enabling LLM fallback
+
 
 looks like there are a number of text normalization functions in `tests/extraction/conftest.py` that I kind of expect should also exist in the ingestion/extraction pipeline itself? like, we should also be normalizing the extracted author names and stuff in actual production, even if we don't have a ground truth to compare to later. so are they duplicating functionality, or not present in the production pipeline, or what?
 
@@ -233,19 +249,6 @@ Just upgraded to Zotero 8, will need to go back and make sure M4 (Zotero import)
 
 
 
-What would help complete the picture:
-
-1. Existing patterns: yes, definitely. 
-2. Marker output characteristics: 
-    - It does tend to do a pretty good job of preserving font size, structure, or other emphasis signals, though this is sometimes via heading levels and sometimes via bold or italics. 
-    - It does a pretty decent job at omitting headers and footers (e.g., page numbers, repeated titles, etc.), but sometimes in ways that omit actual text. 
-3. Particular concern: 
-    - Book sections or essays in collections, where we might have the book title as well as the section or essay title. 
-    - Yes, there are a number of scanned and non-English documents (some of which are both) and a limited number of historical texts (though nothing handwritten or pre-1800). All of these could present challenges. 
-4. Ideally flagging for manual review.
-
-
-Oh, do we know for sure/can we confirm LLM providers that will support validated structured output
 
 You seem to have been errored out during implementation. This has happened a couple of times; I don't think it's something with the code per se, but just in case, I want you to investigate the codebase and git history to establish where we are, make a note in @CLAUDE.md so that, in case there's an error, we can look at where this run started and see what progress was made, or if we keep erroring in the same place. Then continue with implementation using the executing-an-implementation-plan skill.
 
@@ -255,11 +258,6 @@ other options for embedding:
 - BGE
 - E5-Mistral
 
-To-Do: 
-
-- more robust testing framework for PDF extraction pipeline (especially Marker extraction) using a selection of actual pdfs from my Zotero library.
-    - currently not including any really long docs (anything more than 50/100 pages), but we will need a strategy for dealing with them in actual production. 
-    - 20 docs, combination of easy + hard, some non-english, some rotated pages, etc.
 
 
 ## Implementation Layers (Build Order)

@@ -9,7 +9,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from local_library.core import DocumentStatus, Library
+from local_library.core import DocumentStatus, EmbeddingStatus, Library
 
 console = Console()
 
@@ -104,6 +104,7 @@ def list_docs(
     table.add_column("Status", style="magenta")
     table.add_column("Title")
     table.add_column("Authors")
+    table.add_column("Embed Status", style="magenta")
 
     status_style = {
         DocumentStatus.PENDING: "yellow",
@@ -111,10 +112,16 @@ def list_docs(
         DocumentStatus.FAILED: "red",
         DocumentStatus.NEEDS_REVIEW: "yellow bold",
     }
+    embed_status_style = {
+        EmbeddingStatus.PENDING: "yellow",
+        EmbeddingStatus.CURRENT: "green",
+        EmbeddingStatus.STALE: "yellow bold",
+    }
 
     for doc in docs[:display_limit]:
         short_id = str(doc.id)[:8]
         style = status_style.get(doc.status, "white")
+        embed_style = embed_status_style.get(doc.embedding_status, "white")
 
         table.add_row(
             short_id,
@@ -122,6 +129,7 @@ def list_docs(
             f"[{style}]{doc.status.value}[/{style}]",
             _truncate(doc.title, 40),
             _truncate(doc.authors, 25),
+            f"[{embed_style}]{doc.embedding_status.value}[/{embed_style}]",
         )
 
     # Output with pager if showing all
