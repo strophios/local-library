@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-01-30
+Last verified: 2026-02-06
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -52,9 +52,9 @@ Each document record contains:
 
 Development follows a **pipeline-first, layer-complete** approach documented in `build_philosophy.md`. The key insight: pipeline stages (vertical data flow) and architectural layers (horizontal concerns) are orthogonal. Build along the pipeline for rapid feedback; implement layers completely when touched.
 
-### Current Status: M1-M4 + M3b Complete (Record Storage + Extraction + Metadata + Zotero Reader + Text Extraction)
+### Current Status: M1-M5 + M3b Complete (Record Storage + Extraction + Metadata + Zotero Reader + Text Extraction + Embeddings)
 
-Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), M3b (text-based metadata extraction), and M4 (Zotero read-only access) are implemented. The system can:
+Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), M3b (text-based metadata extraction), M4 (Zotero read-only access), and M5 (embedding pipeline) are implemented. The system can:
 - Ingest local PDF files via CLI (`local-library add <path>`)
 - Accept explicit CSL-JSON metadata (`--metadata <file>`)
 - Extract text to markdown via Marker
@@ -62,6 +62,8 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - **Extract metadata from PDF text** when no explicit metadata provided
 - Set documents to NEEDS_REVIEW status when extraction confidence is low
 - Optionally use LLM fallback (via LiteLLM) for low-confidence extractions
+- **Chunk extracted text and compute vector embeddings** via nomic-embed-text-v1.5
+- **Track embedding status** (PENDING/CURRENT/STALE) across the document lifecycle
 - Store documents in content-addressable storage with SQLite metadata
 - Query, list, and delete documents via CLI
 - Read items, attachments, and metadata from Zotero library (via database or BetterBibTeX JSON export)
@@ -74,14 +76,19 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - **Text-based metadata extraction**: heuristic extractors for title, authors, date, and document type with confidence scoring
 - **NEEDS_REVIEW workflow**: documents with low-confidence extraction flagged for human review
 - **Optional LLM fallback**: LiteLLM integration for re-extracting low-confidence fields
-- SQLite storage with content-addressable file layout
-- CLI interface (add, list, show, delete, open, update, review commands)
+- **Embedding pipeline**: section-aware markdown chunking (~512 tokens, ~15% overlap), nomic-embed-text-v1.5 via sentence-transformers (768-dim vectors), sqlite-vec storage with FTS5
+- **Embedding status tracking**: PENDING → CURRENT on embed, CURRENT → STALE on re-extraction, cascade deletion on document delete
+- **Embed-on-add**: documents automatically embedded during `add` and `zotero import` (use `--skip-embed` to defer)
+- **CLI `embed` command**: manual embedding/re-embedding with `--pending`, `--all`, `--force`, `--dry-run` options
+- **Graceful degradation**: library functions without sqlite-vec for document storage; embedding operations fail clearly
+- SQLite storage with content-addressable file layout (schema v3)
+- CLI interface (add, list, show, delete, open, update, review, embed commands)
 - @citekey identifier support with fuzzy matching suggestions
 - Pagination support (--limit, --all flags on list command)
 - Zotero read-only access: ZoteroReader facade with database and JSON export backends, BetterBibTeX citekey mapping, attachment resolution, collection and library filtering
 - **Batch import from Zotero**: `zotero import` command with library/collection filtering, dry-run mode, progress tracking, and continue-on-error (defaults to personal library)
 
-**Next milestones:** M5 (embedding pipeline). See `build_plan.md` for full details.
+**Next milestones:** M6 (retrieval — hybrid search via sqlite-vec + FTS5 with RRF fusion). See `build_plan.md` for full details.
 
 **Deferred to later phases:** M3b (metadata extraction is functionally complete, but does not yet hit benchmarks; that has been deferred), M3c (API metadata enrichment), web content ingestion, Zotero sync, citation tooling, auto-tagging, note management, Neovim plugin. See `future_roadmap.md` for full details.
 
@@ -98,7 +105,7 @@ Four horizontal concerns cut across the system:
 
 - **Web extraction**: trafilatura, readability-lxml
 - **PDF extraction**: Marker (primary), olmOCR (for scanned historical documents on remote GPU)
-- **Embeddings**: nomic-embed-text-v1.5 (local, 1024 dims, 8192 context)
+- **Embeddings**: nomic-embed-text-v1.5 (local, 768 dims, 8192 context) via sentence-transformers
 - **Metadata**: CrossRef API, GROBID (for academic PDFs), Open Graph tags (for web)
 - **Vector storage**: sqlite-vec (v0.1.6+), SQLite FTS5 for hybrid search
 - **LLM interface**: Custom RAGInterface + LiteLLM for provider abstraction
@@ -160,16 +167,19 @@ A detailed evaluation framework with quality targets, test set design, and evalu
 
 All commands accepting document IDs support both UUID (full or partial) and @citekey identifiers (e.g., `@Smith2023`).
 
-- `uv run local-library add <path>` - Add a PDF to the library
+- `uv run local-library add <path>` - Add a PDF to the library (embeds by default; use `--skip-embed` to defer)
 - `uv run local-library add <path> --metadata <csl-json-file>` - Add with bibliographic metadata
 - `uv run local-library add <path> --llm-extract` - Add with LLM-enhanced PDF extraction (requires GEMINI_API_KEY)
 - `uv run local-library list` - List all documents (use `--limit N` for pagination, `--all` for unlimited)
 - `uv run local-library show <id>` - Show document details
-- `uv run local-library delete <id>` - Delete a document
+- `uv run local-library delete <id>` - Delete a document (cascades to embeddings)
 - `uv run local-library open <id>` - Open extracted markdown in editor (use `--pdf` for PDF, `--both` for both)
 - `uv run local-library update <id>` - Edit document metadata in editor with validation loop
 - `uv run local-library review <id>` - Combined open + update workflow for NEEDS_REVIEW documents
-- `uv run local-library zotero import` - Batch import from Zotero (personal library by default; use `--library NAME`, `--collection NAME`, `--dry-run`)
+- `uv run local-library embed <id>` - Embed a specific document
+- `uv run local-library embed --pending` - Embed all PENDING/STALE documents
+- `uv run local-library embed --all --force` - Re-embed all READY documents
+- `uv run local-library zotero import` - Batch import from Zotero (embeds by default; use `--skip-embed` to defer; `--library NAME`, `--collection NAME`, `--dry-run`)
 - `uv run local-library zotero collections` - List Zotero collections (personal library by default; use `--library NAME` or `--all-libraries`)
 - `uv run local-library zotero libraries` - List available Zotero libraries (personal and group)
 - `uv run pytest` - Run tests
@@ -183,10 +193,16 @@ src/local_library/
 ├── __init__.py          # Package root
 ├── config.py            # XDG-compliant path configuration
 ├── core/                # Domain: models, storage, orchestration
-│   ├── models.py        # Document, result types (Functional Core)
+│   ├── models.py        # Document, EmbeddingStatus, result types (Functional Core)
 │   ├── errors.py        # Exception hierarchy with ErrorCode (Functional Core)
-│   ├── storage.py       # SQLite CRUD operations (Imperative Shell)
-│   └── library.py       # Library orchestrator (Imperative Shell)
+│   ├── storage.py       # SQLite CRUD operations, schema v3 (Imperative Shell)
+│   ├── library.py       # Library orchestrator (Imperative Shell)
+│   └── vec_extension.py # sqlite-vec extension loading and availability checking
+├── embeddings/          # Domain: chunking, embedding computation, vector storage
+│   ├── base.py          # Chunk, ChunkEmbedding dataclasses; Chunker, Embedder protocols
+│   ├── chunking.py      # MarkdownChunker (section-aware markdown splitting)
+│   ├── nomic.py         # NomicEmbedder (nomic-embed-text-v1.5 via sentence-transformers)
+│   └── storage.py       # EmbeddingStorage (sqlite-vec CRUD, FTS5 sync, status functions)
 ├── ingestion/           # Domain: content acquisition and extraction
 │   ├── base.py          # Protocols: ContentAcquirer, ContentExtractor
 │   ├── file.py          # FileAcquirer implementation
@@ -196,17 +212,19 @@ src/local_library/
 │   └── zotero.py        # ZoteroReader facade (database + JSON backends, citekey mapping)
 └── cli/                 # CLI interface (Typer/Rich)
     ├── main.py          # Entry point, command registration
-    ├── add.py           # Add command
-    ├── list.py          # List command (pagination with --limit/--all)
+    ├── add.py           # Add command (--skip-embed flag)
+    ├── list.py          # List command (pagination with --limit/--all, embed status column)
     ├── show.py          # Show command (@citekey support)
     ├── delete.py        # Delete command (@citekey support)
+    ├── embed.py         # Embed command (--pending, --all, --force, --dry-run)
     ├── open.py          # Open command (markdown/PDF viewing)
     ├── update.py        # Update command (editor-based metadata editing)
     ├── review.py        # Review command (combined open + update)
-    └── utils.py         # Shared utilities (identifier resolution, fuzzy matching)
+    ├── utils.py         # Shared utilities (identifier resolution, fuzzy matching)
+    └── zotero.py        # Zotero commands (import with --skip-embed, collections, libraries)
 ```
 
-See `src/local_library/core/CLAUDE.md`, `src/local_library/ingestion/CLAUDE.md`, and `src/local_library/cli/CLAUDE.md` for domain contracts.
+See `src/local_library/core/CLAUDE.md`, `src/local_library/ingestion/CLAUDE.md`, `src/local_library/embeddings/CLAUDE.md`, and `src/local_library/cli/CLAUDE.md` for domain contracts.
 
 ## Background Documentation
 

@@ -58,14 +58,14 @@ Four horizontal concerns cut across the entire system:
 - Embeddings stored per-chunk with foreign key to parent document
 
 **Completeness Checklist:**
-- [ ] Create, read, update, delete for documents
-- [ ] Create, read, delete for embeddings (update = delete + recreate)
+- [x] Create, read, update, delete for documents
+- [x] Create, read, delete for embeddings (update = delete + recreate)
 - [ ] Tag management (add, remove, list by document, list by tag)
-- [ ] Vector similarity search
-- [ ] Full-text search
-- [ ] Hybrid search (RRF combination)
-- [ ] Transaction support for multi-step operations
-- [ ] Error handling for constraint violations, missing records, etc.
+- [ ] Vector similarity search (M6)
+- [ ] Full-text search (M6)
+- [ ] Hybrid search (RRF combination) (M6)
+- [x] Transaction support for multi-step operations
+- [x] Error handling for constraint violations, missing records, etc.
 
 ### Ingestion Layer
 
@@ -106,12 +106,12 @@ Four horizontal concerns cut across the entire system:
 - Brute-force search acceptable up to ~100K vectors
 
 **Completeness Checklist:**
-- [ ] Text chunking with configurable parameters
-- [ ] Embedding computation for document chunks
-- [ ] Embedding computation for queries
-- [ ] Batch embedding for efficiency
-- [ ] Re-embedding on document update
-- [ ] Embedding deletion cascades with document deletion
+- [x] Text chunking with configurable parameters
+- [x] Embedding computation for document chunks
+- [ ] Embedding computation for queries (M6)
+- [x] Batch embedding for efficiency
+- [x] Re-embedding on document update
+- [x] Embedding deletion cascades with document deletion
 
 ### Interface Layer
 
@@ -344,7 +344,7 @@ Each milestone extends the pipeline and delivers testable functionality.
 
 ---
 
-### M5: Embedding Pipeline
+### M5: Embedding Pipeline ✓
 
 **Goal:** Chunk documents and compute embeddings.
 
@@ -355,12 +355,25 @@ Each milestone extends the pipeline and delivers testable functionality.
 - Re-embedding on document update
 
 **Done when:**
-- Documents have searchable embeddings after add/import
-- Chunk boundaries respect text structure
-- Embeddings are deleted when documents are deleted
-- Tests pass for chunking logic and embedding storage
+- Documents have searchable embeddings after add/import ✓
+- Chunk boundaries respect text structure ✓
+- Embeddings are deleted when documents are deleted ✓
+- Embedding status tracked (PENDING/CURRENT/STALE) with automatic transitions ✓
+- CLI `embed` command for manual embedding/re-embedding ✓
+- Two-phase batch operations (add with --skip-embed, then embed --pending) ✓
+- Tests pass for chunking logic and embedding storage ✓
 
-**Layers touched:** Embeddings (primary), Storage (vector tables)
+**Layers touched:** Embeddings (primary), Storage (vector tables), Interface (embed command, --skip-embed flags)
+
+**Status:** Complete
+
+**Implementation details:**
+- Section-aware markdown chunking via MarkdownHeaderTextSplitter + RecursiveCharacterTextSplitter (~512 tokens, ~15% overlap)
+- nomic-embed-text-v1.5 via sentence-transformers producing 768-dimensional vectors with `search_document:` prefix
+- sqlite-vec for vector storage, FTS5 for full-text chunk search, normalized schema (chunks → chunk_vectors + chunks_fts)
+- Schema migration v2 → v3 adding embedding_status column, chunks table, vec0 table, FTS5 table
+- Graceful degradation when sqlite-vec unavailable
+- See `docs/design-plans/2026-02-03-m5-embedding-pipeline.md` for design, `docs/implementation-plans/2026-02-04-m5-embedding-pipeline/` for implementation plan (8 phases)
 
 ---
 
@@ -549,7 +562,7 @@ Decisions to make during implementation:
 
 ## Next Steps
 
-Current status: M1 ✓, M2 ✓, M3a ✓, M4 ✓
+Current status: M1 ✓, M2 ✓, M3a ✓, M4 ✓, M3b ✓ (deferred benchmarks), M5 ✓
 
-1. **M3b: Text-based metadata extraction** — Implement heuristics with confidence scoring, validated against Zotero ground truth via extraction testing infrastructure
-2. Continue to M5 (embeddings) once metadata pipeline is complete
+1. **M6: Retrieval** — Query embedding with `search_query:` prefix, vector similarity search via sqlite-vec, full-text search via FTS5, hybrid ranking via RRF
+2. Continue to M7 (RAG query interface) once retrieval is working
