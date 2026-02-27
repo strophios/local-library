@@ -398,22 +398,29 @@ Text extraction (M3b) → confidence score
 
 ## Quality and Validation
 
-### Evaluation Framework
+### Evaluation Framework Expansion
 
-**What:** Systematic evaluation of retrieval and RAG quality.
+**What:** Expand retrieval and RAG evaluation from the initial 12-query set to 50-100 queries with established quality targets.
 
-**Why deferred:** Needed before production use, but Phase 1 can proceed with manual evaluation.
+**Current state (M6 delivered):**
+- IR metrics: Precision@k, Recall@k, MRR in `tests/eval/retrieval_eval.py` (unit tested)
+- 12 labeled test queries across 5 categories (factual, conceptual, comparative, methodology, adversarial) in `tests/eval/test_queries.json`
+- Comparative evaluation harness running all three retriever modes (vector, FTS, hybrid)
+- Document-level relevance judgments (citekey-based)
 
-**Dependencies:** Phase 1 complete (something to evaluate)
+**What remains:**
+- Expand test query set to 50-100 queries with relevance annotations against real corpus
+- Establish quality targets: Precision@5 ≥60%, MRR ≥0.5, "I don't know" accuracy ≥80%
+- Latency benchmarks per operation
+- End-to-end RAG evaluation (answer quality, not just retrieval quality)
+
+**Why deferred to post-M7:** End-to-end RAG evaluation (M7) is the most informative signal for which retrieval failures matter. Query expansion is most valuable against a populated library with real usage patterns. See `build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling" for the full decision rationale and sequencing.
+
+**Dependencies:** M7 complete, full Zotero corpus imported
 
 **Implementation notes:**
 - See RAG report Section 7 "Pending: Evaluation Framework"
 - See `RAG_background/v1_backport_content.md` for starter content
-- Elements needed:
-  - Stratified test query set (50-100 queries)
-  - Quality targets: Precision@5 ≥60%, MRR ≥0.5, "I don't know" accuracy ≥80%
-  - Latency targets per operation
-  - Evaluation code for automated measurement
 
 ---
 

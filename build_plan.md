@@ -377,7 +377,7 @@ Each milestone extends the pipeline and delivers testable functionality.
 
 ---
 
-### M6: Retrieval
+### M6: Retrieval ✓
 
 **Goal:** Search documents by vector similarity and full-text.
 
@@ -388,12 +388,23 @@ Each milestone extends the pipeline and delivers testable functionality.
 - Hybrid ranking via RRF
 
 **Done when:**
-- Relevant chunks retrieved for test queries
-- Hybrid search outperforms vector-only on keyword queries
-- Search results include source document references
-- Tests pass for retrieval quality (manual evaluation initially)
+- Relevant chunks retrieved for test queries ✓
+- Hybrid search outperforms vector-only on keyword queries ✓
+- Search results include source document references ✓
+- Tests pass for retrieval quality (manual evaluation initially) ✓
 
 **Layers touched:** Embeddings (query), Storage (search), Interface (search command)
+
+**Status:** Complete
+
+**Implementation details:**
+- Protocol-based retriever architecture: `Retriever` protocol in `embeddings/base.py` with `VectorRetriever`, `FTSRetriever`, `HybridRetriever` implementations in `embeddings/retrieval.py`
+- RRF fusion with configurable weights (`rrf_k=60`, equal vector/FTS weighting, 3x candidate multiplier)
+- FTS5 full-text search via `search_fts()` on `EmbeddingStorage`, with `FTSQueryError` for malformed queries
+- `Library.get_retriever(mode)` factory method wiring dependencies
+- CLI `search` command with `--mode` (hybrid/vector/fts), `--doc` (document-scoped), `--limit`, `--json` flags
+- Initial evaluation framework: `tests/eval/retrieval_eval.py` with Precision@k, Recall@k, MRR metrics; 12 labeled test queries in `test_queries.json`; comparative evaluation harness across all three modes
+- See `docs/design-plans/2026-02-26-m6-retrieval.md` for design, `docs/implementation-plans/2026-02-27-m6-retrieval/` for implementation plan (7 phases)
 
 ---
 
@@ -414,6 +425,37 @@ Each milestone extends the pipeline and delivers testable functionality.
 - Basic latency acceptable (<10s for typical query)
 
 **Layers touched:** Interface (primary), Embeddings (retrieval)
+
+---
+
+### Post-M7: Pipeline Evaluation and Corpus Scaling
+
+> **Decision (2026-02-27):** Evaluation query expansion (50-100 queries) and full Zotero corpus import are deferred to after M7. M7 proceeds with the current 12-query evaluation set as a regression baseline.
+
+This is not a pipeline milestone but a quality gate between completing the RAG pipeline and scaling to the full corpus. It ensures that the hours of extraction + embedding compute for ~1200 Zotero documents are not spent on a pipeline with undiagnosed quality issues.
+
+**Rationale:**
+
+1. **End-to-end RAG is the most informative quality signal.** M7 will reveal which retrieval failures actually matter — a query returning the right document but wrong chunks is invisible to document-level P@k but fatal for answer quality. Evaluation queries written after M7 experience will target real failure modes rather than hypothetical ones.
+
+2. **Full import is expensive and effectively one-way.** Re-extracting and re-embedding ~1200 documents after discovering pipeline issues (extraction artifacts, chunking problems) wastes significant compute. Better to validate on a small set first.
+
+3. **Query expansion against a real corpus is more valuable.** Writing 50-100 queries against documents you've actually read and queried produces better relevance annotations than synthetic coverage.
+
+**Planned sequencing:**
+
+```
+M7: RAG query interface (12-query regression baseline)
+  → Systematic evaluation pass: use RAG answer quality as primary signal
+    → Pipeline improvements as warranted (text post-processing, chunking, etc.)
+      → Full Zotero import (~1200 docs) with confidence in pipeline quality
+        → Expand evaluation query set (50-100 queries) against real corpus
+```
+
+**What this does NOT defer:**
+- The current 12-query evaluation set remains active throughout M7 as a regression baseline
+- Quality is still measured during M7 development; the *scope* of measurement is what's deferred
+- Pipeline improvements are explicitly planned, not aspirational
 
 ---
 
@@ -562,7 +604,7 @@ Decisions to make during implementation:
 
 ## Next Steps
 
-Current status: M1 ✓, M2 ✓, M3a ✓, M4 ✓, M3b ✓ (deferred benchmarks), M5 ✓
+Current status: M1 ✓, M2 ✓, M3a ✓, M4 ✓, M3b ✓ (deferred benchmarks), M5 ✓, M6 ✓
 
-1. **M6: Retrieval** — Query embedding with `search_query:` prefix, vector similarity search via sqlite-vec, full-text search via FTS5, hybrid ranking via RRF
-2. Continue to M7 (RAG query interface) once retrieval is working
+1. **M7: RAG Query Interface** — Context assembly from retrieved chunks, prompt construction with sources, LiteLLM integration, response formatting with citations
+2. **Post-M7 evaluation pass** — End-to-end RAG quality assessment, pipeline improvements, full Zotero corpus import, evaluation query expansion (see "Post-M7: Pipeline Evaluation and Corpus Scaling" above)

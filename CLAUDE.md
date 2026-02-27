@@ -93,7 +93,7 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - Zotero read-only access: ZoteroReader facade with database and JSON export backends, BetterBibTeX citekey mapping, attachment resolution, collection and library filtering
 - **Batch import from Zotero**: `zotero import` command with library/collection filtering, dry-run mode, progress tracking, and continue-on-error (defaults to personal library)
 
-**Next milestones:** M7 (LLM query interface — context assembly, answer generation via LiteLLM). See `build_plan.md` for full details.
+**Next milestones:** M7 (LLM query interface — context assembly, answer generation via LiteLLM), followed by a post-M7 evaluation pass (end-to-end RAG quality assessment, pipeline improvements, full Zotero corpus import, evaluation query expansion to 50-100). See `build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling" for rationale.
 
 **Deferred to later phases:** M3b (metadata extraction is functionally complete, but does not yet hit benchmarks; that has been deferred), M3c (API metadata enrichment), web content ingestion, Zotero sync, citation tooling, auto-tagging, note management, Neovim plugin. See `future_roadmap.md` for full details.
 
@@ -146,8 +146,9 @@ Comprehensive research on the RAG pipeline is documented in `RAG_background/`. T
 ### Evaluation Framework (Initial)
 A retrieval evaluation framework has been implemented in `tests/eval/`. Current state:
 - **IR metrics**: `retrieval_eval.py` provides Precision@k, Recall@k, MRR, NDCG@k with unit tests (`test_retrieval_metrics.py`)
-- **Seed query set**: `test_queries.json` contains initial test queries across categories (factual, conceptual, comparative, methodology, adversarial)
-- **Remaining work**: Quality targets not yet established, latency benchmarks not yet defined, end-to-end evaluation against a populated library not yet run. The seed query set needs expansion to 50-100 queries. See `RAG_background/v1_backport_content.md` for additional context.
+- **Seed query set**: `test_queries.json` contains 12 labeled test queries across 5 categories (factual, conceptual, comparative, methodology, adversarial)
+- **Comparative harness**: Runs all three retriever modes (vector, FTS, hybrid) with per-category breakdowns
+- **Planned expansion (post-M7)**: Query set expansion to 50-100 queries, quality targets, latency benchmarks, and end-to-end RAG evaluation are planned for after M7 — see `build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling" for rationale and sequencing
 
 ### What Would Change These Decisions
 - Scale beyond 250K vectors → migrate to LanceDB

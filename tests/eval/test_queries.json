@@ -5,70 +5,90 @@
       "id": "factual_001",
       "text": "What is the role of social identity in intergroup behavior?",
       "category": "factual",
-      "relevant_docs": ["Tajfel1979"],
+      "relevant_docs": [
+        "Tajfel1979"
+      ],
       "unanswerable": false
     },
     {
       "id": "factual_002",
       "text": "What is the phenomenological concept of the lifeworld?",
       "category": "factual",
-      "relevant_docs": ["Schutz1944"],
+      "relevant_docs": [
+        "Schutz1944"
+      ],
       "unanswerable": false
     },
     {
       "id": "factual_003",
       "text": "What are the NIST guidelines for digital evidence?",
       "category": "factual",
-      "relevant_docs": ["NIST2023"],
+      "relevant_docs": [
+        "NIST2023"
+      ],
       "unanswerable": false
     },
     {
       "id": "conceptual_001",
       "text": "How does actor-network theory describe the relationship between human and non-human actors?",
       "category": "conceptual",
-      "relevant_docs": ["Callon1998"],
+      "relevant_docs": [
+        "Callon1998"
+      ],
       "unanswerable": false
     },
     {
       "id": "conceptual_002",
       "text": "What is the relationship between culture and social structure?",
       "category": "conceptual",
-      "relevant_docs": ["Sewell1996a"],
+      "relevant_docs": [
+        "Sewell1996a"
+      ],
       "unanswerable": false
     },
     {
       "id": "conceptual_003",
       "text": "How does commodity fetishism obscure social relations?",
       "category": "conceptual",
-      "relevant_docs": ["Marx1968"],
+      "relevant_docs": [
+        "Marx1968"
+      ],
       "unanswerable": false
     },
     {
       "id": "methodology_001",
       "text": "How are legal texts processed with natural language processing?",
       "category": "methodology",
-      "relevant_docs": ["Chalkidis2020"],
+      "relevant_docs": [
+        "Chalkidis2020"
+      ],
       "unanswerable": false
     },
     {
       "id": "methodology_002",
-      "text": "What methods are used for information retrieval evaluation?",
+      "text": "What are the consequences of a processural approach to collective identity for research practices?",
       "category": "methodology",
-      "relevant_docs": ["Melucci1995"],
+      "relevant_docs": [
+        "Melucci1995"
+      ],
       "unanswerable": false
     },
     {
       "id": "comparative_001",
       "text": "How do embodied cognition theories differ from traditional cognitive models?",
       "category": "comparative",
-      "relevant_docs": ["Wilson-Mendenhall2018"],
+      "relevant_docs": [
+        "Wilson-Mendenhall2018"
+      ],
       "unanswerable": false
     },
     {
       "id": "comparative_002",
       "text": "What is the difference between commons-based peer production and traditional economic models?",
       "category": "comparative",
-      "relevant_docs": ["CBPP2015"],
+      "relevant_docs": [
+        "CBPP2015"
+      ],
       "unanswerable": false
     },
     {
