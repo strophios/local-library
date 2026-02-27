@@ -32,7 +32,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 ## Dependencies
 
 - **Uses**: `config` (paths), `ingestion` (ContentAcquirer, ContentExtractor protocols, MetadataHandler, TextMetadataExtractor), `embeddings` (MarkdownChunker, NomicEmbedder, EmbeddingStorage)
-- **Used by**: `cli`, future domains (embeddings, search)
+- **Used by**: `cli`, `embeddings` (retrieval module imports from core.errors)
 - **Boundary**: Core MUST NOT import from cli
 
 ## Key Decisions

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-02-06
+Last verified: 2026-02-27
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -52,9 +52,9 @@ Each document record contains:
 
 Development follows a **pipeline-first, layer-complete** approach documented in `build_philosophy.md`. The key insight: pipeline stages (vertical data flow) and architectural layers (horizontal concerns) are orthogonal. Build along the pipeline for rapid feedback; implement layers completely when touched.
 
-### Current Status: M1-M5 + M3b Complete (Record Storage + Extraction + Metadata + Zotero Reader + Text Extraction + Embeddings)
+### Current Status: M1-M6 + M3b Complete (Record Storage + Extraction + Metadata + Zotero Reader + Text Extraction + Embeddings + Retrieval)
 
-Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), M3b (text-based metadata extraction), M4 (Zotero read-only access), and M5 (embedding pipeline) are implemented. The system can:
+Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), M3b (text-based metadata extraction), M4 (Zotero read-only access), M5 (embedding pipeline), and M6 (retrieval) are implemented. The system can:
 - Ingest local PDF files via CLI (`local-library add <path>`)
 - Accept explicit CSL-JSON metadata (`--metadata <file>`)
 - Extract text to markdown via Marker
@@ -64,8 +64,9 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - Optionally use LLM fallback (via LiteLLM) for low-confidence extractions
 - **Chunk extracted text and compute vector embeddings** via nomic-embed-text-v1.5
 - **Track embedding status** (PENDING/CURRENT/STALE) across the document lifecycle
+- **Search documents** via hybrid (vector + FTS5 with RRF fusion), vector-only, or FTS-only modes
 - Store documents in content-addressable storage with SQLite metadata
-- Query, list, and delete documents via CLI
+- Query, list, search, and delete documents via CLI
 - Read items, attachments, and metadata from Zotero library (via database or BetterBibTeX JSON export)
 
 **Implemented:**
@@ -81,14 +82,18 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - **Embed-on-add**: documents automatically embedded during `add` and `zotero import` (use `--skip-embed` to defer)
 - **CLI `embed` command**: manual embedding/re-embedding with `--pending`, `--all`, `--force`, `--dry-run` options
 - **Graceful degradation**: library functions without sqlite-vec for document storage; embedding operations fail clearly
+- **Retrieval system**: VectorRetriever (cosine similarity), FTSRetriever (BM25 via FTS5), HybridRetriever (RRF fusion with configurable weights)
+- **Retriever protocol**: Protocol-based extensibility; `Library.get_retriever()` factory method wires up dependencies
+- **CLI `search` command**: hybrid/vector/fts modes, document-scoped search (--doc), JSON output (--json), configurable result limit (--limit)
+- **Retrieval evaluation framework**: IR metrics (Precision@k, Recall@k, MRR, NDCG@k), seed query set (test_queries.json), automated evaluation harness
 - SQLite storage with content-addressable file layout (schema v3)
-- CLI interface (add, list, show, delete, open, update, review, embed commands)
+- CLI interface (add, list, show, delete, open, update, review, embed, search commands)
 - @citekey identifier support with fuzzy matching suggestions
 - Pagination support (--limit, --all flags on list command)
 - Zotero read-only access: ZoteroReader facade with database and JSON export backends, BetterBibTeX citekey mapping, attachment resolution, collection and library filtering
 - **Batch import from Zotero**: `zotero import` command with library/collection filtering, dry-run mode, progress tracking, and continue-on-error (defaults to personal library)
 
-**Next milestones:** M6 (retrieval — hybrid search via sqlite-vec + FTS5 with RRF fusion). See `build_plan.md` for full details.
+**Next milestones:** M7 (LLM query interface — context assembly, answer generation via LiteLLM). See `build_plan.md` for full details.
 
 **Deferred to later phases:** M3b (metadata extraction is functionally complete, but does not yet hit benchmarks; that has been deferred), M3c (API metadata enrichment), web content ingestion, Zotero sync, citation tooling, auto-tagging, note management, Neovim plugin. See `future_roadmap.md` for full details.
 
@@ -98,7 +103,7 @@ Four horizontal concerns cut across the system:
 
 1. **Storage**: SQLite schema, CRUD operations, sqlite-vec, FTS5
 2. **Ingestion**: Content acquisition, extraction (Marker), metadata handling
-3. **Embeddings**: Chunking, nomic-embed-text, similarity operations
+3. **Embeddings + Retrieval**: Chunking, nomic-embed-text, similarity operations, FTS5 search, hybrid retrieval (RRF fusion)
 4. **Interface**: CLI, RAG queries, (later) daemon, Neovim plugin, HTTP API
 
 ## Key Libraries and Tools
@@ -126,7 +131,7 @@ Comprehensive research on the RAG pipeline is documented in `RAG_background/`. T
 ### Vector Storage: sqlite-vec + FTS5
 - Single-file portability prioritized over native hybrid search (LanceDB)
 - Brute-force search is adequate for ~100K vectors; scale ceiling ~250K
-- Hybrid search via manual RRF (~30 lines Python) combining sqlite-vec + FTS5
+- Hybrid search implemented via RRF fusion combining sqlite-vec + FTS5 (see `embeddings/retrieval.py`)
 
 ### PDF Extraction: Marker + Selective olmOCR
 - Marker for primary processing (proven M1 support, ~4s/page)
@@ -138,12 +143,11 @@ Comprehensive research on the RAG pipeline is documented in `RAG_background/`. T
 - Reframe verification as "triage for human review" rather than "automated decision"
 - Same infrastructure, lower accuracy bar, immediate utility
 
-### Pending: Evaluation Framework
-A detailed evaluation framework with quality targets, test set design, and evaluation code needs to be researched and created. The v1 research contained useful starter content (see `RAG_background/v1_backport_content.md`), but a proper framework specific to our architecture and use case should be developed before implementation begins. Key elements needed:
-- Stratified test query set (50-100 queries across factual, conceptual, comparative, methodology, and adversarial categories)
-- Quality targets (Precision@5, Recall@10, MRR, "I don't know" accuracy)
-- Latency targets per operation
-- Evaluation code for automated measurement
+### Evaluation Framework (Initial)
+A retrieval evaluation framework has been implemented in `tests/eval/`. Current state:
+- **IR metrics**: `retrieval_eval.py` provides Precision@k, Recall@k, MRR, NDCG@k with unit tests (`test_retrieval_metrics.py`)
+- **Seed query set**: `test_queries.json` contains initial test queries across categories (factual, conceptual, comparative, methodology, adversarial)
+- **Remaining work**: Quality targets not yet established, latency benchmarks not yet defined, end-to-end evaluation against a populated library not yet run. The seed query set needs expansion to 50-100 queries. See `RAG_background/v1_backport_content.md` for additional context.
 
 ### What Would Change These Decisions
 - Scale beyond 250K vectors → migrate to LanceDB
@@ -179,6 +183,9 @@ All commands accepting document IDs support both UUID (full or partial) and @cit
 - `uv run local-library embed <id>` - Embed a specific document
 - `uv run local-library embed --pending` - Embed all PENDING/STALE documents
 - `uv run local-library embed --all --force` - Re-embed all READY documents
+- `uv run local-library search "<query>"` - Search documents (hybrid mode by default; use `--mode vector` or `--mode fts`)
+- `uv run local-library search "<query>" --doc @Author2023` - Search within a specific document
+- `uv run local-library search "<query>" --limit 20 --json` - Get more results as JSON
 - `uv run local-library zotero import` - Batch import from Zotero (embeds by default; use `--skip-embed` to defer; `--library NAME`, `--collection NAME`, `--dry-run`)
 - `uv run local-library zotero collections` - List Zotero collections (personal library by default; use `--library NAME` or `--all-libraries`)
 - `uv run local-library zotero libraries` - List available Zotero libraries (personal and group)
@@ -198,11 +205,12 @@ src/local_library/
 │   ├── storage.py       # SQLite CRUD operations, schema v3 (Imperative Shell)
 │   ├── library.py       # Library orchestrator (Imperative Shell)
 │   └── vec_extension.py # sqlite-vec extension loading and availability checking
-├── embeddings/          # Domain: chunking, embedding computation, vector storage
-│   ├── base.py          # Chunk, ChunkEmbedding dataclasses; Chunker, Embedder protocols
+├── embeddings/          # Domain: chunking, embedding computation, vector storage, retrieval
+│   ├── base.py          # Chunk, ChunkEmbedding, SearchResult dataclasses; Chunker, Embedder, Retriever protocols
 │   ├── chunking.py      # MarkdownChunker (section-aware markdown splitting)
 │   ├── nomic.py         # NomicEmbedder (nomic-embed-text-v1.5 via sentence-transformers)
-│   └── storage.py       # EmbeddingStorage (sqlite-vec CRUD, FTS5 sync, status functions)
+│   ├── retrieval.py     # VectorRetriever, FTSRetriever, HybridRetriever, _rrf_fuse
+│   └── storage.py       # EmbeddingStorage (sqlite-vec CRUD, FTS5 search, status functions)
 ├── ingestion/           # Domain: content acquisition and extraction
 │   ├── base.py          # Protocols: ContentAcquirer, ContentExtractor
 │   ├── file.py          # FileAcquirer implementation
@@ -217,6 +225,7 @@ src/local_library/
     ├── show.py          # Show command (@citekey support)
     ├── delete.py        # Delete command (@citekey support)
     ├── embed.py         # Embed command (--pending, --all, --force, --dry-run)
+    ├── search.py        # Search command (--limit, --mode, --doc, --json)
     ├── open.py          # Open command (markdown/PDF viewing)
     ├── update.py        # Update command (editor-based metadata editing)
     ├── review.py        # Review command (combined open + update)
