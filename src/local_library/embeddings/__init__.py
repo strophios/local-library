@@ -46,6 +46,14 @@ def __getattr__(name: str) -> object:
         from local_library.embeddings.storage import get_documents_needing_embedding
 
         return get_documents_needing_embedding
+    elif name == "SearchResult":
+        from local_library.embeddings.base import SearchResult
+
+        return SearchResult
+    elif name == "Retriever":
+        from local_library.embeddings.base import Retriever
+
+        return Retriever
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -53,9 +61,11 @@ __all__ = [
     # Protocols
     "Chunker",
     "Embedder",
+    "Retriever",
     # Data models
     "Chunk",
     "ChunkEmbedding",
+    "SearchResult",
     # Implementations
     "MarkdownChunker",
     "NomicEmbedder",
