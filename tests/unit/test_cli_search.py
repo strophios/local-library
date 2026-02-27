@@ -61,9 +61,7 @@ def _make_mock_result(
 class TestSearchCommand:
     """Tests for the search command."""
 
-    def test_basic_search(
-        self, mock_search_library: MagicMock, mock_vec_available
-    ) -> None:
+    def test_basic_search(self, mock_search_library: MagicMock, mock_vec_available) -> None:
         """search command returns results in table format."""
         mock_retriever = MagicMock()
         mock_retriever.retrieve.return_value = [
@@ -77,9 +75,7 @@ class TestSearchCommand:
         assert "machine learning" in result.output.lower() or "Search" in result.output
         mock_search_library.get_retriever.assert_called_once_with(mode="hybrid")
 
-    def test_json_output(
-        self, mock_search_library: MagicMock, mock_vec_available
-    ) -> None:
+    def test_json_output(self, mock_search_library: MagicMock, mock_vec_available) -> None:
         """search --json outputs valid JSON with expected schema."""
         mock_retriever = MagicMock()
         mock_retriever.retrieve.return_value = [
@@ -108,9 +104,7 @@ class TestSearchCommand:
         assert "search_methods" in item
         assert "text" in item
 
-    def test_mode_vector(
-        self, mock_search_library: MagicMock, mock_vec_available
-    ) -> None:
+    def test_mode_vector(self, mock_search_library: MagicMock, mock_vec_available) -> None:
         """search --mode vector uses vector retriever."""
         mock_retriever = MagicMock()
         mock_retriever.retrieve.return_value = []
@@ -121,9 +115,7 @@ class TestSearchCommand:
         assert result.exit_code == 0
         mock_search_library.get_retriever.assert_called_once_with(mode="vector")
 
-    def test_mode_fts(
-        self, mock_search_library: MagicMock, mock_vec_available
-    ) -> None:
+    def test_mode_fts(self, mock_search_library: MagicMock, mock_vec_available) -> None:
         """search --mode fts uses FTS retriever."""
         mock_retriever = MagicMock()
         mock_retriever.retrieve.return_value = []
@@ -140,9 +132,7 @@ class TestSearchCommand:
 
         assert result.exit_code == 1
 
-    def test_limit_parameter(
-        self, mock_search_library: MagicMock, mock_vec_available
-    ) -> None:
+    def test_limit_parameter(self, mock_search_library: MagicMock, mock_vec_available) -> None:
         """search --limit passes k parameter to retriever."""
         mock_retriever = MagicMock()
         mock_retriever.retrieve.return_value = []
@@ -155,9 +145,7 @@ class TestSearchCommand:
         call_kwargs = mock_retriever.retrieve.call_args
         assert call_kwargs.kwargs.get("k") == 5 or call_kwargs[1].get("k") == 5
 
-    def test_doc_filter(
-        self, mock_search_library: MagicMock, mock_vec_available
-    ) -> None:
+    def test_doc_filter(self, mock_search_library: MagicMock, mock_vec_available) -> None:
         """search --doc resolves identifier and passes doc_ids."""
         mock_doc = MagicMock()
         mock_doc.id = uuid4()
@@ -176,9 +164,7 @@ class TestSearchCommand:
         assert doc_ids is not None
         assert mock_doc.id in doc_ids
 
-    def test_empty_results(
-        self, mock_search_library: MagicMock, mock_vec_available
-    ) -> None:
+    def test_empty_results(self, mock_search_library: MagicMock, mock_vec_available) -> None:
         """search with no results shows appropriate message."""
         mock_retriever = MagicMock()
         mock_retriever.retrieve.return_value = []
@@ -196,9 +182,7 @@ class TestSearchCommand:
 
         assert result.exit_code == 1
 
-    def test_fts_query_error(
-        self, mock_search_library: MagicMock, mock_vec_available
-    ) -> None:
+    def test_fts_query_error(self, mock_search_library: MagicMock, mock_vec_available) -> None:
         """search handles FTSQueryError gracefully."""
         mock_retriever = MagicMock()
         mock_retriever.retrieve.side_effect = FTSQueryError(
@@ -212,9 +196,7 @@ class TestSearchCommand:
 
         assert result.exit_code == 1
 
-    def test_embedding_error(
-        self, mock_search_library: MagicMock, mock_vec_available
-    ) -> None:
+    def test_embedding_error(self, mock_search_library: MagicMock, mock_vec_available) -> None:
         """search handles EmbeddingError gracefully."""
         mock_search_library.get_retriever.side_effect = EmbeddingError(
             "sqlite-vec extension not available",

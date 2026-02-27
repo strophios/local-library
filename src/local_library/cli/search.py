@@ -14,6 +14,7 @@ from local_library.cli.utils import resolve_identifier
 from local_library.core import Library
 from local_library.core.errors import EmbeddingError, FTSQueryError, LookupError
 from local_library.core.vec_extension import is_vec_available
+from local_library.embeddings.base import SearchResult
 
 console = Console()
 err_console = Console(stderr=True)
@@ -126,30 +127,32 @@ def search(
         raise typer.Exit(code=1) from None
 
 
-def _output_json(results) -> None:
+def _output_json(results: list[SearchResult]) -> None:
     """Output search results as JSON."""
     output = []
     for r in results:
-        output.append({
-            "chunk_id": r.chunk.chunk_id,
-            "doc_id": str(r.chunk.doc_id),
-            "chunk_index": r.chunk.chunk_index,
-            "score": round(r.score, 6),
-            "doc_title": r.doc_title,
-            "doc_citekey": r.doc_citekey,
-            "search_methods": sorted(r.search_methods),
-            "text": r.chunk.text,
-        })
+        output.append(
+            {
+                "chunk_id": r.chunk.chunk_id,
+                "doc_id": str(r.chunk.doc_id),
+                "chunk_index": r.chunk.chunk_index,
+                "score": round(r.score, 6),
+                "doc_title": r.doc_title,
+                "doc_citekey": r.doc_citekey,
+                "search_methods": sorted(r.search_methods),
+                "text": r.chunk.text,
+            }
+        )
     console.print(json.dumps(output, indent=2))
 
 
-def _output_table(results, query: str, mode: str) -> None:
+def _output_table(results: list[SearchResult], query: str, mode: str) -> None:
     """Output search results as a Rich table."""
     if not results:
-        console.print(f"[dim]no results for[/dim] \"{query}\"")
+        console.print(f'[dim]no results for[/dim] "{query}"')
         return
 
-    table = Table(title=f"Search: \"{query}\" ({mode}, {len(results)} results)")
+    table = Table(title=f'Search: "{query}" ({mode}, {len(results)} results)')
     table.add_column("#", style="dim", width=3)
     table.add_column("Score", width=8)
     table.add_column("Source", width=30)
