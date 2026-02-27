@@ -9,7 +9,7 @@ from uuid import UUID
 import numpy as np
 from numpy.typing import NDArray
 
-from local_library.core.errors import EmbeddingError, ErrorCode
+from local_library.core.errors import EmbeddingError, ErrorCode, FTSQueryError
 from local_library.core.models import EmbeddingStatus
 from local_library.core.vec_extension import require_vec_extension
 from local_library.embeddings.base import Chunk, ChunkEmbedding
@@ -272,6 +272,86 @@ class EmbeddingStorage:
             )
             distance = row[1]
             results.append((chunk, distance))
+
+        return results
+
+    def search_fts(
+        self,
+        query: str,
+        limit: int = 10,
+        doc_ids: list[UUID] | None = None,
+    ) -> list[tuple[Chunk, float]]:
+        """Search for chunks using FTS5 full-text search with BM25 ranking.
+
+        Args:
+            query: Search query text (passed to FTS5 MATCH)
+            limit: Maximum number of results to return
+            doc_ids: Optional list of document IDs to filter by
+
+        Returns:
+            List of (Chunk, bm25_score) tuples sorted by relevance.
+            BM25 scores are negative; more negative = better match.
+
+        Raises:
+            FTSQueryError: If query contains invalid FTS5 syntax
+        """
+        try:
+            if doc_ids:
+                placeholders = ",".join("?" * len(doc_ids))
+                cursor = self._conn.execute(
+                    f"""
+                    SELECT c.chunk_id, c.doc_id, c.chunk_index, c.text, c.section,
+                           c.char_start, c.char_end, c.created_at, bm25(chunks_fts)
+                    FROM chunks_fts
+                    JOIN chunks c ON chunks_fts.rowid = c.rowid
+                    WHERE chunks_fts MATCH ? AND c.doc_id IN ({placeholders})
+                    ORDER BY bm25(chunks_fts)
+                    LIMIT ?
+                    """,
+                    [query] + [str(d) for d in doc_ids] + [limit],
+                )
+            else:
+                cursor = self._conn.execute(
+                    """
+                    SELECT c.chunk_id, c.doc_id, c.chunk_index, c.text, c.section,
+                           c.char_start, c.char_end, c.created_at, bm25(chunks_fts)
+                    FROM chunks_fts
+                    JOIN chunks c ON chunks_fts.rowid = c.rowid
+                    WHERE chunks_fts MATCH ?
+                    ORDER BY bm25(chunks_fts)
+                    LIMIT ?
+                    """,
+                    [query, limit],
+                )
+        except sqlite3.OperationalError as e:
+            error_msg = str(e).lower()
+            if (
+                "fts5" in error_msg
+                or "syntax" in error_msg
+                or "parse" in error_msg
+                or "unterminated" in error_msg
+            ):
+                raise FTSQueryError(
+                    f"invalid FTS5 query syntax: {e}",
+                    ErrorCode.EMBEDDING_FTS_QUERY_SYNTAX,
+                    details={"query": query},
+                ) from e
+            raise
+
+        results = []
+        for row in cursor.fetchall():
+            chunk = Chunk(
+                chunk_id=row[0],
+                doc_id=UUID(row[1]),
+                chunk_index=row[2],
+                text=row[3],
+                section=row[4] or "",
+                char_start=row[5],
+                char_end=row[6],
+                created_at=datetime.fromisoformat(row[7]),
+            )
+            score = row[8]
+            results.append((chunk, score))
 
         return results
 
