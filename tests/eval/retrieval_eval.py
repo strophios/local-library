@@ -19,7 +19,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-
 # ── Functional Core: Metric computation ──────────────────────────
 
 
@@ -304,7 +303,11 @@ def main() -> None:
         default=Path(__file__).parent / "test_queries.json",
         help="Path to test queries JSON",
     )
-    parser.add_argument("--mode", default="all", help="Retriever mode (hybrid, vector, fts, or all)")
+    parser.add_argument(
+        "--mode",
+        default="all",
+        help="Retriever mode (hybrid, vector, fts, or all)",
+    )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     args = parser.parse_args()
 
