@@ -62,6 +62,10 @@ def __getattr__(name: str) -> object:
         from local_library.embeddings.retrieval import FTSRetriever
 
         return FTSRetriever
+    elif name == "HybridRetriever":
+        from local_library.embeddings.retrieval import HybridRetriever
+
+        return HybridRetriever
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -80,6 +84,7 @@ __all__ = [
     "EmbeddingStorage",
     "VectorRetriever",
     "FTSRetriever",
+    "HybridRetriever",
     # Utilities
     "estimate_token_count",
     "update_embedding_status",

@@ -673,7 +673,11 @@ class TestHybridRetriever:
             assert r.search_methods == frozenset({"vector"})
 
         # Should log a warning
-        assert any("FTS" in record.message or "fts" in record.message.lower() for record in caplog.records)
+        fts_logged = any(
+            "FTS" in record.message or "fts" in record.message.lower()
+            for record in caplog.records
+        )
+        assert fts_logged
 
     def test_respects_k_parameter(self, storage: EmbeddingStorage) -> None:
         """retrieve() returns at most k results."""
