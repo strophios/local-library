@@ -1,6 +1,6 @@
 # Core Domain
 
-Last verified: 2026-02-05
+Last verified: 2026-02-27
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 
 ## Contracts
 
-- **Exposes**: Document, DocumentStatus (PENDING, READY, FAILED, NEEDS_REVIEW), EmbeddingStatus (PENDING, CURRENT, STALE), AddResult, FieldExtraction, TextExtractionResult, ErrorCode hierarchy (including MetadataError, ZoteroError, EmbeddingError), Library class (with get_by_citekey, get_all_citekeys, update_metadata, embed, embed_all), storage functions, vec_extension module
+- **Exposes**: Document, DocumentStatus (PENDING, READY, FAILED, NEEDS_REVIEW), EmbeddingStatus (PENDING, CURRENT, STALE), AddResult, FieldExtraction, TextExtractionResult, ErrorCode hierarchy (including MetadataError, ZoteroError, EmbeddingError), Library class (with get_by_citekey, get_all_citekeys, update_metadata, embed, embed_all, get_retriever), storage functions, vec_extension module
 - **Guarantees**:
   - Document.id is UUID, globally unique
   - Document.content_hash is SHA-256, content-addressable
@@ -26,6 +26,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
   - Library.embed_all() processes all PENDING/STALE documents
   - Library.delete() cascades to remove embeddings
   - Library.add() embeds by default when embed_on_add=True and sqlite-vec available
+  - Library.get_retriever() factory method returns Retriever protocol-compliant instances (HybridRetriever, VectorRetriever, or FTSRetriever)
 - **Expects**: Sources handled by at least one registered acquirer; files handled by at least one extractor
 
 ## Dependencies
@@ -69,7 +70,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 - `models.py` - Document, AcquisitionResult, ExtractionResult, AddResult, FieldExtraction, TextExtractionResult, EmbeddingStatus
 - `errors.py` - ErrorCode enum, exception hierarchy (includes ACQUISITION_*, EXTRACTION_*, METADATA_*, ZOTERO_*, EMBEDDING_* codes)
 - `storage.py` - SQLite CRUD (get_connection, init_schema, create/get/update/delete), schema v3 with chunks and FTS5
-- `library.py` - Library orchestrator (add, get, get_by_citekey, get_all_citekeys, list, delete, embed, embed_all, update_metadata) with handler dispatch and text extraction integration
+- `library.py` - Library orchestrator (add, get, get_by_citekey, get_all_citekeys, list, delete, embed, embed_all, update_metadata, get_retriever) with handler dispatch and text extraction integration
 - `vec_extension.py` - sqlite-vec extension loading, vec0 table creation, availability checking
 
 ## Gotchas
@@ -86,3 +87,4 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 - Library.embed() raises EmbeddingError if sqlite-vec unavailable or document not READY
 - Embedding failure in add() is non-fatal; document created but embedding_status stays PENDING
 - embed_on_add respects sqlite-vec availability; disabled automatically if extension unavailable
+- Library.get_retriever() raises EmbeddingError if sqlite-vec unavailable; factory method handles embedder lazy-init for vector/hybrid modes
