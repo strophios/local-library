@@ -51,15 +51,9 @@ def _create_test_document(conn: sqlite3.Connection, doc_id: UUID) -> None:
 
 
 @pytest.fixture
-def temp_dir(tmp_path: Path) -> Path:
-    """Provide a temporary directory."""
-    return tmp_path
-
-
-@pytest.fixture
-def storage(temp_dir: Path) -> EmbeddingStorage:
+def storage(tmp_path: Path) -> EmbeddingStorage:
     """Provide an EmbeddingStorage with initialized schema."""
-    db_path = temp_dir / "test.db"
+    db_path = tmp_path / "test.db"
     conn = get_connection(db_path)
     init_schema(conn)
     return EmbeddingStorage(conn)
