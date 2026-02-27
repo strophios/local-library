@@ -2,6 +2,7 @@
 
 # pattern: Imperative Shell
 
+import logging
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,8 +18,10 @@ from local_library.core.vec_extension import is_vec_available
 from local_library.embeddings.base import Chunk, ChunkEmbedding, Retriever, SearchResult
 from local_library.embeddings.retrieval import (
     FTSRetriever,
+    HybridRetriever,
     VectorRetriever,
     _lookup_doc_metadata,
+    _rrf_fuse,
 )
 from local_library.embeddings.storage import EmbeddingStorage
 
@@ -431,3 +434,284 @@ class TestFTSRetriever:
         results = retriever.retrieve("xylophone")
 
         assert results == []
+
+
+class TestRrfFuse:
+    """Tests for the _rrf_fuse pure function (Functional Core)."""
+
+    def _make_result(
+        self,
+        chunk_id: str,
+        score: float,
+        method: str,
+        doc_id: UUID | None = None,
+    ) -> SearchResult:
+        """Helper to create SearchResult for fusion tests."""
+        if doc_id is None:
+            doc_id = uuid4()
+        chunk = Chunk.create(doc_id, 0, f"Text for {chunk_id}")
+        # Override chunk_id for deterministic testing
+        chunk = Chunk(
+            chunk_id=chunk_id,
+            doc_id=chunk.doc_id,
+            chunk_index=chunk.chunk_index,
+            text=chunk.text,
+            section=chunk.section,
+            char_start=chunk.char_start,
+            char_end=chunk.char_end,
+            created_at=chunk.created_at,
+        )
+        return SearchResult(
+            chunk=chunk,
+            score=score,
+            doc_title=None,
+            doc_citekey=None,
+            search_methods=frozenset({method}),
+        )
+
+    def test_empty_inputs(self) -> None:
+        """RRF with empty lists returns empty list."""
+        result = _rrf_fuse([], [], k=10)
+        assert result == []
+
+    def test_single_list_vector_only(self) -> None:
+        """RRF with only vector results returns them re-scored."""
+        vector_results = [
+            self._make_result("a", 0.9, "vector"),
+            self._make_result("b", 0.8, "vector"),
+        ]
+        fused = _rrf_fuse(vector_results, [], k=10)
+
+        assert len(fused) == 2
+        assert fused[0].chunk.chunk_id == "a"
+        assert fused[1].chunk.chunk_id == "b"
+        assert fused[0].score > fused[1].score
+
+    def test_single_list_fts_only(self) -> None:
+        """RRF with only FTS results returns them re-scored."""
+        fts_results = [
+            self._make_result("x", 5.0, "fts"),
+            self._make_result("y", 3.0, "fts"),
+        ]
+        fused = _rrf_fuse([], fts_results, k=10)
+
+        assert len(fused) == 2
+        assert fused[0].chunk.chunk_id == "x"
+        assert fused[1].chunk.chunk_id == "y"
+
+    def test_overlapping_results_merge(self) -> None:
+        """Chunks appearing in both lists get combined scores and methods."""
+        doc_id = uuid4()
+        vector_results = [
+            self._make_result("shared", 0.9, "vector", doc_id=doc_id),
+            self._make_result("vec_only", 0.7, "vector"),
+        ]
+        fts_results = [
+            self._make_result("shared", 5.0, "fts", doc_id=doc_id),
+            self._make_result("fts_only", 3.0, "fts"),
+        ]
+        fused = _rrf_fuse(vector_results, fts_results, k=10)
+
+        shared_result = next(r for r in fused if r.chunk.chunk_id == "shared")
+        assert shared_result.search_methods == frozenset({"vector", "fts"})
+
+        # Shared result should rank highest (gets RRF score from both lists)
+        assert fused[0].chunk.chunk_id == "shared"
+
+    def test_respects_k_limit(self) -> None:
+        """RRF returns at most k results."""
+        vector_results = [
+            self._make_result(f"v{i}", 1.0 - i * 0.1, "vector")
+            for i in range(5)
+        ]
+        fts_results = [
+            self._make_result(f"f{i}", 5.0 - i, "fts")
+            for i in range(5)
+        ]
+        fused = _rrf_fuse(vector_results, fts_results, k=3)
+
+        assert len(fused) == 3
+
+    def test_sorted_by_score_descending(self) -> None:
+        """Fused results are sorted by RRF score descending."""
+        vector_results = [
+            self._make_result("a", 0.9, "vector"),
+            self._make_result("b", 0.5, "vector"),
+        ]
+        fts_results = [
+            self._make_result("c", 5.0, "fts"),
+            self._make_result("b", 3.0, "fts"),
+        ]
+        fused = _rrf_fuse(vector_results, fts_results, k=10)
+
+        scores = [r.score for r in fused]
+        assert scores == sorted(scores, reverse=True)
+
+    def test_rrf_k_parameter(self) -> None:
+        """Different rrf_k values change scores but not rank order."""
+        vector_results = [
+            self._make_result("a", 0.9, "vector"),
+            self._make_result("b", 0.5, "vector"),
+        ]
+        fused_60 = _rrf_fuse(vector_results, [], k=10, rrf_k=60)
+        fused_10 = _rrf_fuse(vector_results, [], k=10, rrf_k=10)
+
+        # Same order
+        assert [r.chunk.chunk_id for r in fused_60] == [r.chunk.chunk_id for r in fused_10]
+        # Different scores
+        assert fused_60[0].score != fused_10[0].score
+
+    def test_weights_affect_scoring(self) -> None:
+        """Non-equal weights change relative contribution of each list."""
+        doc_id = uuid4()
+        vector_results = [self._make_result("a", 0.9, "vector", doc_id=doc_id)]
+        fts_results = [self._make_result("a", 5.0, "fts", doc_id=doc_id)]
+
+        fused_equal = _rrf_fuse(
+            vector_results, fts_results, k=10,
+            vector_weight=1.0, fts_weight=1.0,
+        )
+        fused_vector_heavy = _rrf_fuse(
+            vector_results, fts_results, k=10,
+            vector_weight=2.0, fts_weight=0.5,
+        )
+
+        # Scores differ when weights change
+        assert fused_equal[0].score != fused_vector_heavy[0].score
+
+    def test_preserves_metadata(self) -> None:
+        """Fused results preserve doc_title and doc_citekey from original results."""
+        doc_id = uuid4()
+        chunk = Chunk.create(doc_id, 0, "Text")
+        chunk = Chunk(
+            chunk_id="meta_test",
+            doc_id=chunk.doc_id,
+            chunk_index=chunk.chunk_index,
+            text=chunk.text,
+            section=chunk.section,
+            char_start=chunk.char_start,
+            char_end=chunk.char_end,
+            created_at=chunk.created_at,
+        )
+        vector_results = [
+            SearchResult(
+                chunk=chunk,
+                score=0.9,
+                doc_title="My Title",
+                doc_citekey="Key2023",
+                search_methods=frozenset({"vector"}),
+            )
+        ]
+        fused = _rrf_fuse(vector_results, [], k=10)
+
+        assert fused[0].doc_title == "My Title"
+        assert fused[0].doc_citekey == "Key2023"
+
+
+class TestHybridRetriever:
+    """Tests for HybridRetriever."""
+
+    def test_satisfies_retriever_protocol(self, storage: EmbeddingStorage) -> None:
+        """HybridRetriever satisfies the Retriever protocol."""
+        mock_embedder = MagicMock()
+        vector_ret = VectorRetriever(storage, mock_embedder)
+        fts_ret = FTSRetriever(storage)
+        hybrid = HybridRetriever(vector_ret, fts_ret)
+        assert isinstance(hybrid, Retriever)
+
+    def test_returns_fused_results(self, storage: EmbeddingStorage) -> None:
+        """retrieve() returns results from both vector and FTS search."""
+        doc_id = uuid4()
+        _create_test_document(storage._conn, doc_id)
+        storage._conn.execute(
+            "UPDATE documents SET title = ?, citekey = ? WHERE id = ?",
+            ("Hybrid Doc", "Hybrid2023", str(doc_id)),
+        )
+        storage._conn.commit()
+        storage.store_embeddings([
+            make_chunk_embedding(doc_id, 0, "Machine learning classification algorithms"),
+        ])
+
+        mock_embedder = MagicMock()
+        mock_embedder.embed_query.return_value = np.random.randn(768).astype(np.float32)
+
+        vector_ret = VectorRetriever(storage, mock_embedder)
+        fts_ret = FTSRetriever(storage)
+        hybrid = HybridRetriever(vector_ret, fts_ret)
+        results = hybrid.retrieve("machine learning")
+
+        assert len(results) >= 1
+        result = results[0]
+        assert isinstance(result, SearchResult)
+        # The result should come from at least one method
+        assert len(result.search_methods) >= 1
+
+    def test_falls_back_to_vector_on_fts_error(
+        self, storage: EmbeddingStorage, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """HybridRetriever falls back to vector-only when FTS raises FTSQueryError."""
+        doc_id = uuid4()
+        _create_test_document(storage._conn, doc_id)
+        storage.store_embeddings([
+            make_chunk_embedding(doc_id, 0, "Some text content"),
+        ])
+
+        mock_embedder = MagicMock()
+        mock_embedder.embed_query.return_value = np.random.randn(768).astype(np.float32)
+
+        vector_ret = VectorRetriever(storage, mock_embedder)
+        fts_ret = FTSRetriever(storage)
+        hybrid = HybridRetriever(vector_ret, fts_ret)
+
+        # Query with FTS5 syntax error
+        with caplog.at_level(logging.WARNING):
+            results = hybrid.retrieve('"unbalanced quote')
+
+        # Should still get vector results
+        assert len(results) >= 1
+        for r in results:
+            assert r.search_methods == frozenset({"vector"})
+
+        # Should log a warning
+        assert any("FTS" in record.message or "fts" in record.message.lower() for record in caplog.records)
+
+    def test_respects_k_parameter(self, storage: EmbeddingStorage) -> None:
+        """retrieve() returns at most k results."""
+        doc_id = uuid4()
+        _create_test_document(storage._conn, doc_id)
+        storage.store_embeddings([
+            make_chunk_embedding(doc_id, i, f"Chunk {i} with searchable terms")
+            for i in range(10)
+        ])
+
+        mock_embedder = MagicMock()
+        mock_embedder.embed_query.return_value = np.random.randn(768).astype(np.float32)
+
+        vector_ret = VectorRetriever(storage, mock_embedder)
+        fts_ret = FTSRetriever(storage)
+        hybrid = HybridRetriever(vector_ret, fts_ret)
+        results = hybrid.retrieve("searchable", k=3)
+
+        assert len(results) <= 3
+
+    def test_passes_doc_ids_filter(self, storage: EmbeddingStorage) -> None:
+        """retrieve() passes doc_ids filter to both sub-retrievers."""
+        doc_id_1 = uuid4()
+        doc_id_2 = uuid4()
+        _create_test_document(storage._conn, doc_id_1)
+        _create_test_document(storage._conn, doc_id_2)
+        storage.store_embeddings([
+            make_chunk_embedding(doc_id_1, 0, "Content about Python programming"),
+            make_chunk_embedding(doc_id_2, 0, "Content about Python programming"),
+        ])
+
+        mock_embedder = MagicMock()
+        mock_embedder.embed_query.return_value = np.random.randn(768).astype(np.float32)
+
+        vector_ret = VectorRetriever(storage, mock_embedder)
+        fts_ret = FTSRetriever(storage)
+        hybrid = HybridRetriever(vector_ret, fts_ret)
+        results = hybrid.retrieve("Python", k=10, doc_ids=[doc_id_1])
+
+        for result in results:
+            assert result.chunk.doc_id == doc_id_1
