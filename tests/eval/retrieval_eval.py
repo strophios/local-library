@@ -226,7 +226,6 @@ def run_evaluation(
     db_path: Path,
     queries_path: Path,
     mode: str = "hybrid",
-    json_output: bool = False,
 ) -> EvalReport:
     """Run retrieval evaluation against labeled query set.
 
@@ -234,7 +233,6 @@ def run_evaluation(
         db_path: Path to SQLite database with embedded documents
         queries_path: Path to test_queries.json
         mode: Retriever mode (hybrid, vector, fts)
-        json_output: Output as JSON instead of table
 
     Returns:
         EvalReport with metrics for all queries
@@ -273,14 +271,12 @@ def run_evaluation(
 def run_comparative_evaluation(
     db_path: Path,
     queries_path: Path,
-    json_output: bool = False,
 ) -> dict[str, EvalReport]:
     """Run evaluation for all three retriever modes and compare.
 
     Args:
         db_path: Path to SQLite database with embedded documents
         queries_path: Path to test_queries.json
-        json_output: Output as JSON
 
     Returns:
         Dict mapping mode name to EvalReport
