@@ -1,6 +1,6 @@
 # CLI Domain
 
-Last verified: 2026-02-05
+Last verified: 2026-02-27
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 
 ## Contracts
 
-- **Exposes**: CLI commands (add, list, show, delete, open, update, review, embed), zotero command group (import, collections), identifier resolution utilities
+- **Exposes**: CLI commands (add, list, show, delete, open, update, review, embed, search), zotero command group (import, collections), identifier resolution utilities
 - **Guarantees**:
   - All commands accepting document IDs support UUID (full or partial) and @citekey syntax
   - Failed citekey lookups provide fuzzy match suggestions (Levenshtein distance + prefix matching)
@@ -17,12 +17,16 @@ Command-line interface for the local-library system. Provides user-facing comman
   - PDF opens non-blocking; markdown opens blocking
   - Both `--llm` and `--llm-extract` flags validate GEMINI_API_KEY early, warn and disable if missing
   - embed command requires sqlite-vec; fails gracefully with helpful error if unavailable
+  - search command requires sqlite-vec; fails gracefully with helpful error if unavailable
+  - search command validates --mode against (hybrid, vector, fts) before executing
+  - search --doc supports UUID and @citekey identifiers for document-scoped search
+  - FTS query syntax errors caught and reported with suggestion to use --mode vector
   - --skip-embed flag available on add and zotero import for batch workflows
 - **Expects**: Library context manager for database access; editor available for update/review/open commands
 
 ## Dependencies
 
-- **Uses**: `core.Library`, `core.models` (Document, DocumentStatus), `core.errors` (LookupError), `core.storage` (get_connection, get_unique_citekey), `ingestion.metadata` (MetadataHandler)
+- **Uses**: `core.Library`, `core.models` (Document, DocumentStatus), `core.errors` (LookupError, EmbeddingError, FTSQueryError), `core.storage` (get_connection, get_unique_citekey), `core.vec_extension` (is_vec_available), `ingestion.metadata` (MetadataHandler), `embeddings.base` (SearchResult)
 - **Used by**: Entry point (`local-library` command)
 - **Boundary**: CLI MUST NOT be imported by core or ingestion
 
@@ -42,6 +46,9 @@ Command-line interface for the local-library system. Provides user-facing comman
 - **Embed command modes**: Three orthogonal modes (single doc, --pending, --all) with mutual exclusivity validation; --force re-embeds existing; --dry-run non-destructive
 - **Skip embed flags**: --skip-embed on add/zotero import defers embedding to separate batch operation for faster ingestion; allows bulk embedding in single batch call
 - **Batch error logging**: Batch embedding catches exceptions and logs them to stderr per-document for visibility; --json output suppresses per-document logs but includes final count
+- **Search command**: `search` command delegates to `Library.get_retriever()` factory; supports hybrid/vector/fts modes, document-scoped search via --doc, and JSON output
+- **Search error handling**: Three error types caught (LookupError for --doc resolution, FTSQueryError for syntax, EmbeddingError for sqlite-vec); each provides mode-appropriate error messages
+- **Search output formats**: Rich table (default) shows rank, score, source, methods, text preview; --json outputs structured array for programmatic use
 
 ## Invariants
 
@@ -62,6 +69,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 - `update.py` - Update command with editor-based validation loop
 - `review.py` - Review command (open --both + update composition)
 - `embed.py` - Embed command with --pending, --all, --force, --dry-run options
+- `search.py` - Search command with --limit, --mode, --doc, --json options
 - `zotero.py` - Zotero command group with `import` (batch import with progress) and `collections` (list collections)
 
 ## Gotchas

@@ -60,6 +60,7 @@ class ErrorCode(str, Enum):
     EMBEDDING_STORAGE_FAILED = "EMBEDDING_STORAGE_FAILED"
     EMBEDDING_CHUNK_FAILED = "EMBEDDING_CHUNK_FAILED"
     EMBEDDING_DOCUMENT_NOT_READY = "EMBEDDING_DOCUMENT_NOT_READY"
+    EMBEDDING_FTS_QUERY_SYNTAX = "EMBEDDING_FTS_QUERY_SYNTAX"
 
 
 class LocalLibraryError(Exception):
@@ -124,5 +125,15 @@ class ZoteroError(LocalLibraryError):
 
 class EmbeddingError(LocalLibraryError):
     """Error during embedding operations (chunking, computation, storage)."""
+
+    pass
+
+
+class FTSQueryError(EmbeddingError):
+    """FTS5 query syntax error.
+
+    Raised when a user query contains syntax that SQLite FTS5 cannot parse
+    (e.g., unbalanced quotes, invalid operators).
+    """
 
     pass

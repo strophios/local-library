@@ -164,3 +164,52 @@ class Embedder(Protocol):
             EmbeddingError: If embedding computation fails
         """
         ...
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    """A single search result with score and provenance metadata.
+
+    Returned by all Retriever implementations. Frozen for immutability.
+
+    Attributes:
+        chunk: The matched chunk of text
+        score: Relevance score (higher = more relevant). RRF score for hybrid,
+               converted distance for vector, BM25 rank for FTS.
+        doc_title: Document title for display (None if metadata unavailable)
+        doc_citekey: Citekey for citation reference (None if not set)
+        search_methods: Which search methods contributed to this result
+    """
+
+    chunk: Chunk
+    score: float
+    doc_title: str | None
+    doc_citekey: str | None
+    search_methods: frozenset[str]
+
+
+@runtime_checkable
+class Retriever(Protocol):
+    """Protocol for searching document chunks by content.
+
+    Implementations wrap one or more search backends (vector similarity,
+    full-text search, or a hybrid combination) and return ranked results.
+    """
+
+    def retrieve(
+        self,
+        query: str,
+        k: int = 10,
+        doc_ids: list[UUID] | None = None,
+    ) -> list[SearchResult]:
+        """Search for chunks matching a query.
+
+        Args:
+            query: Natural language search query
+            k: Maximum number of results to return
+            doc_ids: Optional document ID filter (search only these documents)
+
+        Returns:
+            List of SearchResult objects, sorted by score descending
+        """
+        ...

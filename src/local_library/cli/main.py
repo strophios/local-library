@@ -10,6 +10,7 @@ from local_library.cli import embed as embed_cmd
 from local_library.cli import list as list_cmd
 from local_library.cli import open as open_cmd
 from local_library.cli import review as review_cmd
+from local_library.cli import search as search_cmd
 from local_library.cli import show as show_cmd
 from local_library.cli import update as update_cmd
 from local_library.cli import zotero as zotero_cmd
@@ -30,6 +31,7 @@ app.command(name="open")(open_cmd.open_doc)
 app.command(name="update")(update_cmd.update)
 app.command(name="review")(review_cmd.review)
 app.command(name="embed")(embed_cmd.embed)
+app.command(name="search")(search_cmd.search)
 app.add_typer(zotero_cmd.app, name="zotero")
 
 

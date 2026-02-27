@@ -7,8 +7,11 @@ import sqlite3
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from local_library.embeddings.base import Retriever
 
 from local_library.config import (
     ensure_directories,
@@ -199,6 +202,56 @@ class Library:
             self._embedding_storage = EmbeddingStorage(self._conn)
 
         return self._embedding_storage
+
+    def get_retriever(self, mode: str = "hybrid") -> "Retriever":
+        """Get a retriever instance for searching documents.
+
+        Factory method that wires up retriever dependencies (storage, embedder)
+        and returns the requested implementation.
+
+        Args:
+            mode: Retriever type - "hybrid" (default), "vector", or "fts"
+
+        Returns:
+            A Retriever protocol-compliant instance
+
+        Raises:
+            EmbeddingError: If sqlite-vec extension is not available
+            ValueError: If mode is not recognized
+        """
+        from local_library.core.errors import EmbeddingError, ErrorCode
+        from local_library.embeddings.nomic import NomicEmbedder
+        from local_library.embeddings.retrieval import (
+            FTSRetriever,
+            HybridRetriever,
+            VectorRetriever,
+        )
+
+        storage = self._get_embedding_storage()
+        if storage is None:
+            raise EmbeddingError(
+                "sqlite-vec extension not available for retrieval",
+                ErrorCode.EMBEDDING_EXTENSION_UNAVAILABLE,
+            )
+
+        if mode == "fts":
+            return FTSRetriever(storage)
+
+        # Vector and hybrid modes need an embedder
+        if self._embedder is None:
+            self._embedder = NomicEmbedder()
+
+        if mode == "vector":
+            return VectorRetriever(storage, self._embedder)
+
+        if mode == "hybrid":
+            vector_ret = VectorRetriever(storage, self._embedder)
+            fts_ret = FTSRetriever(storage)
+            return HybridRetriever(vector_ret, fts_ret)
+
+        raise ValueError(
+            f"unknown retriever mode: {mode!r} (expected 'hybrid', 'vector', or 'fts')"
+        )
 
     def _mark_embeddings_stale(self, doc_id: UUID) -> None:
         """Mark document's embeddings as stale.
