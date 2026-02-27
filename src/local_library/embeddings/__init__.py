@@ -54,6 +54,14 @@ def __getattr__(name: str) -> object:
         from local_library.embeddings.base import Retriever
 
         return Retriever
+    elif name == "VectorRetriever":
+        from local_library.embeddings.retrieval import VectorRetriever
+
+        return VectorRetriever
+    elif name == "FTSRetriever":
+        from local_library.embeddings.retrieval import FTSRetriever
+
+        return FTSRetriever
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -70,6 +78,8 @@ __all__ = [
     "MarkdownChunker",
     "NomicEmbedder",
     "EmbeddingStorage",
+    "VectorRetriever",
+    "FTSRetriever",
     # Utilities
     "estimate_token_count",
     "update_embedding_status",

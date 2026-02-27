@@ -10,7 +10,7 @@ metadata. HybridRetriever (Phase 4) composes these two via RRF fusion.
 import sqlite3
 from uuid import UUID
 
-from local_library.embeddings.base import Chunk, Embedder, SearchResult
+from local_library.embeddings.base import Embedder, SearchResult
 from local_library.embeddings.storage import EmbeddingStorage
 
 
