@@ -5,7 +5,8 @@ and return protocol-compliant SearchResult objects enriched with document
 metadata. HybridRetriever (Phase 4) composes these two via RRF fusion.
 """
 
-# pattern: Imperative Shell
+# pattern: Mixed — _rrf_fuse is Functional Core (pure computation);
+#          retrievers are Imperative Shell (I/O via storage)
 
 import logging
 import sqlite3
@@ -77,6 +78,8 @@ def _rrf_fuse(
     for rank, result in enumerate(vector_results, start=1):
         cid = result.chunk.chunk_id
         scores[cid] = scores.get(cid, 0.0) + vector_weight / (rrf_k + rank)
+        # Vector results processed first; metadata from first-seen result is kept.
+        # Both retrievers query the same database, so metadata is identical in practice.
         results_by_id[cid] = result
         methods_by_id.setdefault(cid, set()).update(result.search_methods)
 
@@ -84,6 +87,8 @@ def _rrf_fuse(
     for rank, result in enumerate(fts_results, start=1):
         cid = result.chunk.chunk_id
         scores[cid] = scores.get(cid, 0.0) + fts_weight / (rrf_k + rank)
+        # Only store FTS result if not already present from vector results.
+        # Vector results processed first; metadata from first-seen result is kept.
         if cid not in results_by_id:
             results_by_id[cid] = result
         methods_by_id.setdefault(cid, set()).update(result.search_methods)
