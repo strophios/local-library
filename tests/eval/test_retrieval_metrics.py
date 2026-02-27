@@ -145,16 +145,32 @@ class TestEvalReport:
     def test_aggregate_metrics(self) -> None:
         """Report computes correct averages across queries."""
         report = EvalReport()
-        report.add(QueryResult(
-            query_id="q1", query_text="q1", category="factual",
-            precision_at_5=0.8, precision_at_10=0.6, recall_at_10=1.0,
-            mrr=1.0, retrieved_docs=[], relevant_docs=[],
-        ))
-        report.add(QueryResult(
-            query_id="q2", query_text="q2", category="factual",
-            precision_at_5=0.4, precision_at_10=0.3, recall_at_10=0.5,
-            mrr=0.5, retrieved_docs=[], relevant_docs=[],
-        ))
+        report.add(
+            QueryResult(
+                query_id="q1",
+                query_text="q1",
+                category="factual",
+                precision_at_5=0.8,
+                precision_at_10=0.6,
+                recall_at_10=1.0,
+                mrr=1.0,
+                retrieved_docs=[],
+                relevant_docs=[],
+            )
+        )
+        report.add(
+            QueryResult(
+                query_id="q2",
+                query_text="q2",
+                category="factual",
+                precision_at_5=0.4,
+                precision_at_10=0.3,
+                recall_at_10=0.5,
+                mrr=0.5,
+                retrieved_docs=[],
+                relevant_docs=[],
+            )
+        )
 
         assert report.mean_precision_at_5 == pytest.approx(0.6)
         assert report.mean_mrr == pytest.approx(0.75)
@@ -162,16 +178,32 @@ class TestEvalReport:
     def test_results_by_category(self) -> None:
         """Report groups results by category."""
         report = EvalReport()
-        report.add(QueryResult(
-            query_id="q1", query_text="q1", category="factual",
-            precision_at_5=0.8, precision_at_10=0.6, recall_at_10=1.0,
-            mrr=1.0, retrieved_docs=[], relevant_docs=[],
-        ))
-        report.add(QueryResult(
-            query_id="q2", query_text="q2", category="conceptual",
-            precision_at_5=0.4, precision_at_10=0.3, recall_at_10=0.5,
-            mrr=0.5, retrieved_docs=[], relevant_docs=[],
-        ))
+        report.add(
+            QueryResult(
+                query_id="q1",
+                query_text="q1",
+                category="factual",
+                precision_at_5=0.8,
+                precision_at_10=0.6,
+                recall_at_10=1.0,
+                mrr=1.0,
+                retrieved_docs=[],
+                relevant_docs=[],
+            )
+        )
+        report.add(
+            QueryResult(
+                query_id="q2",
+                query_text="q2",
+                category="conceptual",
+                precision_at_5=0.4,
+                precision_at_10=0.3,
+                recall_at_10=0.5,
+                mrr=0.5,
+                retrieved_docs=[],
+                relevant_docs=[],
+            )
+        )
 
         by_cat = report.results_by_category()
         assert "factual" in by_cat
@@ -181,11 +213,19 @@ class TestEvalReport:
     def test_format_summary(self) -> None:
         """format_summary produces human-readable output."""
         report = EvalReport()
-        report.add(QueryResult(
-            query_id="q1", query_text="q1", category="factual",
-            precision_at_5=0.8, precision_at_10=0.6, recall_at_10=1.0,
-            mrr=1.0, retrieved_docs=[], relevant_docs=[],
-        ))
+        report.add(
+            QueryResult(
+                query_id="q1",
+                query_text="q1",
+                category="factual",
+                precision_at_5=0.8,
+                precision_at_10=0.6,
+                recall_at_10=1.0,
+                mrr=1.0,
+                retrieved_docs=[],
+                relevant_docs=[],
+            )
+        )
 
         summary = report.format_summary()
         assert "Precision@5" in summary
@@ -195,11 +235,19 @@ class TestEvalReport:
     def test_to_dict(self) -> None:
         """to_dict produces JSON-serializable output."""
         report = EvalReport()
-        report.add(QueryResult(
-            query_id="q1", query_text="q1", category="factual",
-            precision_at_5=0.8, precision_at_10=0.6, recall_at_10=1.0,
-            mrr=1.0, retrieved_docs=[], relevant_docs=[],
-        ))
+        report.add(
+            QueryResult(
+                query_id="q1",
+                query_text="q1",
+                category="factual",
+                precision_at_5=0.8,
+                precision_at_10=0.6,
+                recall_at_10=1.0,
+                mrr=1.0,
+                retrieved_docs=[],
+                relevant_docs=[],
+            )
+        )
 
         d = report.to_dict()
         assert "total_queries" in d

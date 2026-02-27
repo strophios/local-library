@@ -197,9 +197,7 @@ class EvalReport:
                     "precision_at_5": round(
                         sum(r.precision_at_5 for r in results) / len(results), 4
                     ),
-                    "recall_at_10": round(
-                        sum(r.recall_at_10 for r in results) / len(results), 4
-                    ),
+                    "recall_at_10": round(sum(r.recall_at_10 for r in results) / len(results), 4),
                     "mrr": round(sum(r.mrr for r in results) / len(results), 4),
                 }
                 for cat, results in sorted(self.results_by_category().items())
