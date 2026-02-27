@@ -281,9 +281,11 @@ class TestVectorRetriever:
             ("Test Doc", "Test2023", str(doc_id)),
         )
         storage._conn.commit()
-        storage.store_embeddings([
-            make_chunk_embedding(doc_id, 0, "Some text about machine learning"),
-        ])
+        storage.store_embeddings(
+            [
+                make_chunk_embedding(doc_id, 0, "Some text about machine learning"),
+            ]
+        )
 
         mock_embedder = MagicMock()
         mock_embedder.embed_query.return_value = np.random.randn(768).astype(np.float32)
@@ -303,10 +305,9 @@ class TestVectorRetriever:
         """retrieve() returns at most k results."""
         doc_id = uuid4()
         _create_test_document(storage._conn, doc_id)
-        storage.store_embeddings([
-            make_chunk_embedding(doc_id, i, f"Chunk number {i}")
-            for i in range(5)
-        ])
+        storage.store_embeddings(
+            [make_chunk_embedding(doc_id, i, f"Chunk number {i}") for i in range(5)]
+        )
 
         mock_embedder = MagicMock()
         mock_embedder.embed_query.return_value = np.random.randn(768).astype(np.float32)
@@ -322,10 +323,12 @@ class TestVectorRetriever:
         doc_id_2 = uuid4()
         _create_test_document(storage._conn, doc_id_1)
         _create_test_document(storage._conn, doc_id_2)
-        storage.store_embeddings([
-            make_chunk_embedding(doc_id_1, 0, "Content in doc one"),
-            make_chunk_embedding(doc_id_2, 0, "Content in doc two"),
-        ])
+        storage.store_embeddings(
+            [
+                make_chunk_embedding(doc_id_1, 0, "Content in doc one"),
+                make_chunk_embedding(doc_id_2, 0, "Content in doc two"),
+            ]
+        )
 
         mock_embedder = MagicMock()
         mock_embedder.embed_query.return_value = np.random.randn(768).astype(np.float32)
@@ -364,9 +367,11 @@ class TestFTSRetriever:
             ("FTS Doc", "FTS2023", str(doc_id)),
         )
         storage._conn.commit()
-        storage.store_embeddings([
-            make_chunk_embedding(doc_id, 0, "Python programming language features"),
-        ])
+        storage.store_embeddings(
+            [
+                make_chunk_embedding(doc_id, 0, "Python programming language features"),
+            ]
+        )
 
         retriever = FTSRetriever(storage)
         results = retriever.retrieve("Python programming")
@@ -383,10 +388,12 @@ class TestFTSRetriever:
         """retrieve() returns at most k results."""
         doc_id = uuid4()
         _create_test_document(storage._conn, doc_id)
-        storage.store_embeddings([
-            make_chunk_embedding(doc_id, i, f"Chunk {i} about searchable keyword")
-            for i in range(5)
-        ])
+        storage.store_embeddings(
+            [
+                make_chunk_embedding(doc_id, i, f"Chunk {i} about searchable keyword")
+                for i in range(5)
+            ]
+        )
 
         retriever = FTSRetriever(storage)
         results = retriever.retrieve("keyword", k=2)
@@ -399,10 +406,12 @@ class TestFTSRetriever:
         doc_id_2 = uuid4()
         _create_test_document(storage._conn, doc_id_1)
         _create_test_document(storage._conn, doc_id_2)
-        storage.store_embeddings([
-            make_chunk_embedding(doc_id_1, 0, "Searchable term in doc one"),
-            make_chunk_embedding(doc_id_2, 0, "Searchable term in doc two"),
-        ])
+        storage.store_embeddings(
+            [
+                make_chunk_embedding(doc_id_1, 0, "Searchable term in doc one"),
+                make_chunk_embedding(doc_id_2, 0, "Searchable term in doc two"),
+            ]
+        )
 
         retriever = FTSRetriever(storage)
         results = retriever.retrieve("Searchable", doc_ids=[doc_id_1])
@@ -414,9 +423,11 @@ class TestFTSRetriever:
         """retrieve() propagates FTSQueryError for bad syntax."""
         doc_id = uuid4()
         _create_test_document(storage._conn, doc_id)
-        storage.store_embeddings([
-            make_chunk_embedding(doc_id, 0, "Some text"),
-        ])
+        storage.store_embeddings(
+            [
+                make_chunk_embedding(doc_id, 0, "Some text"),
+            ]
+        )
 
         retriever = FTSRetriever(storage)
         with pytest.raises(FTSQueryError):
@@ -426,9 +437,11 @@ class TestFTSRetriever:
         """retrieve() returns empty list for no matches."""
         doc_id = uuid4()
         _create_test_document(storage._conn, doc_id)
-        storage.store_embeddings([
-            make_chunk_embedding(doc_id, 0, "Some text"),
-        ])
+        storage.store_embeddings(
+            [
+                make_chunk_embedding(doc_id, 0, "Some text"),
+            ]
+        )
 
         retriever = FTSRetriever(storage)
         results = retriever.retrieve("xylophone")
@@ -520,14 +533,8 @@ class TestRrfFuse:
 
     def test_respects_k_limit(self) -> None:
         """RRF returns at most k results."""
-        vector_results = [
-            self._make_result(f"v{i}", 1.0 - i * 0.1, "vector")
-            for i in range(5)
-        ]
-        fts_results = [
-            self._make_result(f"f{i}", 5.0 - i, "fts")
-            for i in range(5)
-        ]
+        vector_results = [self._make_result(f"v{i}", 1.0 - i * 0.1, "vector") for i in range(5)]
+        fts_results = [self._make_result(f"f{i}", 5.0 - i, "fts") for i in range(5)]
         fused = _rrf_fuse(vector_results, fts_results, k=3)
 
         assert len(fused) == 3
@@ -568,12 +575,18 @@ class TestRrfFuse:
         fts_results = [self._make_result("a", 5.0, "fts", doc_id=doc_id)]
 
         fused_equal = _rrf_fuse(
-            vector_results, fts_results, k=10,
-            vector_weight=1.0, fts_weight=1.0,
+            vector_results,
+            fts_results,
+            k=10,
+            vector_weight=1.0,
+            fts_weight=1.0,
         )
         fused_vector_heavy = _rrf_fuse(
-            vector_results, fts_results, k=10,
-            vector_weight=2.0, fts_weight=0.5,
+            vector_results,
+            fts_results,
+            k=10,
+            vector_weight=2.0,
+            fts_weight=0.5,
         )
 
         # Scores differ when weights change
@@ -628,9 +641,11 @@ class TestHybridRetriever:
             ("Hybrid Doc", "Hybrid2023", str(doc_id)),
         )
         storage._conn.commit()
-        storage.store_embeddings([
-            make_chunk_embedding(doc_id, 0, "Machine learning classification algorithms"),
-        ])
+        storage.store_embeddings(
+            [
+                make_chunk_embedding(doc_id, 0, "Machine learning classification algorithms"),
+            ]
+        )
 
         mock_embedder = MagicMock()
         mock_embedder.embed_query.return_value = np.random.randn(768).astype(np.float32)
@@ -652,9 +667,11 @@ class TestHybridRetriever:
         """HybridRetriever falls back to vector-only when FTS raises FTSQueryError."""
         doc_id = uuid4()
         _create_test_document(storage._conn, doc_id)
-        storage.store_embeddings([
-            make_chunk_embedding(doc_id, 0, "Some text content"),
-        ])
+        storage.store_embeddings(
+            [
+                make_chunk_embedding(doc_id, 0, "Some text content"),
+            ]
+        )
 
         mock_embedder = MagicMock()
         mock_embedder.embed_query.return_value = np.random.randn(768).astype(np.float32)
@@ -674,8 +691,7 @@ class TestHybridRetriever:
 
         # Should log a warning
         fts_logged = any(
-            "FTS" in record.message or "fts" in record.message.lower()
-            for record in caplog.records
+            "FTS" in record.message or "fts" in record.message.lower() for record in caplog.records
         )
         assert fts_logged
 
@@ -683,10 +699,9 @@ class TestHybridRetriever:
         """retrieve() returns at most k results."""
         doc_id = uuid4()
         _create_test_document(storage._conn, doc_id)
-        storage.store_embeddings([
-            make_chunk_embedding(doc_id, i, f"Chunk {i} with searchable terms")
-            for i in range(10)
-        ])
+        storage.store_embeddings(
+            [make_chunk_embedding(doc_id, i, f"Chunk {i} with searchable terms") for i in range(10)]
+        )
 
         mock_embedder = MagicMock()
         mock_embedder.embed_query.return_value = np.random.randn(768).astype(np.float32)
@@ -704,10 +719,12 @@ class TestHybridRetriever:
         doc_id_2 = uuid4()
         _create_test_document(storage._conn, doc_id_1)
         _create_test_document(storage._conn, doc_id_2)
-        storage.store_embeddings([
-            make_chunk_embedding(doc_id_1, 0, "Content about Python programming"),
-            make_chunk_embedding(doc_id_2, 0, "Content about Python programming"),
-        ])
+        storage.store_embeddings(
+            [
+                make_chunk_embedding(doc_id_1, 0, "Content about Python programming"),
+                make_chunk_embedding(doc_id_2, 0, "Content about Python programming"),
+            ]
+        )
 
         mock_embedder = MagicMock()
         mock_embedder.embed_query.return_value = np.random.randn(768).astype(np.float32)
