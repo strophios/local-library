@@ -135,7 +135,6 @@ class RAGStream:
         self._model = model
         self._retrieval_mode = retrieval_mode
         self._accumulated: list[str] = []
-        self._exhausted = False
 
     def __iter__(self) -> Iterator[str]:
         """Yield answer tokens, accumulating them internally.
@@ -152,8 +151,6 @@ class RAGStream:
                 "LLM generation failed during streaming",
                 ErrorCode.LLM_GENERATION_FAILED,
             ) from exc
-        finally:
-            self._exhausted = True
 
     def to_response(self) -> RAGResponse:
         """Build the complete RAGResponse from accumulated tokens.

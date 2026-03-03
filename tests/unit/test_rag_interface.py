@@ -4,9 +4,9 @@ from uuid import uuid4
 
 from local_library.embeddings.base import Chunk, SearchResult
 from local_library.rag.interface import (
-    RAGInterface,
     _CONTEXT_SEPARATOR,
     _SYSTEM_PROMPT,
+    RAGInterface,
     assemble_context,
     build_messages,
 )
@@ -199,8 +199,9 @@ class TestRAGInterface:
 
     def test_query_llm_error_raises_rag_error(self) -> None:
         """query() should wrap LLM errors in RAGError."""
-        import pytest
         from unittest.mock import MagicMock
+
+        import pytest
 
         from local_library.core.errors import RAGError
 
