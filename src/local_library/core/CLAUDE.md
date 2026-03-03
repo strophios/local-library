@@ -1,6 +1,6 @@
 # Core Domain
 
-Last verified: 2026-02-27
+Last verified: 2026-03-03
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 
 ## Contracts
 
-- **Exposes**: Document, DocumentStatus (PENDING, READY, FAILED, NEEDS_REVIEW), EmbeddingStatus (PENDING, CURRENT, STALE), AddResult, FieldExtraction, TextExtractionResult, ErrorCode hierarchy (including MetadataError, ZoteroError, EmbeddingError), Library class (with get_by_citekey, get_all_citekeys, update_metadata, embed, embed_all, get_retriever), storage functions, vec_extension module
+- **Exposes**: Document, DocumentStatus (PENDING, READY, FAILED, NEEDS_REVIEW), EmbeddingStatus (PENDING, CURRENT, STALE), RAGResponse, AddResult, FieldExtraction, TextExtractionResult, ErrorCode hierarchy (including MetadataError, ZoteroError, EmbeddingError, LLMError, RAGError), Library class (with get_by_citekey, get_all_citekeys, update_metadata, embed, embed_all, get_retriever, query, query_stream), storage functions, vec_extension module
 - **Guarantees**:
   - Document.id is UUID, globally unique
   - Document.content_hash is SHA-256, content-addressable
@@ -27,12 +27,16 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
   - Library.delete() cascades to remove embeddings
   - Library.add() embeds by default when embed_on_add=True and sqlite-vec available
   - Library.get_retriever() factory method returns Retriever protocol-compliant instances (HybridRetriever, VectorRetriever, or FTSRetriever)
+  - Library.query() retrieves context chunks and generates a RAG answer (blocking); returns RAGResponse
+  - Library.query_stream() retrieves context chunks and returns RAGStream for token-by-token answer generation
+  - Library accepts `rag_model` parameter (default: "gemini/gemini-2.0-flash") for RAG query LLM selection
+  - RAGInterface lazily initialized on first query() or query_stream() call
 - **Expects**: Sources handled by at least one registered acquirer; files handled by at least one extractor
 
 ## Dependencies
 
-- **Uses**: `config` (paths), `ingestion` (ContentAcquirer, ContentExtractor protocols, MetadataHandler, TextMetadataExtractor), `embeddings` (MarkdownChunker, NomicEmbedder, EmbeddingStorage)
-- **Used by**: `cli`, `embeddings` (retrieval module imports from core.errors)
+- **Uses**: `config` (paths), `ingestion` (ContentAcquirer, ContentExtractor protocols, MetadataHandler, TextMetadataExtractor), `embeddings` (MarkdownChunker, NomicEmbedder, EmbeddingStorage), `llm` (LLMClient, LiteLLMClient), `rag` (RAGInterface, RAGStream)
+- **Used by**: `cli`, `embeddings` (retrieval module imports from core.errors), `rag` (imports RAGResponse, ErrorCode)
 - **Boundary**: Core MUST NOT import from cli
 
 ## Key Decisions
@@ -55,6 +59,9 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 - **Cascade deletion**: Chunks and embeddings deleted via ON DELETE CASCADE foreign key when parent document deleted
 - **Embedding integration**: Library orchestrates chunking→embedding→storage pipeline; graceful failure on add (document usable, just not vector-searchable)
 - **embed_on_add config**: Defaults to True; controlled via Library constructor parameter
+- **LLMClient injection**: Library creates LLMClient at Library level for text extraction (if enabled) and RAG queries. TextMetadataExtractor receives LLMClient via constructor injection rather than managing its own LiteLLM dependency
+- **Lazy RAG initialization**: RAGInterface and its LLMClient created on first query()/query_stream() call, avoiding unnecessary LLM client setup when only doing document management
+- **RAGResponse dataclass**: Frozen dataclass capturing question, answer, context_chunks (tuple of SearchResult), model, and retrieval_mode for display and serialization
 
 ## Invariants
 
@@ -67,10 +74,10 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 
 ## Key Files
 
-- `models.py` - Document, AcquisitionResult, ExtractionResult, AddResult, FieldExtraction, TextExtractionResult, EmbeddingStatus
-- `errors.py` - ErrorCode enum, exception hierarchy (includes ACQUISITION_*, EXTRACTION_*, METADATA_*, ZOTERO_*, EMBEDDING_* codes)
+- `models.py` - Document, AcquisitionResult, ExtractionResult, AddResult, FieldExtraction, TextExtractionResult, RAGResponse, EmbeddingStatus
+- `errors.py` - ErrorCode enum, exception hierarchy (includes ACQUISITION_*, EXTRACTION_*, METADATA_*, ZOTERO_*, EMBEDDING_*, RAG_*, LLM_* codes; LLMError, RAGError exceptions)
 - `storage.py` - SQLite CRUD (get_connection, init_schema, create/get/update/delete), schema v3 with chunks and FTS5
-- `library.py` - Library orchestrator (add, get, get_by_citekey, get_all_citekeys, list, delete, embed, embed_all, update_metadata, get_retriever) with handler dispatch and text extraction integration
+- `library.py` - Library orchestrator (add, get, get_by_citekey, get_all_citekeys, list, delete, embed, embed_all, update_metadata, get_retriever, query, query_stream) with handler dispatch, text extraction integration, and lazy RAG initialization
 - `vec_extension.py` - sqlite-vec extension loading, vec0 table creation, availability checking
 
 ## Gotchas
@@ -81,8 +88,10 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 - storage.py functions require explicit connection parameter (no global state)
 - No matching acquirer raises ACQUISITION_UNSUPPORTED_SOURCE; no matching extractor raises EXTRACTION_UNSUPPORTED_FORMAT
 - `from local_library.core import Library` works but is lazy-loaded; `from local_library.core.library import Library` is direct but may trigger circular import issues if called at module level
-- Library constructor accepts text_extraction_* parameters to configure automatic metadata extraction behavior
+- Library constructor accepts text_extraction_* parameters to configure automatic metadata extraction behavior; LLMClient created at Library level and injected into TextMetadataExtractor
 - When no explicit metadata is provided and text extraction is enabled, Library.add() attempts to extract metadata from the document text
+- Library.query() and query_stream() raise RAGError on LLM generation failure and EmbeddingError if sqlite-vec unavailable
+- RAGInterface lazy init means LiteLLM import only happens when RAG queries are actually used
 - `pdf_llm_enabled` only affects the default PdfExtractor; custom extractors must configure LLM mode themselves
 - Library.embed() raises EmbeddingError if sqlite-vec unavailable or document not READY
 - Embedding failure in add() is non-fatal; document created but embedding_status stays PENDING

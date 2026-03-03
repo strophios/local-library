@@ -1,6 +1,6 @@
 # CLI Domain
 
-Last verified: 2026-02-27
+Last verified: 2026-03-03
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 
 ## Contracts
 
-- **Exposes**: CLI commands (add, list, show, delete, open, update, review, embed, search), zotero command group (import, collections), identifier resolution utilities
+- **Exposes**: CLI commands (add, ask, list, show, delete, open, update, review, embed, search), zotero command group (import, collections), identifier resolution utilities
 - **Guarantees**:
   - All commands accepting document IDs support UUID (full or partial) and @citekey syntax
   - Failed citekey lookups provide fuzzy match suggestions (Levenshtein distance + prefix matching)
@@ -22,11 +22,16 @@ Command-line interface for the local-library system. Provides user-facing comman
   - search --doc supports UUID and @citekey identifiers for document-scoped search
   - FTS query syntax errors caught and reported with suggestion to use --mode vector
   - --skip-embed flag available on add and zotero import for batch workflows
+  - ask command requires sqlite-vec; fails gracefully with helpful error if unavailable
+  - ask command validates --mode against (hybrid, vector, fts) before executing
+  - ask command supports --doc for document-scoped queries (UUID and @citekey)
+  - ask command streams by default; --json implies --no-stream
+  - ask command catches LLMError, RAGError, EmbeddingError, LookupError with mode-appropriate messages
 - **Expects**: Library context manager for database access; editor available for update/review/open commands
 
 ## Dependencies
 
-- **Uses**: `core.Library`, `core.models` (Document, DocumentStatus), `core.errors` (LookupError, EmbeddingError, FTSQueryError), `core.storage` (get_connection, get_unique_citekey), `core.vec_extension` (is_vec_available), `ingestion.metadata` (MetadataHandler), `embeddings.base` (SearchResult)
+- **Uses**: `core.Library`, `core.models` (Document, DocumentStatus, RAGResponse), `core.errors` (LookupError, EmbeddingError, FTSQueryError, LLMError, RAGError), `core.storage` (get_connection, get_unique_citekey), `core.vec_extension` (is_vec_available), `ingestion.metadata` (MetadataHandler), `embeddings.base` (SearchResult)
 - **Used by**: Entry point (`local-library` command)
 - **Boundary**: CLI MUST NOT be imported by core or ingestion
 
@@ -49,6 +54,10 @@ Command-line interface for the local-library system. Provides user-facing comman
 - **Search command**: `search` command delegates to `Library.get_retriever()` factory; supports hybrid/vector/fts modes, document-scoped search via --doc, and JSON output
 - **Search error handling**: Three error types caught (LookupError for --doc resolution, FTSQueryError for syntax, EmbeddingError for sqlite-vec); each provides mode-appropriate error messages
 - **Search output formats**: Rich table (default) shows rank, score, source, methods, text preview; --json outputs structured array for programmatic use
+- **Ask command streaming**: Uses Rich Live display for token-by-token streaming; graceful Ctrl+C shows partial answer; sources footer printed after stream completes
+- **Ask command JSON output**: --json implies --no-stream (must collect full response for structured output); outputs question, answer, model, retrieval_mode, and aggregated sources with chunk counts
+- **Ask command model override**: --model flag passed to Library via `rag_model` parameter; overrides default "gemini/gemini-2.0-flash"
+- **Ask command error handling**: Four error types caught (LookupError, EmbeddingError, RAGError, LLMError); JSON mode outputs error with code, non-JSON prints styled error
 
 ## Invariants
 
@@ -62,6 +71,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 - `main.py` - Entry point, command registration
 - `utils.py` - `resolve_identifier()`, `suggest_citekeys()`, `levenshtein_distance()`, `LibraryProtocol`
 - `add.py` - Add command with --metadata flag
+- `ask.py` - Ask command with streaming, --no-stream, --json, --model, --mode, --doc, --limit options
 - `list.py` - List command with --limit/--all pagination
 - `show.py` - Show command with @citekey support
 - `delete.py` - Delete command with @citekey support

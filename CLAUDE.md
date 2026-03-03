@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-02-27
+Last verified: 2026-03-03
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -52,9 +52,9 @@ Each document record contains:
 
 Development follows a **pipeline-first, layer-complete** approach documented in `build_philosophy.md`. The key insight: pipeline stages (vertical data flow) and architectural layers (horizontal concerns) are orthogonal. Build along the pipeline for rapid feedback; implement layers completely when touched.
 
-### Current Status: M1-M6 + M3b Complete (Record Storage + Extraction + Metadata + Zotero Reader + Text Extraction + Embeddings + Retrieval)
+### Current Status: M1-M7 + M3b Complete (Record Storage + Extraction + Metadata + Zotero Reader + Text Extraction + Embeddings + Retrieval + RAG Query)
 
-Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), M3b (text-based metadata extraction), M4 (Zotero read-only access), M5 (embedding pipeline), and M6 (retrieval) are implemented. The system can:
+Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), M3b (text-based metadata extraction), M4 (Zotero read-only access), M5 (embedding pipeline), M6 (retrieval), and M7 (RAG query interface) are implemented. The system can:
 - Ingest local PDF files via CLI (`local-library add <path>`)
 - Accept explicit CSL-JSON metadata (`--metadata <file>`)
 - Extract text to markdown via Marker
@@ -65,6 +65,7 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - **Chunk extracted text and compute vector embeddings** via nomic-embed-text-v1.5
 - **Track embedding status** (PENDING/CURRENT/STALE) across the document lifecycle
 - **Search documents** via hybrid (vector + FTS5 with RRF fusion), vector-only, or FTS-only modes
+- **Ask natural language questions** and get RAG-generated answers with source citations (streaming or blocking)
 - Store documents in content-addressable storage with SQLite metadata
 - Query, list, search, and delete documents via CLI
 - Read items, attachments, and metadata from Zotero library (via database or BetterBibTeX JSON export)
@@ -76,7 +77,7 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - Indexed field extraction (title, authors, issued_date)
 - **Text-based metadata extraction**: heuristic extractors for title, authors, date, and document type with confidence scoring
 - **NEEDS_REVIEW workflow**: documents with low-confidence extraction flagged for human review
-- **Optional LLM fallback**: LiteLLM integration for re-extracting low-confidence fields
+- **Optional LLM fallback**: LLMClient injection with LiteLLM backend for re-extracting low-confidence fields
 - **Embedding pipeline**: section-aware markdown chunking (~512 tokens, ~15% overlap), nomic-embed-text-v1.5 via sentence-transformers (768-dim vectors), sqlite-vec storage with FTS5
 - **Embedding status tracking**: PENDING → CURRENT on embed, CURRENT → STALE on re-extraction, cascade deletion on document delete
 - **Embed-on-add**: documents automatically embedded during `add` and `zotero import` (use `--skip-embed` to defer)
@@ -86,25 +87,29 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - **Retriever protocol**: Protocol-based extensibility; `Library.get_retriever()` factory method wires up dependencies
 - **CLI `search` command**: hybrid/vector/fts modes, document-scoped search (--doc), JSON output (--json), configurable result limit (--limit)
 - **Retrieval evaluation framework**: IR metrics (Precision@k, Recall@k, MRR, NDCG@k), seed query set (test_queries.json), automated evaluation harness
+- **LLM abstraction layer**: LLMClient protocol with LiteLLMClient implementation; provider-agnostic LLM access with error mapping to ErrorCode hierarchy
+- **RAG query interface**: RAGInterface orchestrates context assembly, prompt construction, and LLM generation; RAGStream supports streaming with token accumulation; pre-LLM gate skips API call when no context retrieved
+- **CLI `ask` command**: streaming answers with Rich Live display, --no-stream, --json, --model, --mode, --doc, --limit options; source citations with citekey attribution
 - SQLite storage with content-addressable file layout (schema v3)
-- CLI interface (add, list, show, delete, open, update, review, embed, search commands)
+- CLI interface (add, list, show, delete, open, update, review, embed, search, ask commands)
 - @citekey identifier support with fuzzy matching suggestions
 - Pagination support (--limit, --all flags on list command)
 - Zotero read-only access: ZoteroReader facade with database and JSON export backends, BetterBibTeX citekey mapping, attachment resolution, collection and library filtering
 - **Batch import from Zotero**: `zotero import` command with library/collection filtering, dry-run mode, progress tracking, and continue-on-error (defaults to personal library)
 
-**Next milestones:** M7 (LLM query interface — context assembly, answer generation via LiteLLM), followed by a post-M7 evaluation pass (end-to-end RAG quality assessment, pipeline improvements, full Zotero corpus import, evaluation query expansion to 50-100). See `build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling" for rationale.
+**Next milestones:** Post-M7 evaluation pass (end-to-end RAG quality assessment, pipeline improvements, full Zotero corpus import, evaluation query expansion to 50-100). See `build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling" for rationale.
 
 **Deferred to later phases:** M3b (metadata extraction is functionally complete, but does not yet hit benchmarks; that has been deferred), M3c (API metadata enrichment), web content ingestion, Zotero sync, citation tooling, auto-tagging, note management, Neovim plugin. See `future_roadmap.md` for full details.
 
 ### Architectural Layers
 
-Four horizontal concerns cut across the system:
+Five horizontal concerns cut across the system:
 
 1. **Storage**: SQLite schema, CRUD operations, sqlite-vec, FTS5
 2. **Ingestion**: Content acquisition, extraction (Marker), metadata handling
 3. **Embeddings + Retrieval**: Chunking, nomic-embed-text, similarity operations, FTS5 search, hybrid retrieval (RRF fusion)
-4. **Interface**: CLI, RAG queries, (later) daemon, Neovim plugin, HTTP API
+4. **LLM + RAG**: LLMClient protocol, LiteLLM provider abstraction, context assembly, prompt construction, answer generation
+5. **Interface**: CLI, (later) daemon, Neovim plugin, HTTP API
 
 ## Key Libraries and Tools
 
@@ -187,6 +192,11 @@ All commands accepting document IDs support both UUID (full or partial) and @cit
 - `uv run local-library search "<query>"` - Search documents (hybrid mode by default; use `--mode vector` or `--mode fts`)
 - `uv run local-library search "<query>" --doc @Author2023` - Search within a specific document
 - `uv run local-library search "<query>" --limit 20 --json` - Get more results as JSON
+- `uv run local-library ask "<question>"` - Ask a question and get a RAG-generated answer (streams by default)
+- `uv run local-library ask "<question>" --model anthropic/claude-3-haiku` - Use a specific LLM model
+- `uv run local-library ask "<question>" --doc @Author2023` - Scope to a specific document
+- `uv run local-library ask "<question>" --json` - Get structured JSON output (implies --no-stream)
+- `uv run local-library ask "<question>" --no-stream` - Wait for full answer before displaying
 - `uv run local-library zotero import` - Batch import from Zotero (embeds by default; use `--skip-embed` to defer; `--library NAME`, `--collection NAME`, `--dry-run`)
 - `uv run local-library zotero collections` - List Zotero collections (personal library by default; use `--library NAME` or `--all-libraries`)
 - `uv run local-library zotero libraries` - List available Zotero libraries (personal and group)
@@ -212,6 +222,11 @@ src/local_library/
 │   ├── nomic.py         # NomicEmbedder (nomic-embed-text-v1.5 via sentence-transformers)
 │   ├── retrieval.py     # VectorRetriever, FTSRetriever, HybridRetriever, _rrf_fuse
 │   └── storage.py       # EmbeddingStorage (sqlite-vec CRUD, FTS5 search, status functions)
+├── llm/                 # Domain: LLM provider abstraction
+│   ├── base.py          # LLMClient protocol (Functional Core)
+│   └── litellm_client.py # LiteLLMClient implementation (Imperative Shell)
+├── rag/                 # Domain: RAG query pipeline
+│   └── interface.py     # RAGInterface, RAGStream, assemble_context, build_messages
 ├── ingestion/           # Domain: content acquisition and extraction
 │   ├── base.py          # Protocols: ContentAcquirer, ContentExtractor
 │   ├── file.py          # FileAcquirer implementation
@@ -222,6 +237,7 @@ src/local_library/
 └── cli/                 # CLI interface (Typer/Rich)
     ├── main.py          # Entry point, command registration
     ├── add.py           # Add command (--skip-embed flag)
+    ├── ask.py           # Ask command (RAG queries with streaming)
     ├── list.py          # List command (pagination with --limit/--all, embed status column)
     ├── show.py          # Show command (@citekey support)
     ├── delete.py        # Delete command (@citekey support)
@@ -234,7 +250,7 @@ src/local_library/
     └── zotero.py        # Zotero commands (import with --skip-embed, collections, libraries)
 ```
 
-See `src/local_library/core/CLAUDE.md`, `src/local_library/ingestion/CLAUDE.md`, `src/local_library/embeddings/CLAUDE.md`, and `src/local_library/cli/CLAUDE.md` for domain contracts.
+See `src/local_library/core/CLAUDE.md`, `src/local_library/llm/CLAUDE.md`, `src/local_library/rag/CLAUDE.md`, `src/local_library/ingestion/CLAUDE.md`, `src/local_library/embeddings/CLAUDE.md`, and `src/local_library/cli/CLAUDE.md` for domain contracts.
 
 ## Background Documentation
 

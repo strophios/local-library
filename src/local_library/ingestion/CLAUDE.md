@@ -1,6 +1,6 @@
 # Ingestion Domain
 
-Last verified: 2026-01-30
+Last verified: 2026-03-03
 
 ## Purpose
 
@@ -24,7 +24,7 @@ Handles content acquisition (getting files into the system), extraction (convert
 
 ## Dependencies
 
-- **Uses**: `core.models` (AcquisitionResult, ExtractionResult, FieldExtraction, TextExtractionResult), `core.errors` (exception types)
+- **Uses**: `core.models` (AcquisitionResult, ExtractionResult, FieldExtraction, TextExtractionResult), `core.errors` (exception types), `llm.base` (LLMClient protocol, TYPE_CHECKING only)
 - **Used by**: `core.library` (Library orchestrator dispatches via `can_handle()` and uses TextMetadataExtractor)
 - **Boundary**: Ingestion MUST NOT import from cli or storage
 
@@ -38,8 +38,9 @@ Handles content acquisition (getting files into the system), extraction (convert
 - **Quality validation**: ExtractionResult.validate() checks min length and printable ratio
 - **compute_storage_path**: Git-style `ab/cd/hash.ext` layout for content-addressable storage
 - **MetadataHandler**: Stateless CSL-JSON validation with citekey generation (internal, used by Library)
-- **TextMetadataExtractor**: Heuristic extraction of title, authors, date, doc_type from Marker-produced markdown. Optional LLM fallback via LiteLLM when confidence is low. Returns TextExtractionResult with per-field FieldExtraction objects.
-- **Mixed pattern for text_extraction.py**: File contains pure extraction functions (Functional Core) and LLMExtractor class (requires HTTP calls). Separation adds complexity without testability benefit since LLM tests use mocks.
+- **TextMetadataExtractor**: Heuristic extraction of title, authors, date, doc_type from Marker-produced markdown. Optional LLM fallback via injected LLMClient when confidence is low. Returns TextExtractionResult with per-field FieldExtraction objects.
+- **LLMClient injection**: TextMetadataExtractor and LLMExtractor accept an optional `LLMClient` instance via constructor. If None, LLM fallback is disabled. Library creates and injects the client; text_extraction.py no longer imports litellm directly.
+- **Mixed pattern for text_extraction.py**: File contains pure extraction functions (Functional Core) and LLMExtractor class (requires HTTP calls via LLMClient). Separation adds complexity without testability benefit since LLM tests use mocks.
 - **Confidence-based workflow**: Fields below confidence threshold (default 0.7) trigger needs_review. LLM fallback (if enabled) uses heuristic candidates as context hints but preserves heuristic confidence scores.
 - **Lazy imports via `__getattr__`**: Ingestion package uses module-level `__getattr__` to defer imports until needed. Breaks circular dependency: ingestion → core.models → core.library → ingestion.base. Zotero module not exposed here to remain isolated.
 - **Zotero module isolation**: `zotero.py` uses Mixed pattern for LibraryJsonParser (I/O necessary to parse CSL-JSON; cannot be separated without complexity). Frozen dataclasses remain pure. Tests import directly via `from local_library.ingestion.zotero import ...` to avoid circular import chain.
@@ -70,6 +71,7 @@ Handles content acquisition (getting files into the system), extraction (convert
 - Importing `from local_library.ingestion.zotero import ...` does NOT trigger eager evaluation of ingestion module imports (uses lazy `__getattr__`)
 - Do NOT add zotero imports to ingestion `__init__.py` - keep it isolated to preserve the lazy import pattern
 - TextMetadataExtractor preserves heuristic confidence even when LLM provides the value (for consistent needs_review determination)
+- LLMExtractor.enabled is now a property derived from whether LLMClient is None (not a stored boolean)
 - Field extractors return FieldExtraction with value=None when extraction fails (not exceptions)
 - The `nameparser` library is used for robust author name parsing
 - PdfExtractor with `llm_enabled=True` passes `gemini_api_key` directly via Marker's config dict (avoids environment variable mutation)
