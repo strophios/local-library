@@ -62,6 +62,12 @@ class ErrorCode(str, Enum):
     EMBEDDING_DOCUMENT_NOT_READY = "EMBEDDING_DOCUMENT_NOT_READY"
     EMBEDDING_FTS_QUERY_SYNTAX = "EMBEDDING_FTS_QUERY_SYNTAX"
 
+    # RAG / LLM errors
+    RAG_NO_CONTEXT = "RAG_NO_CONTEXT"
+    LLM_GENERATION_FAILED = "LLM_GENERATION_FAILED"
+    LLM_MODEL_NOT_FOUND = "LLM_MODEL_NOT_FOUND"
+    LLM_RATE_LIMITED = "LLM_RATE_LIMITED"
+
 
 class LocalLibraryError(Exception):
     """Base exception for all local-library errors."""
@@ -135,5 +141,17 @@ class FTSQueryError(EmbeddingError):
     Raised when a user query contains syntax that SQLite FTS5 cannot parse
     (e.g., unbalanced quotes, invalid operators).
     """
+
+    pass
+
+
+class LLMError(LocalLibraryError):
+    """Error during LLM API interaction."""
+
+    pass
+
+
+class RAGError(LocalLibraryError):
+    """Error during RAG query pipeline."""
 
     pass
