@@ -444,3 +444,67 @@ class TestMetadataResult:
         assert result.authors == "Vaswani, A."
         assert result.issued_date == "2017"
         assert result.author_list == ("Vaswani, A.",)
+
+
+class TestRAGResponse:
+    """Tests for RAGResponse frozen dataclass."""
+
+    def test_rag_response_creation(self) -> None:
+        """RAGResponse should store all fields correctly."""
+        from uuid import uuid4
+
+        from local_library.core.models import RAGResponse
+        from local_library.embeddings.base import Chunk, SearchResult
+
+        chunk = Chunk.create(doc_id=uuid4(), chunk_index=0, text="Some text")
+        result = SearchResult(
+            chunk=chunk,
+            score=0.9,
+            doc_title="Test Doc",
+            doc_citekey="Smith2023",
+            search_methods=frozenset({"vector"}),
+        )
+
+        response = RAGResponse(
+            question="What is attention?",
+            answer="Attention is a mechanism...",
+            context_chunks=(result,),
+            model="gemini/gemini-2.0-flash",
+            retrieval_mode="hybrid",
+        )
+
+        assert response.question == "What is attention?"
+        assert response.answer == "Attention is a mechanism..."
+        assert len(response.context_chunks) == 1
+        assert response.context_chunks[0].doc_citekey == "Smith2023"
+        assert response.model == "gemini/gemini-2.0-flash"
+        assert response.retrieval_mode == "hybrid"
+
+    def test_rag_response_is_frozen(self) -> None:
+        """RAGResponse should be immutable."""
+        from local_library.core.models import RAGResponse
+
+        response = RAGResponse(
+            question="Q",
+            answer="A",
+            context_chunks=(),
+            model="test-model",
+            retrieval_mode="hybrid",
+        )
+
+        with pytest.raises(AttributeError):
+            response.answer = "modified"  # type: ignore[misc]
+
+    def test_rag_response_empty_context(self) -> None:
+        """RAGResponse should handle empty context (no-context path)."""
+        from local_library.core.models import RAGResponse
+
+        response = RAGResponse(
+            question="Q",
+            answer="I don't have relevant context.",
+            context_chunks=(),
+            model="test-model",
+            retrieval_mode="hybrid",
+        )
+
+        assert len(response.context_chunks) == 0

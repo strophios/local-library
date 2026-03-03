@@ -6,8 +6,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
+
+if TYPE_CHECKING:
+    from local_library.embeddings.base import SearchResult
 
 
 class DocumentStatus(str, Enum):
@@ -244,3 +247,25 @@ class TextExtractionResult:
     overall_confidence: float
     needs_review: bool
     review_reasons: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RAGResponse:
+    """Complete result of a RAG query.
+
+    Captures the question, LLM-generated answer, contributing chunks,
+    model used, and retrieval mode for display and serialization.
+
+    Attributes:
+        question: The original natural language question
+        answer: LLM-generated answer text with citekey citations
+        context_chunks: SearchResults used as context for generation
+        model: LLM model identifier (e.g., "gemini/gemini-2.0-flash")
+        retrieval_mode: Retrieval mode used ("hybrid", "vector", "fts")
+    """
+
+    question: str
+    answer: str
+    context_chunks: tuple["SearchResult", ...]
+    model: str
+    retrieval_mode: str
