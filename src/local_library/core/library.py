@@ -2,6 +2,8 @@
 
 # pattern: Imperative Shell
 
+from __future__ import annotations
+
 import shutil
 import sqlite3
 import tempfile
@@ -11,7 +13,9 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 if TYPE_CHECKING:
+    from local_library.core.models import RAGResponse
     from local_library.embeddings.base import Retriever
+    from local_library.rag.interface import RAGStream
 
 from local_library.config import (
     ensure_directories,
@@ -105,6 +109,7 @@ class Library:
         pdf_llm_enabled: bool = False,
         embed_on_add: bool = True,
         embedding_batch_size: int = 32,
+        rag_model: str = "gemini/gemini-2.0-flash",
     ) -> None:
         """Initialize the library.
 
@@ -122,6 +127,7 @@ class Library:
                             Enables better table, math, and image handling. Requires GEMINI_API_KEY.
             embed_on_add: Whether to embed documents during add() (default: True).
             embedding_batch_size: Batch size for embedding computation (default: 32).
+            rag_model: LLM model identifier for RAG queries (default: "gemini/gemini-2.0-flash").
         """
         # Use defaults from config if not specified
         self._db_path = db_path or get_database_path()
@@ -175,6 +181,11 @@ class Library:
         self._embedder = None
         self._embedding_storage = None  # Lazy init when needed
 
+        # RAG query components (lazy init on first query() call)
+        self._rag_model = rag_model
+        self._llm_client = None  # Lazy: created on first query
+        self._rag_interface = None  # Lazy: created on first query
+
     @property
     def conn(self) -> sqlite3.Connection:
         """Get the database connection."""
@@ -184,7 +195,7 @@ class Library:
         """Close the database connection."""
         self._conn.close()
 
-    def __enter__(self) -> "Library":
+    def __enter__(self) -> Library:
         """Context manager entry."""
         return self
 
@@ -209,7 +220,7 @@ class Library:
 
         return self._embedding_storage
 
-    def get_retriever(self, mode: str = "hybrid") -> "Retriever":
+    def get_retriever(self, mode: str = "hybrid") -> Retriever:
         """Get a retriever instance for searching documents.
 
         Factory method that wires up retriever dependencies (storage, embedder)
@@ -951,3 +962,98 @@ class Library:
             storage.delete_by_document(doc.id)
 
         return delete_document(self._conn, doc.id)
+
+    # --- RAG Query Operations ---
+
+    def _get_rag_interface(self):
+        """Get or create RAGInterface instance.
+
+        Lazily initializes LLMClient and RAGInterface on first call.
+
+        Returns:
+            Configured RAGInterface instance.
+        """
+        if self._rag_interface is None:
+            if self._llm_client is None:
+                from local_library.llm.litellm_client import LiteLLMClient
+
+                self._llm_client = LiteLLMClient(model=self._rag_model)
+
+            from local_library.rag.interface import RAGInterface
+
+            self._rag_interface = RAGInterface(
+                llm_client=self._llm_client,
+                model=self._rag_model,
+            )
+
+        return self._rag_interface
+
+    def query(
+        self,
+        question: str,
+        retriever: Retriever | None = None,
+        mode: str = "hybrid",
+        limit: int = 10,
+        doc_ids: list[UUID] | None = None,
+    ) -> RAGResponse:
+        """Ask a question and get a RAG-generated answer.
+
+        Retrieves relevant document chunks, assembles context, and generates
+        an LLM answer with source citations.
+
+        Args:
+            question: Natural language question.
+            retriever: Pre-configured retriever (if None, creates one via get_retriever).
+            mode: Retrieval mode if creating retriever ("hybrid", "vector", "fts").
+            limit: Maximum number of context chunks to retrieve.
+            doc_ids: Optional document ID filter.
+
+        Returns:
+            RAGResponse with answer, source chunks, and model info.
+
+        Raises:
+            RAGError: If LLM generation fails.
+            EmbeddingError: If retriever creation fails (sqlite-vec unavailable).
+        """
+        if retriever is None:
+            retriever = self.get_retriever(mode=mode)
+
+        search_results = retriever.retrieve(question, k=limit, doc_ids=doc_ids)
+
+        rag = self._get_rag_interface()
+        return rag.query(question, search_results, retrieval_mode=mode)
+
+    def query_stream(
+        self,
+        question: str,
+        retriever: Retriever | None = None,
+        mode: str = "hybrid",
+        limit: int = 10,
+        doc_ids: list[UUID] | None = None,
+    ) -> RAGStream:
+        """Ask a question and get a streaming RAG-generated answer.
+
+        Like query(), but returns a RAGStream that yields tokens as they
+        arrive from the LLM.
+
+        Args:
+            question: Natural language question.
+            retriever: Pre-configured retriever (if None, creates one via get_retriever).
+            mode: Retrieval mode if creating retriever ("hybrid", "vector", "fts").
+            limit: Maximum number of context chunks to retrieve.
+            doc_ids: Optional document ID filter.
+
+        Returns:
+            RAGStream yielding answer tokens.
+
+        Raises:
+            RAGError: If LLM generation fails during streaming.
+            EmbeddingError: If retriever creation fails (sqlite-vec unavailable).
+        """
+        if retriever is None:
+            retriever = self.get_retriever(mode=mode)
+
+        search_results = retriever.retrieve(question, k=limit, doc_ids=doc_ids)
+
+        rag = self._get_rag_interface()
+        return rag.query_stream(question, search_results, retrieval_mode=mode)
