@@ -55,7 +55,7 @@ def show(
             "created_at": doc.created_at.isoformat() if doc.created_at else None,
             "updated_at": doc.updated_at.isoformat() if doc.updated_at else None,
         }
-        console.print(json.dumps(output, indent=2))
+        print(json.dumps(output, indent=2))
     else:
         status_style = {
             "pending": "yellow",

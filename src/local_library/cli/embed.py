@@ -215,7 +215,7 @@ def _embed_batch(
 
     if not doc_ids:
         if json_output:
-            console.print(json.dumps({"embedded": 0, "failed": 0, "chunks": 0}))
+            print(json.dumps({"embedded": 0, "failed": 0, "chunks": 0}))
         else:
             console.print("[dim]no documents need embedding[/dim]")
         return
@@ -233,7 +233,7 @@ def _embed_batch(
             except Exception:  # noqa: BLE001
                 results["failed"] += 1
 
-        console.print(json.dumps(results))
+        print(json.dumps(results))
     else:
         with Progress(
             SpinnerColumn(),

@@ -75,6 +75,6 @@ def delete(
         raise typer.Exit(code=1) from None
 
     if json_output:
-        console.print(json.dumps({"deleted": str(doc.id), "files_deleted": not keep_files}))
+        print(json.dumps({"deleted": str(doc.id), "files_deleted": not keep_files}))
     else:
         console.print(f"[green]deleted[/green]: {doc.id}")

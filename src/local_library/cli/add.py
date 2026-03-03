@@ -182,7 +182,7 @@ def add(
         }
         if result.is_duplicate:
             output["duplicate_reason"] = result.duplicate_reason
-        console.print(json.dumps(output, indent=2))
+        print(json.dumps(output, indent=2))
     else:
         if result.is_duplicate:
             console.print(f"[yellow]duplicate[/yellow] ({result.duplicate_reason}): {doc.id}")

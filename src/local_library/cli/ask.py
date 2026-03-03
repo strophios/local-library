@@ -216,4 +216,4 @@ def _output_json(response: RAGResponse) -> None:
         "retrieval_mode": response.retrieval_mode,
         "sources": list(source_map.values()),
     }
-    console.print(json.dumps(output, indent=2))
+    print(json.dumps(output, indent=2))

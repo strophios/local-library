@@ -82,7 +82,7 @@ def list_docs(
             }
             for doc in docs
         ]
-        console.print(json.dumps(output, indent=2))
+        print(json.dumps(output, indent=2))
         return
 
     if not docs:

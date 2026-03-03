@@ -144,7 +144,7 @@ def _output_json(results: list[SearchResult]) -> None:
                 "text": r.chunk.text,
             }
         )
-    console.print(json.dumps(output, indent=2))
+    print(json.dumps(output, indent=2))
 
 
 def _output_table(results: list[SearchResult], query: str, mode: str) -> None:
