@@ -15,7 +15,7 @@ from uuid import UUID
 if TYPE_CHECKING:
     from local_library.core.models import RAGResponse
     from local_library.embeddings.base import Retriever
-    from local_library.rag.interface import RAGStream
+    from local_library.rag.interface import RAGInterface, RAGStream
 
 from local_library.config import (
     ensure_directories,
@@ -965,7 +965,7 @@ class Library:
 
     # --- RAG Query Operations ---
 
-    def _get_rag_interface(self):
+    def _get_rag_interface(self) -> RAGInterface:
         """Get or create RAGInterface instance.
 
         Lazily initializes LLMClient and RAGInterface on first call.

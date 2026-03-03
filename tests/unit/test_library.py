@@ -568,12 +568,13 @@ class TestLibraryQuery:
     def test_query_returns_rag_response(self, library: Library) -> None:
         """query() should return a RAGResponse."""
         from unittest.mock import MagicMock
+        from uuid import uuid4
 
         from local_library.core.models import RAGResponse
         from local_library.embeddings.base import Chunk, SearchResult
 
         # Set up mock retriever
-        chunk = Chunk.create(doc_id=__import__("uuid").uuid4(), chunk_index=0, text="Test text")
+        chunk = Chunk.create(doc_id=uuid4(), chunk_index=0, text="Test text")
         mock_retriever = MagicMock()
         mock_retriever.retrieve.return_value = [
             SearchResult(
@@ -622,11 +623,12 @@ class TestLibraryQuery:
     def test_query_stream_returns_rag_stream(self, library: Library) -> None:
         """query_stream() should return a RAGStream."""
         from unittest.mock import MagicMock
+        from uuid import uuid4
 
         from local_library.embeddings.base import Chunk, SearchResult
         from local_library.rag.interface import RAGStream
 
-        chunk = Chunk.create(doc_id=__import__("uuid").uuid4(), chunk_index=0, text="Text")
+        chunk = Chunk.create(doc_id=uuid4(), chunk_index=0, text="Text")
         mock_retriever = MagicMock()
         mock_retriever.retrieve.return_value = [
             SearchResult(
@@ -659,9 +661,7 @@ class TestLibraryQuery:
         # No _llm_client set — should be created lazily
         assert library._llm_client is None
 
-        with patch(
-            "local_library.llm.litellm_client.LiteLLMClient"
-        ) as mock_litellm_cls:
+        with patch("local_library.llm.litellm_client.LiteLLMClient") as mock_litellm_cls:
             mock_instance = MagicMock()
             mock_litellm_cls.return_value = mock_instance
 
@@ -708,7 +708,9 @@ class TestLibraryQuery:
         )
 
         mock_retriever.retrieve.assert_called_once_with(
-            "Q?", k=5, doc_ids=[doc_id],
+            "Q?",
+            k=5,
+            doc_ids=[doc_id],
         )
 
     def test_query_default_model(self, temp_dir: Path) -> None:
