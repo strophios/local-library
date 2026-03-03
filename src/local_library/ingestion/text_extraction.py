@@ -1122,7 +1122,6 @@ def extract_title(markdown_text: str) -> FieldExtraction:
 
 # LLM extraction constants
 _LLM_MAX_TEXT_LENGTH = 8000  # Characters to send to LLM
-_LLM_DEFAULT_MODEL = "gemini/gemini-2.0-flash"  # Fast, cheap, supports structured output
 
 # Default confidence threshold for triggering needs_review
 _DEFAULT_CONFIDENCE_THRESHOLD = 0.7
@@ -1224,7 +1223,7 @@ class LLMExtractor:
             return self._parse_response(content)
 
         except Exception as e:
-            # Catch litellm API errors and other exceptions
+            # Catch LLM API errors and other exceptions
             logger.warning(f"LLM extraction failed: {e}")
             return None
 
