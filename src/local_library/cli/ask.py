@@ -3,7 +3,7 @@
 # pattern: Imperative Shell
 
 import json
-from typing import Annotated
+from typing import Annotated, Any
 from uuid import UUID
 
 import typer
@@ -95,7 +95,7 @@ def ask(
     if json_output:
         no_stream = True
 
-    lib_kwargs: dict = {"embed_on_add": False}
+    lib_kwargs: dict[str, Any] = {"embed_on_add": False}
     if model:
         lib_kwargs["rag_model"] = model
 
@@ -118,19 +118,7 @@ def ask(
             else:
                 _stream_answer(lib, question, mode=mode, limit=limit, doc_ids=doc_ids)
 
-    except LookupError as e:
-        if json_output:
-            err_console.print(json.dumps({"error": e.message, "code": e.code.value}))
-        else:
-            err_console.print(f"[red]error:[/red] {e.message}")
-        raise typer.Exit(code=1) from None
-    except EmbeddingError as e:
-        if json_output:
-            err_console.print(json.dumps({"error": e.message, "code": e.code.value}))
-        else:
-            err_console.print(f"[red]error:[/red] {e.message}")
-        raise typer.Exit(code=1) from None
-    except (RAGError, LLMError) as e:
+    except (LookupError, EmbeddingError, RAGError, LLMError) as e:
         if json_output:
             err_console.print(json.dumps({"error": e.message, "code": e.code.value}))
         else:
@@ -186,16 +174,17 @@ def _print_sources(response: RAGResponse) -> None:
     if not response.context_chunks:
         return
 
-    # Deduplicate by citekey, preserving order
-    seen: dict[str | None, str | None] = {}
+    # Deduplicate by citekey (or doc_id if citekey is None), preserving order
+    seen: dict[str, tuple[str | None, str | None]] = {}
     for chunk in response.context_chunks:
-        key = chunk.doc_citekey
+        # Use citekey as grouping key, fallback to doc_id string if None
+        key = chunk.doc_citekey or str(chunk.chunk.doc_id)
         if key not in seen:
-            seen[key] = chunk.doc_title
+            seen[key] = (chunk.doc_citekey, chunk.doc_title)
 
     console.print()
     console.print("[bold]Sources:[/bold]")
-    for citekey, title in seen.items():
+    for citekey, title in seen.values():
         label = f"[@{citekey}]" if citekey else "[unknown source]"
         title_str = f'  "{title}"' if title else ""
         console.print(f"  {label}{title_str}")
@@ -203,13 +192,14 @@ def _print_sources(response: RAGResponse) -> None:
 
 def _output_json(response: RAGResponse) -> None:
     """Output RAGResponse as JSON."""
-    # Aggregate sources: deduplicate by citekey, count chunks per source
-    source_map: dict[str | None, dict] = {}
+    # Aggregate sources: deduplicate by citekey (or doc_id if None), count chunks per source
+    source_map: dict[str, dict[str, Any]] = {}
     for chunk in response.context_chunks:
-        key = chunk.doc_citekey
+        # Use citekey as grouping key, fallback to doc_id string if None
+        key = chunk.doc_citekey or str(chunk.chunk.doc_id)
         if key not in source_map:
             source_map[key] = {
-                "citekey": key,
+                "citekey": chunk.doc_citekey,
                 "title": chunk.doc_title,
                 "doc_id": str(chunk.chunk.doc_id),
                 "chunks_used": 0,

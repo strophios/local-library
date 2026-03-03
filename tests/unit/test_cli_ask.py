@@ -5,7 +5,6 @@
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
-import pytest
 from typer.testing import CliRunner
 
 from local_library.cli.main import app
@@ -213,7 +212,11 @@ class TestAskCommand:
         result = runner.invoke(app, ["ask", "Q?", "--no-stream"])
 
         assert result.exit_code == 0
-        assert "don't have relevant context" in result.output.lower() or "no relevant" in result.output.lower()
+        output_lower = result.output.lower()
+        assert (
+            "don't have relevant context" in output_lower
+            or "no relevant" in output_lower
+        )
 
     @patch("local_library.cli.ask.is_vec_available", return_value=True)
     @patch("local_library.cli.ask.Library")
@@ -262,7 +265,7 @@ class TestAskCommand:
         mock_lib.query_stream.return_value = mock_stream
         mock_lib_cls.return_value = mock_lib
 
-        result = runner.invoke(app, ["ask", "What is X?"])
+        runner.invoke(app, ["ask", "What is X?"])
 
         # Should have called query_stream (not query)
         mock_lib.query_stream.assert_called_once()
@@ -275,7 +278,7 @@ class TestAskCommand:
         self, mock_lib_cls: MagicMock, _mock_vec: MagicMock
     ) -> None:
         """ask should display RAGError cleanly and exit 1."""
-        from local_library.core.errors import RAGError, ErrorCode
+        from local_library.core.errors import ErrorCode, RAGError
 
         mock_lib = MagicMock()
         mock_lib.__enter__ = MagicMock(return_value=mock_lib)
@@ -293,7 +296,7 @@ class TestAskCommand:
         self, mock_lib_cls: MagicMock, _mock_vec: MagicMock
     ) -> None:
         """ask should display LLMError cleanly and exit 1."""
-        from local_library.core.errors import LLMError, ErrorCode
+        from local_library.core.errors import ErrorCode, LLMError
 
         mock_lib = MagicMock()
         mock_lib.__enter__ = MagicMock(return_value=mock_lib)
@@ -307,13 +310,11 @@ class TestAskCommand:
 
     @patch("local_library.cli.ask.is_vec_available", return_value=True)
     @patch("local_library.cli.ask.Library")
-    def test_ask_json_error_format(
+    def test_ask_json_error_exits_cleanly(
         self, mock_lib_cls: MagicMock, _mock_vec: MagicMock
     ) -> None:
-        """ask --json errors should produce JSON error output."""
-        import json
-
-        from local_library.core.errors import RAGError, ErrorCode
+        """ask --json errors should produce JSON error output and exit cleanly."""
+        from local_library.core.errors import ErrorCode, RAGError
 
         mock_lib = MagicMock()
         mock_lib.__enter__ = MagicMock(return_value=mock_lib)
