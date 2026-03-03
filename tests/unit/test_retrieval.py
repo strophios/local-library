@@ -23,7 +23,7 @@ from local_library.embeddings.retrieval import (
     _lookup_doc_metadata,
     _rrf_fuse,
 )
-from local_library.embeddings.storage import EmbeddingStorage
+from local_library.embeddings.storage import EmbeddingStorage, _sanitize_fts_query
 
 pytestmark = pytest.mark.skipif(
     not is_vec_available(),
@@ -66,6 +66,151 @@ def storage(tmp_path: Path) -> EmbeddingStorage:
     conn = get_connection(db_path)
     init_schema(conn)
     return EmbeddingStorage(conn)
+
+
+class TestSanitizeFtsQuery:
+    """Tests for FTS5 query sanitization."""
+
+    def test_query_with_trailing_question_mark(self) -> None:
+        """Query with trailing ? is stripped."""
+        query = "What makes transformer models so effective?"
+        result = _sanitize_fts_query(query)
+        assert result == "What makes transformer models so effective"
+        assert "?" not in result
+
+    def test_query_with_multiple_punctuation(self) -> None:
+        """Query with multiple punctuation marks is cleaned."""
+        query = "Machine learning: How? And why!?!"
+        result = _sanitize_fts_query(query)
+        assert "?" not in result
+        assert "!" not in result
+        assert ":" not in result
+        # Should contain the core words
+        assert "Machine" in result
+        assert "learning" in result
+
+    def test_query_with_only_punctuation_raises_error(self) -> None:
+        """Query that becomes empty after sanitization raises FTSQueryError."""
+        query = "?!.,;:"
+        with pytest.raises(FTSQueryError):
+            _sanitize_fts_query(query)
+
+    def test_balanced_quotes_preserved(self) -> None:
+        """Balanced quotes are preserved for phrase matching."""
+        query = '"state of the art" embeddings'
+        result = _sanitize_fts_query(query)
+        assert '"state of the art"' in result
+        assert "embeddings" in result
+
+    def test_unbalanced_quotes_stripped(self) -> None:
+        """Unbalanced quotes are removed."""
+        query = 'What is "natural language processing'
+        result = _sanitize_fts_query(query)
+        assert '"' not in result
+        assert "natural" in result
+        assert "language" in result
+        assert "processing" in result
+
+    def test_normal_alphanumeric_query_unchanged(self) -> None:
+        """Normal alphanumeric query remains unchanged."""
+        query = "machine learning algorithms"
+        result = _sanitize_fts_query(query)
+        assert result == "machine learning algorithms"
+
+    def test_hyphenated_words_preserved(self) -> None:
+        """Hyphenated words like state-of-the-art are preserved."""
+        query = "state-of-the-art deep-learning"
+        result = _sanitize_fts_query(query)
+        assert "state-of-the-art" in result
+        assert "deep-learning" in result
+
+    def test_standalone_plus_sign_removed(self) -> None:
+        """Standalone + operators are removed."""
+        query = "machine + learning"
+        result = _sanitize_fts_query(query)
+        assert "+" not in result
+        assert "machine" in result
+        assert "learning" in result
+
+    def test_standalone_minus_sign_removed(self) -> None:
+        """Standalone - operators are removed."""
+        query = "neural - networks"
+        result = _sanitize_fts_query(query)
+        assert "-" not in result  # Standalone - is removed
+        assert "neural" in result
+        assert "networks" in result
+
+    def test_multiple_spaces_collapsed(self) -> None:
+        """Multiple consecutive spaces are collapsed to single space."""
+        query = "machine   learning    algorithms"
+        result = _sanitize_fts_query(query)
+        assert result == "machine learning algorithms"
+
+    def test_leading_trailing_whitespace_stripped(self) -> None:
+        """Leading and trailing whitespace is removed."""
+        query = "   machine learning   "
+        result = _sanitize_fts_query(query)
+        assert result == "machine learning"
+
+    def test_parentheses_removed(self) -> None:
+        """Parentheses are removed."""
+        query = "transformers (attention mechanism)"
+        result = _sanitize_fts_query(query)
+        assert "(" not in result
+        assert ")" not in result
+        assert "transformers" in result
+        assert "attention" in result
+        assert "mechanism" in result
+
+    def test_square_brackets_removed(self) -> None:
+        """Square brackets are removed."""
+        query = "retrieval [augmented] generation"
+        result = _sanitize_fts_query(query)
+        assert "[" not in result
+        assert "]" not in result
+        assert "retrieval" in result
+        assert "augmented" in result
+        assert "generation" in result
+
+    def test_braces_removed(self) -> None:
+        """Curly braces are removed."""
+        query = "data {science} methods"
+        result = _sanitize_fts_query(query)
+        assert "{" not in result
+        assert "}" not in result
+        assert "data" in result
+        assert "science" in result
+        assert "methods" in result
+
+    def test_special_chars_removed(self) -> None:
+        """Special characters like ^, ~, \\ are removed."""
+        query = "regex^pattern~test\\backslash"
+        result = _sanitize_fts_query(query)
+        assert "^" not in result
+        assert "~" not in result
+        assert "\\" not in result
+        assert "regex" in result
+        assert "pattern" in result
+        assert "test" in result
+        assert "backslash" in result
+
+    def test_commas_and_semicolons_removed(self) -> None:
+        """Commas and semicolons are removed."""
+        query = "natural language; processing, analysis"
+        result = _sanitize_fts_query(query)
+        assert ";" not in result
+        assert "," not in result
+        assert "natural" in result
+        assert "language" in result
+        assert "processing" in result
+        assert "analysis" in result
+
+    def test_real_world_query_example(self) -> None:
+        """Real-world example: natural language question with punctuation."""
+        query = "What makes transformer models so effective?"
+        result = _sanitize_fts_query(query)
+        # Should be searchable as "What makes transformer models so effective"
+        assert result == "What makes transformer models so effective"
 
 
 class TestSearchFts:
@@ -170,8 +315,8 @@ class TestSearchFts:
 
         assert results == []
 
-    def test_raises_fts_query_error_on_bad_syntax(self, storage: EmbeddingStorage) -> None:
-        """search_fts raises FTSQueryError for malformed FTS5 queries."""
+    def test_raises_fts_query_error_on_only_punctuation(self, storage: EmbeddingStorage) -> None:
+        """search_fts raises FTSQueryError when query becomes empty after sanitization."""
         doc_id = uuid4()
         _create_test_document(storage._conn, doc_id)
         storage.store_embeddings(
@@ -180,8 +325,9 @@ class TestSearchFts:
             ]
         )
 
+        # Query that becomes empty after sanitization
         with pytest.raises(FTSQueryError):
-            storage.search_fts('"unbalanced quote')
+            storage.search_fts("?!.,;:")
 
     def test_reconstructs_chunk_correctly(self, storage: EmbeddingStorage) -> None:
         """search_fts returns Chunk objects with all fields populated."""
@@ -201,6 +347,41 @@ class TestSearchFts:
         assert chunk.chunk_index == 0
         assert "searchable" in chunk.text
         assert isinstance(chunk.created_at, datetime)
+
+    def test_sanitizes_query_with_punctuation(self, storage: EmbeddingStorage) -> None:
+        """search_fts sanitizes queries with punctuation before searching."""
+        doc_id = uuid4()
+        _create_test_document(storage._conn, doc_id)
+        storage.store_embeddings(
+            [
+                make_chunk_embedding(doc_id, 0, "Machine learning classification"),
+            ]
+        )
+
+        # Query with trailing punctuation (would cause FTS5 error without sanitization)
+        results = storage.search_fts("machine learning?")
+
+        assert len(results) >= 1
+        texts = [chunk.text for chunk, _ in results]
+        assert any("Machine learning" in t for t in texts)
+
+    def test_query_becomes_empty_after_sanitization_raises_error(
+        self, storage: EmbeddingStorage
+    ) -> None:
+        """search_fts raises FTSQueryError if sanitization results in empty string."""
+        doc_id = uuid4()
+        _create_test_document(storage._conn, doc_id)
+        storage.store_embeddings(
+            [
+                make_chunk_embedding(doc_id, 0, "Some text"),
+            ]
+        )
+
+        # Query that becomes empty after sanitization
+        with pytest.raises(FTSQueryError) as exc_info:
+            storage.search_fts("?!.,;:")
+
+        assert "empty" in str(exc_info.value).lower()
 
 
 class TestLookupDocMetadata:
@@ -420,7 +601,7 @@ class TestFTSRetriever:
         assert results[0].chunk.doc_id == doc_id_1
 
     def test_raises_fts_query_error(self, storage: EmbeddingStorage) -> None:
-        """retrieve() propagates FTSQueryError for bad syntax."""
+        """retrieve() propagates FTSQueryError when query becomes empty after sanitization."""
         doc_id = uuid4()
         _create_test_document(storage._conn, doc_id)
         storage.store_embeddings(
@@ -431,7 +612,7 @@ class TestFTSRetriever:
 
         retriever = FTSRetriever(storage)
         with pytest.raises(FTSQueryError):
-            retriever.retrieve('"unbalanced')
+            retriever.retrieve("?!.,;:")
 
     def test_empty_results(self, storage: EmbeddingStorage) -> None:
         """retrieve() returns empty list for no matches."""
@@ -680,9 +861,9 @@ class TestHybridRetriever:
         fts_ret = FTSRetriever(storage)
         hybrid = HybridRetriever(vector_ret, fts_ret)
 
-        # Query with FTS5 syntax error
+        # Query that becomes empty after sanitization (causes FTS error)
         with caplog.at_level(logging.WARNING):
-            results = hybrid.retrieve('"unbalanced quote')
+            results = hybrid.retrieve("?!.,;:")
 
         # Should still get vector results
         assert len(results) >= 1

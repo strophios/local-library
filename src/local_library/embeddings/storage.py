@@ -2,6 +2,7 @@
 
 # pattern: Imperative Shell
 
+import re
 import sqlite3
 from datetime import datetime, timezone
 from uuid import UUID
@@ -13,6 +14,47 @@ from local_library.core.errors import EmbeddingError, ErrorCode, FTSQueryError
 from local_library.core.models import EmbeddingStatus
 from local_library.core.vec_extension import require_vec_extension
 from local_library.embeddings.base import Chunk, ChunkEmbedding
+
+
+def _sanitize_fts_query(query: str) -> str:
+    """Sanitize a query string for FTS5 compatibility.
+
+    Removes characters that are invalid in FTS5 query syntax while preserving
+    alphanumeric words and hyphenated terms.
+
+    Args:
+        query: Raw query string (may contain punctuation and special chars)
+
+    Returns:
+        Cleaned query string safe for FTS5 MATCH clause
+
+    Raises:
+        FTSQueryError: If the sanitized query is empty
+    """
+    # Remove characters that FTS5 treats as syntax errors
+    # Includes: ?!.,;:[]{}()^~\
+    cleaned = re.sub(r"[?!.,;:\[\]{}()^~\\]", " ", query)
+
+    # Remove standalone + or - (keep hyphenated words like "state-of-the-art")
+    # Pattern: preceded by non-word OR start of string, AND followed by non-word OR end
+    cleaned = re.sub(r"(?<!\w)[+\-](?!\w)", " ", cleaned)
+
+    # Handle unbalanced quotes by removing all quotes if count is odd
+    # (FTS5 uses quotes for phrase matching, but unbalanced ones cause errors)
+    if cleaned.count('"') % 2 != 0:
+        cleaned = cleaned.replace('"', " ")
+
+    # Collapse multiple spaces and strip
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+    if not cleaned:
+        raise FTSQueryError(
+            "query becomes empty after FTS5 sanitization",
+            ErrorCode.EMBEDDING_FTS_QUERY_SYNTAX,
+            details={"original_query": query},
+        )
+
+    return cleaned
 
 
 class EmbeddingStorage:
@@ -293,8 +335,12 @@ class EmbeddingStorage:
             BM25 scores are negative; more negative = better match.
 
         Raises:
-            FTSQueryError: If query contains invalid FTS5 syntax
+            FTSQueryError: If query contains invalid FTS5 syntax or becomes empty
+                after sanitization
         """
+        # Sanitize query for FTS5 compatibility
+        query = _sanitize_fts_query(query)
+
         try:
             if doc_ids:
                 placeholders = ",".join("?" * len(doc_ids))
