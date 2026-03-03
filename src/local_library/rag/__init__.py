@@ -10,6 +10,10 @@ def __getattr__(name: str) -> object:
         from local_library.rag.interface import RAGInterface
 
         return RAGInterface
+    elif name == "RAGStream":
+        from local_library.rag.interface import RAGStream
+
+        return RAGStream
     elif name == "assemble_context":
         from local_library.rag.interface import assemble_context
 
@@ -23,6 +27,7 @@ def __getattr__(name: str) -> object:
 
 __all__ = [
     "RAGInterface",
+    "RAGStream",
     "assemble_context",
     "build_messages",
 ]
