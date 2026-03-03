@@ -911,27 +911,18 @@ class TestLLMExtraction:
 
     def test_llm_extractor_parses_json_response(self) -> None:
         """LLMExtractor should parse JSON response correctly."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock
 
         from local_library.ingestion.text_extraction import LLMExtractor
 
-        extractor = LLMExtractor(enabled=True, model="gpt-4o-mini")
+        mock_client = MagicMock()
+        mock_client.complete.return_value = (
+            '{"title": "Test Title", "authors": ["John Smith"], '
+            '"year": "2023", "type": "article-journal"}'
+        )
 
-        # Mock response
-        mock_response = MagicMock()
-        mock_response.choices = [
-            MagicMock(
-                message=MagicMock(
-                    content=(
-                        '{"title": "Test Title", "authors": ["John Smith"], '
-                        '"year": "2023", "type": "article-journal"}'
-                    )
-                )
-            )
-        ]
-
-        with patch("litellm.completion", return_value=mock_response):
-            result = extractor.extract("Some document text")
+        extractor = LLMExtractor(llm_client=mock_client)
+        result = extractor.extract("Some document text")
 
         assert result is not None
         assert result["title"] == "Test Title"
@@ -941,83 +932,77 @@ class TestLLMExtraction:
 
     def test_llm_extractor_handles_invalid_json(self) -> None:
         """LLMExtractor should return None for invalid JSON."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock
 
         from local_library.ingestion.text_extraction import LLMExtractor
 
-        extractor = LLMExtractor(enabled=True, model="gpt-4o-mini")
+        mock_client = MagicMock()
+        mock_client.complete.return_value = "not valid json"
 
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock(message=MagicMock(content="not valid json"))]
-
-        with patch("litellm.completion", return_value=mock_response):
-            result = extractor.extract("Some document text")
+        extractor = LLMExtractor(llm_client=mock_client)
+        result = extractor.extract("Some document text")
 
         assert result is None
 
     def test_llm_extractor_handles_api_error(self) -> None:
         """LLMExtractor should return None on API error."""
-        from unittest.mock import patch
+        from unittest.mock import MagicMock
 
         from local_library.ingestion.text_extraction import LLMExtractor
 
-        extractor = LLMExtractor(enabled=True, model="gpt-4o-mini")
+        mock_client = MagicMock()
+        mock_client.complete.side_effect = Exception("API error")
 
-        with patch("litellm.completion", side_effect=Exception("API error")):
-            result = extractor.extract("Some document text")
+        extractor = LLMExtractor(llm_client=mock_client)
+        result = extractor.extract("Some document text")
 
         assert result is None
 
     def test_llm_extractor_disabled_returns_none(self) -> None:
-        """Disabled LLMExtractor should return None immediately."""
+        """LLMExtractor without client should return None immediately."""
         from local_library.ingestion.text_extraction import LLMExtractor
 
-        extractor = LLMExtractor(enabled=False, model="gpt-4o-mini")
-
-        # Should not call API
+        extractor = LLMExtractor()  # No client = disabled
         result = extractor.extract("Some document text")
 
         assert result is None
 
     def test_llm_extractor_truncates_long_text(self) -> None:
         """LLMExtractor should truncate very long documents."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock
 
         from local_library.ingestion.text_extraction import LLMExtractor
 
-        extractor = LLMExtractor(enabled=True, model="gpt-4o-mini")
+        mock_client = MagicMock()
+        mock_client.complete.return_value = (
+            '{"title": "Test", "authors": [], "year": null, "type": "article-journal"}'
+        )
+
+        extractor = LLMExtractor(llm_client=mock_client)
 
         # Very long text
         long_text = "word " * 10000
+        extractor.extract(long_text)
 
-        mock_response = MagicMock()
-        mock_response.choices = [
-            MagicMock(
-                message=MagicMock(
-                    content=(
-                        '{"title": "Test", "authors": [], "year": null, "type": "article-journal"}'
-                    )
-                )
-            )
-        ]
-
-        with patch("litellm.completion", return_value=mock_response) as mock_call:
-            extractor.extract(long_text)
-
-            # Should have called with truncated text
-            call_args = mock_call.call_args
-            messages = call_args.kwargs["messages"]
-            user_content = messages[1]["content"]
-            # Should be truncated to reasonable length
-            assert len(user_content) < len(long_text)
+        # Should have called with truncated text
+        call_args = mock_client.complete.call_args
+        messages = call_args.kwargs["messages"]
+        user_content = messages[1]["content"]
+        # Should be truncated to reasonable length
+        assert len(user_content) < len(long_text)
 
     def test_llm_extractor_prompt_includes_heuristic_candidates(self) -> None:
         """LLMExtractor prompt should include heuristic candidates when provided."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock
 
         from local_library.ingestion.text_extraction import LLMExtractor
 
-        extractor = LLMExtractor(enabled=True, model="gpt-4o-mini")
+        mock_client = MagicMock()
+        mock_client.complete.return_value = (
+            '{"title": "Better Title", '
+            '"authors": ["Smith, John"], '
+            '"year": "2023", "type": "article-journal"}'
+        )
 
         candidates = {
             "title": "Candidate Title",
@@ -1025,27 +1010,31 @@ class TestLLMExtraction:
             "year": "2023",
         }
 
-        mock_response = MagicMock()
-        mock_response.choices = [
-            MagicMock(
-                message=MagicMock(
-                    content=(
-                        '{"title": "Better Title", '
-                        '"authors": ["Smith, John"], '
-                        '"year": "2023", "type": "article-journal"}'
-                    )
-                )
-            )
-        ]
+        extractor = LLMExtractor(llm_client=mock_client)
+        extractor.extract("Document text", heuristic_candidates=candidates)
 
-        with patch("litellm.completion", return_value=mock_response) as mock_call:
-            extractor.extract("Document text", heuristic_candidates=candidates)
+        # Prompt should mention candidates
+        call_args = mock_client.complete.call_args
+        messages = call_args.kwargs["messages"]
+        user_content = messages[1]["content"]
+        assert "Candidate Title" in user_content
 
-            # Prompt should mention candidates
-            call_args = mock_call.call_args
-            messages = call_args.kwargs["messages"]
-            user_content = messages[1]["content"]
-            assert "Candidate Title" in user_content
+    def test_llm_extractor_forwards_response_format(self) -> None:
+        """LLMExtractor should forward response_format kwarg to LLMClient."""
+        from unittest.mock import MagicMock
+
+        from local_library.ingestion.text_extraction import LLMExtractor
+
+        mock_client = MagicMock()
+        mock_client.complete.return_value = (
+            '{"title": "Test", "authors": [], "year": null, "type": "article-journal"}'
+        )
+
+        extractor = LLMExtractor(llm_client=mock_client)
+        extractor.extract("Some text")
+
+        call_args = mock_client.complete.call_args
+        assert "response_format" in call_args.kwargs
 
 
 class TestTextMetadataExtractorWithLLM:
@@ -1053,7 +1042,7 @@ class TestTextMetadataExtractorWithLLM:
 
     def test_extractor_uses_llm_when_low_confidence(self) -> None:
         """Extractor should call LLM when heuristic confidence is low."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock
 
         from local_library.ingestion.text_extraction import TextMetadataExtractor
 
@@ -1063,34 +1052,26 @@ class TestTextMetadataExtractorWithLLM:
         Without clear title or author patterns.
         """
 
-        mock_llm_response = MagicMock()
-        mock_llm_response.choices = [
-            MagicMock(
-                message=MagicMock(
-                    content=(
-                        '{"title": "LLM Title", '
-                        '"authors": ["LLM Author"], '
-                        '"year": "2023", "type": "article-journal"}'
-                    )
-                )
-            )
-        ]
+        mock_client = MagicMock()
+        mock_client.complete.return_value = (
+            '{"title": "LLM Title", '
+            '"authors": ["LLM Author"], '
+            '"year": "2023", "type": "article-journal"}'
+        )
 
-        with patch("litellm.completion", return_value=mock_llm_response):
-            extractor = TextMetadataExtractor(
-                confidence_threshold=0.9,  # High threshold to trigger fallback
-                llm_enabled=True,
-                llm_model="gpt-4o-mini",
-            )
-            result = extractor.extract(text)
+        extractor = TextMetadataExtractor(
+            confidence_threshold=0.9,  # High threshold to trigger fallback
+            llm_client=mock_client,
+        )
+        result = extractor.extract(text)
 
-            # Should have LLM-enhanced values
-            # Note: confidence is preserved from heuristics
-            assert result.title.source == "llm" or result.title.value is not None
+        # Should have LLM-enhanced values
+        # Note: confidence is preserved from heuristics
+        assert result.title.source == "llm" or result.title.value is not None
 
     def test_extractor_skips_llm_when_confident(self) -> None:
         """Extractor should skip LLM when heuristic confidence is high."""
-        from unittest.mock import patch
+        from unittest.mock import MagicMock
 
         from local_library.ingestion.text_extraction import TextMetadataExtractor
 
@@ -1106,17 +1087,16 @@ class TestTextMetadataExtractorWithLLM:
         Abstract...
         """
 
-        with patch("litellm.completion") as mock_call:
-            extractor = TextMetadataExtractor(
-                confidence_threshold=0.3,  # Low threshold
-                llm_enabled=True,
-                llm_model="gpt-4o-mini",
-            )
-            result = extractor.extract(text)
+        mock_client = MagicMock()
+        extractor = TextMetadataExtractor(
+            confidence_threshold=0.3,  # Low threshold
+            llm_client=mock_client,
+        )
+        result = extractor.extract(text)
 
-            # Should not have called LLM
-            if not result.needs_review:
-                mock_call.assert_not_called()
+        # Should not have called LLM
+        if not result.needs_review:
+            mock_client.complete.assert_not_called()
 
     def test_extractor_graceful_degradation_without_llm(self) -> None:
         """Extractor should work without LLM (graceful degradation)."""
@@ -1128,11 +1108,8 @@ class TestTextMetadataExtractorWithLLM:
         2023
         """
 
-        # LLM disabled
-        extractor = TextMetadataExtractor(
-            confidence_threshold=0.7,
-            llm_enabled=False,
-        )
+        # No LLM client = disabled
+        extractor = TextMetadataExtractor(confidence_threshold=0.7)
         result = extractor.extract(text)
 
         # Should still produce results
@@ -1142,7 +1119,7 @@ class TestTextMetadataExtractorWithLLM:
 
     def test_extractor_preserves_heuristic_confidence_after_llm(self) -> None:
         """After LLM fallback, heuristic confidence should be preserved."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock
 
         from local_library.ingestion.text_extraction import TextMetadataExtractor
 
@@ -1151,32 +1128,24 @@ class TestTextMetadataExtractorWithLLM:
         Maybe an author name here
         """
 
-        mock_llm_response = MagicMock()
-        mock_llm_response.choices = [
-            MagicMock(
-                message=MagicMock(
-                    content=(
-                        '{"title": "Actual Title", '
-                        '"authors": ["Real Author"], '
-                        '"year": "2023", "type": "article-journal"}'
-                    )
-                )
-            )
-        ]
+        mock_client = MagicMock()
+        mock_client.complete.return_value = (
+            '{"title": "Actual Title", '
+            '"authors": ["Real Author"], '
+            '"year": "2023", "type": "article-journal"}'
+        )
 
-        with patch("litellm.completion", return_value=mock_llm_response):
-            extractor = TextMetadataExtractor(
-                confidence_threshold=0.8,
-                llm_enabled=True,
-                llm_model="gpt-4o-mini",
-            )
-            result = extractor.extract(text)
+        extractor = TextMetadataExtractor(
+            confidence_threshold=0.8,
+            llm_client=mock_client,
+        )
+        result = extractor.extract(text)
 
-            # Confidence should still be from heuristics (not boosted by LLM)
-            # This ensures needs_review is still triggered appropriately
-            if result.title.source == "llm":
-                # Confidence preserved from heuristics
-                assert result.needs_review is True  # Still needs review
+        # Confidence should still be from heuristics (not boosted by LLM)
+        # This ensures needs_review is still triggered appropriately
+        if result.title.source == "llm":
+            # Confidence preserved from heuristics
+            assert result.needs_review is True  # Still needs review
 
 
 class TestBuildCslJson:

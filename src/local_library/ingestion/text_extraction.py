@@ -19,11 +19,14 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pydantic
 
 from local_library.core.models import FieldExtraction, TextExtractionResult
+
+if TYPE_CHECKING:
+    from local_library.llm.base import LLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -1153,7 +1156,7 @@ class MetadataExtractionResponse(pydantic.BaseModel):
 class LLMExtractor:
     """LLM-based metadata extraction fallback.
 
-    Uses LiteLLM for provider-agnostic LLM access. Called when heuristic
+    Uses LLMClient for provider-agnostic LLM access. Called when heuristic
     confidence is below threshold.
 
     Uses structured output (response_format) for guaranteed valid JSON.
@@ -1163,17 +1166,20 @@ class LLMExtractor:
 
     def __init__(
         self,
-        enabled: bool = False,
-        model: str = _LLM_DEFAULT_MODEL,
+        llm_client: LLMClient | None = None,
     ) -> None:
         """Initialize the LLM extractor.
 
         Args:
-            enabled: Whether LLM fallback is enabled
-            model: LiteLLM model identifier (e.g., "gemini/gemini-2.0-flash")
+            llm_client: Pre-configured LLMClient instance. If None,
+                       LLM extraction is disabled.
         """
-        self.enabled = enabled
-        self.model = model
+        self._llm_client = llm_client
+
+    @property
+    def enabled(self) -> bool:
+        """Whether LLM extraction is available."""
+        return self._llm_client is not None
 
     def extract(
         self,
@@ -1191,12 +1197,10 @@ class LLMExtractor:
             Dict with keys: title, authors, year, type
             Returns None if disabled or API error
         """
-        if not self.enabled:
+        if self._llm_client is None:
             return None
 
         try:
-            import litellm
-
             # Truncate text if too long
             text = markdown_text[:_LLM_MAX_TEXT_LENGTH]
             if len(markdown_text) > _LLM_MAX_TEXT_LENGTH:
@@ -1206,20 +1210,17 @@ class LLMExtractor:
             system_prompt = self._build_system_prompt()
             user_prompt = self._build_user_prompt(text, heuristic_candidates)
 
-            # Call LLM with structured output
-            response = litellm.completion(
-                model=self.model,
+            # Call LLM with structured output via LLMClient
+            content = self._llm_client.complete(
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
                 ],
-                response_format=MetadataExtractionResponse,
-                temperature=0.1,  # Low temperature for consistency
+                temperature=0.1,
                 max_tokens=500,
+                response_format=MetadataExtractionResponse,
             )
 
-            # Parse structured response
-            content = response.choices[0].message.content
             return self._parse_response(content)
 
         except Exception as e:
@@ -1299,26 +1300,23 @@ class TextMetadataExtractor:
     Attributes:
         confidence_threshold: Minimum confidence for a field to be considered
                              reliable. Fields below this trigger needs_review.
-        llm_enabled: Whether to use LLM fallback for low-confidence extractions.
-        llm_model: LiteLLM model identifier for fallback.
     """
 
     def __init__(
         self,
         confidence_threshold: float = _DEFAULT_CONFIDENCE_THRESHOLD,
-        llm_enabled: bool = False,
-        llm_model: str = _LLM_DEFAULT_MODEL,
+        llm_client: LLMClient | None = None,
     ) -> None:
         """Initialize the extractor.
 
         Args:
             confidence_threshold: Minimum confidence (0.0-1.0) for fields.
                                  Default is 0.7 (70%).
-            llm_enabled: Whether to enable LLM fallback. Default is False.
-            llm_model: LiteLLM model identifier. Default is "gpt-4o-mini".
+            llm_client: Pre-configured LLMClient for LLM fallback.
+                       If None, LLM fallback is disabled.
         """
         self.confidence_threshold = confidence_threshold
-        self._llm_extractor = LLMExtractor(enabled=llm_enabled, model=llm_model)
+        self._llm_extractor = LLMExtractor(llm_client=llm_client)
 
     def extract(self, markdown_text: str) -> TextExtractionResult:
         """Extract all metadata fields from markdown text.

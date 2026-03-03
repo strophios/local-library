@@ -142,11 +142,17 @@ class Library:
         self._metadata_handler = MetadataHandler()
 
         # Initialize text metadata extractor
+        # Create LLMClient at Library level for explicit dependency ownership
+        text_llm_client = None
+        if text_extraction_llm_enabled:
+            from local_library.llm.litellm_client import LiteLLMClient
+
+            text_llm_client = LiteLLMClient(model=text_extraction_llm_model)
+
         self._text_extractor = (
             TextMetadataExtractor(
                 confidence_threshold=text_extraction_confidence_threshold,
-                llm_enabled=text_extraction_llm_enabled,
-                llm_model=text_extraction_llm_model,
+                llm_client=text_llm_client,
             )
             if text_extraction_enabled
             else None
