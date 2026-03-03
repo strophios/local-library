@@ -42,6 +42,7 @@ def _make_mock_result(
     title: str | None = "Test Doc",
     citekey: str | None = "Test2023",
     methods: frozenset[str] | None = None,
+    section: str = "",
 ) -> MagicMock:
     """Create a mock SearchResult."""
     if methods is None:
@@ -51,6 +52,7 @@ def _make_mock_result(
     result.chunk.doc_id = uuid4()
     result.chunk.chunk_index = 0
     result.chunk.text = text
+    result.chunk.section = section
     result.score = score
     result.doc_title = title
     result.doc_citekey = citekey
@@ -85,6 +87,7 @@ class TestSearchCommand:
                 title="My Doc",
                 citekey="Key2023",
                 methods=frozenset({"vector"}),
+                section="Introduction > Background",
             )
         ]
         mock_search_library.get_retriever.return_value = mock_retriever
@@ -99,6 +102,7 @@ class TestSearchCommand:
         assert "chunk_id" in item
         assert "doc_id" in item
         assert "score" in item
+        assert "section" in item
         assert "doc_title" in item
         assert "doc_citekey" in item
         assert "search_methods" in item

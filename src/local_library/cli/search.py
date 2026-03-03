@@ -137,6 +137,7 @@ def _output_json(results: list[SearchResult]) -> None:
                 "doc_id": str(r.chunk.doc_id),
                 "chunk_index": r.chunk.chunk_index,
                 "score": round(r.score, 6),
+                "section": r.chunk.section,
                 "doc_title": r.doc_title,
                 "doc_citekey": r.doc_citekey,
                 "search_methods": sorted(r.search_methods),
@@ -156,12 +157,16 @@ def _output_table(results: list[SearchResult], query: str, mode: str) -> None:
     table.add_column("#", style="dim", width=3)
     table.add_column("Score", width=8)
     table.add_column("Source", width=30)
+    table.add_column("Section", width=25, style="dim")
     table.add_column("Methods", width=10)
     table.add_column("Text", ratio=1)
 
     for i, r in enumerate(results, start=1):
         # Format source as citekey or title
         source = r.doc_citekey or _truncate(r.doc_title or str(r.chunk.doc_id)[:8], 28)
+
+        # Format section with truncation if needed
+        section = _truncate(r.chunk.section, 23) if r.chunk.section else ""
 
         # Format methods
         methods = ",".join(sorted(r.search_methods))
@@ -173,6 +178,7 @@ def _output_table(results: list[SearchResult], query: str, mode: str) -> None:
             str(i),
             f"{r.score:.4f}",
             source,
+            section,
             methods,
             text_preview,
         )
