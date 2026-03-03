@@ -5,6 +5,7 @@
 import typer
 
 from local_library.cli import add as add_cmd
+from local_library.cli import ask as ask_cmd
 from local_library.cli import delete as delete_cmd
 from local_library.cli import embed as embed_cmd
 from local_library.cli import list as list_cmd
@@ -32,6 +33,7 @@ app.command(name="update")(update_cmd.update)
 app.command(name="review")(review_cmd.review)
 app.command(name="embed")(embed_cmd.embed)
 app.command(name="search")(search_cmd.search)
+app.command(name="ask")(ask_cmd.ask)
 app.add_typer(zotero_cmd.app, name="zotero")
 
 
