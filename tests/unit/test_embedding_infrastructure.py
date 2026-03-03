@@ -68,9 +68,7 @@ class TestSchemaVersion:
         """SCHEMA_VERSION should be 3 for embedding support."""
         assert SCHEMA_VERSION == 3
 
-    def test_schema_migration_creates_embedding_status_column(
-        self, temp_dir: Path
-    ) -> None:
+    def test_schema_migration_creates_embedding_status_column(self, temp_dir: Path) -> None:
         """Schema migration should add embedding_status column to documents."""
         db_path = temp_dir / "test.db"
         conn = get_connection(db_path)
@@ -88,9 +86,7 @@ class TestSchemaVersion:
         conn = get_connection(db_path)
         init_schema(conn)
 
-        cursor = conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='chunks'"
-        )
+        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='chunks'")
         assert cursor.fetchone() is not None
         conn.close()
 

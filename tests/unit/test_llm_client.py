@@ -59,9 +59,7 @@ class TestLiteLLMClientComplete:
 
         with patch("litellm.completion", return_value=mock_response):
             client = LiteLLMClient(model="test/model")
-            result = client.complete(
-                [{"role": "user", "content": "Say hello"}]
-            )
+            result = client.complete([{"role": "user", "content": "Say hello"}])
 
         assert result == "Hello, world!"
 
@@ -113,9 +111,7 @@ class TestLiteLLMClientStream:
 
         with patch("litellm.completion", return_value=iter(chunks)):
             client = LiteLLMClient(model="test/model")
-            tokens = list(
-                client.stream([{"role": "user", "content": "test"}])
-            )
+            tokens = list(client.stream([{"role": "user", "content": "test"}]))
 
         assert tokens == ["Hello", ", ", "world", "!"]
 
@@ -127,9 +123,7 @@ class TestLiteLLMClientStream:
 
         with patch("litellm.completion", return_value=iter(chunks)):
             client = LiteLLMClient(model="test/model")
-            tokens = list(
-                client.stream([{"role": "user", "content": "test"}])
-            )
+            tokens = list(client.stream([{"role": "user", "content": "test"}]))
 
         assert tokens == ["Hello", " world"]
 
@@ -164,9 +158,7 @@ class TestLiteLLMClientErrorMapping:
         from local_library.llm.litellm_client import LiteLLMClient
 
         mock_litellm = _make_mock_litellm()
-        mock_litellm.completion.side_effect = mock_litellm.RateLimitError(
-            "too many requests"
-        )
+        mock_litellm.completion.side_effect = mock_litellm.RateLimitError("too many requests")
 
         with patch.dict("sys.modules", {"litellm": mock_litellm}):
             client = LiteLLMClient(model="test/model")
@@ -180,9 +172,7 @@ class TestLiteLLMClientErrorMapping:
         from local_library.llm.litellm_client import LiteLLMClient
 
         mock_litellm = _make_mock_litellm()
-        mock_litellm.completion.side_effect = mock_litellm.NotFoundError(
-            "model not found"
-        )
+        mock_litellm.completion.side_effect = mock_litellm.NotFoundError("model not found")
 
         with patch.dict("sys.modules", {"litellm": mock_litellm}):
             client = LiteLLMClient(model="test/model")
@@ -206,9 +196,7 @@ class TestLiteLLMClientErrorMapping:
         """Errors during streaming should also be mapped to LLMError."""
         from local_library.llm.litellm_client import LiteLLMClient
 
-        with patch(
-            "litellm.completion", side_effect=RuntimeError("stream failed")
-        ):
+        with patch("litellm.completion", side_effect=RuntimeError("stream failed")):
             client = LiteLLMClient(model="test/model")
             with pytest.raises(LLMError) as exc_info:
                 list(client.stream([{"role": "user", "content": "test"}]))

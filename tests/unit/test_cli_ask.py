@@ -72,9 +72,7 @@ class TestAskCommand:
 
     @patch("local_library.cli.ask.is_vec_available", return_value=True)
     @patch("local_library.cli.ask.Library")
-    def test_ask_json_output(
-        self, mock_lib_cls: MagicMock, _mock_vec: MagicMock
-    ) -> None:
+    def test_ask_json_output(self, mock_lib_cls: MagicMock, _mock_vec: MagicMock) -> None:
         """ask --json should produce valid JSON with expected fields."""
         import json
 
@@ -98,9 +96,7 @@ class TestAskCommand:
 
     @patch("local_library.cli.ask.is_vec_available", return_value=True)
     @patch("local_library.cli.ask.Library")
-    def test_ask_passes_model_flag(
-        self, mock_lib_cls: MagicMock, _mock_vec: MagicMock
-    ) -> None:
+    def test_ask_passes_model_flag(self, mock_lib_cls: MagicMock, _mock_vec: MagicMock) -> None:
         """ask --model should pass model to Library constructor."""
         response = _make_response()
         mock_lib = MagicMock()
@@ -109,9 +105,7 @@ class TestAskCommand:
         mock_lib.query.return_value = response
         mock_lib_cls.return_value = mock_lib
 
-        runner.invoke(
-            app, ["ask", "Q?", "--model", "anthropic/claude-3-haiku", "--no-stream"]
-        )
+        runner.invoke(app, ["ask", "Q?", "--model", "anthropic/claude-3-haiku", "--no-stream"])
 
         mock_lib_cls.assert_called_once()
         call_kwargs = mock_lib_cls.call_args[1]
@@ -119,9 +113,7 @@ class TestAskCommand:
 
     @patch("local_library.cli.ask.is_vec_available", return_value=True)
     @patch("local_library.cli.ask.Library")
-    def test_ask_passes_mode_flag(
-        self, mock_lib_cls: MagicMock, _mock_vec: MagicMock
-    ) -> None:
+    def test_ask_passes_mode_flag(self, mock_lib_cls: MagicMock, _mock_vec: MagicMock) -> None:
         """ask --mode should pass retrieval mode to query."""
         response = _make_response()
         mock_lib = MagicMock()
@@ -138,9 +130,7 @@ class TestAskCommand:
 
     @patch("local_library.cli.ask.is_vec_available", return_value=True)
     @patch("local_library.cli.ask.Library")
-    def test_ask_passes_limit_flag(
-        self, mock_lib_cls: MagicMock, _mock_vec: MagicMock
-    ) -> None:
+    def test_ask_passes_limit_flag(self, mock_lib_cls: MagicMock, _mock_vec: MagicMock) -> None:
         """ask --limit should pass limit to query."""
         response = _make_response()
         mock_lib = MagicMock()
@@ -213,10 +203,7 @@ class TestAskCommand:
 
         assert result.exit_code == 0
         output_lower = result.output.lower()
-        assert (
-            "don't have relevant context" in output_lower
-            or "no relevant" in output_lower
-        )
+        assert "don't have relevant context" in output_lower or "no relevant" in output_lower
 
     @patch("local_library.cli.ask.is_vec_available", return_value=True)
     @patch("local_library.cli.ask.Library")

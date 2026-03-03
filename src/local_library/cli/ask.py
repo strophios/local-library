@@ -109,7 +109,10 @@ def ask(
 
             if no_stream:
                 response = lib.query(
-                    question, mode=mode, limit=limit, doc_ids=doc_ids,
+                    question,
+                    mode=mode,
+                    limit=limit,
+                    doc_ids=doc_ids,
                 )
                 if json_output:
                     _output_json(response)
