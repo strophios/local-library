@@ -8,7 +8,7 @@ Handles content acquisition (getting files into the system), extraction (convert
 
 ## Contracts
 
-- **Exposes**: ContentAcquirer protocol, ContentExtractor protocol, FileAcquirer, PdfExtractor, TextMetadataExtractor, ZoteroReader (with ZoteroLibrary, ZoteroCollection, ZoteroItem, ZoteroAttachment dataclasses)
+- **Exposes**: ContentAcquirer protocol, ContentExtractor protocol, FileAcquirer, PdfExtractor, TextMetadataExtractor, cleanup_markdown, ZoteroReader (with ZoteroLibrary, ZoteroCollection, ZoteroItem, ZoteroAttachment dataclasses)
 - **Guarantees**:
   - `can_handle()` returns True only for sources/files the handler can process
   - Acquirers copy to temp location (never modify source)
@@ -20,6 +20,8 @@ Handles content acquisition (getting files into the system), extraction (convert
   - Extraction confidence threshold (default 0.7) determines needs_review status
   - LLM fallback (when enabled) uses heuristic values as context hints
   - PdfExtractor supports LLM-enhanced extraction via `llm_enabled` parameter (better tables, math, images when GEMINI_API_KEY available)
+  - `cleanup_markdown()` never raises; each pass catches exceptions and returns input unchanged
+  - `cleanup_markdown()` uses a lazy-loaded system word list (`/usr/share/dict/words`) for dehyphenation; degrades gracefully if unavailable
 - **Expects**: Source paths exist and are readable; temp directories provided by caller; markdown text for TextMetadataExtractor
 
 ## Dependencies
@@ -45,6 +47,7 @@ Handles content acquisition (getting files into the system), extraction (convert
 - **Lazy imports via `__getattr__`**: Ingestion package uses module-level `__getattr__` to defer imports until needed. Breaks circular dependency: ingestion → core.models → core.library → ingestion.base. Zotero module not exposed here to remain isolated.
 - **Zotero module isolation**: `zotero.py` uses Mixed pattern for LibraryJsonParser (I/O necessary to parse CSL-JSON; cannot be separated without complexity). Frozen dataclasses remain pure. Tests import directly via `from local_library.ingestion.zotero import ...` to avoid circular import chain.
 - **Multi-library support**: ZoteroReader supports filtering by library via `library_id` parameter on relevant methods. `get_personal_library()` returns the user's personal library (type='user'). Collections include `library_id` to support library-scoped queries.
+- **Markdown cleanup**: `cleanup_markdown()` applies three composable passes (HTML coercion → dehyphenation → paragraph reflow) between Marker extraction and disk write. Pass ordering is load-bearing. Pure Functional Core — no I/O, no dependencies beyond system dict. Conservative dehyphenation: default keeps hyphen, only removes when positively validated.
 
 ## Invariants
 
@@ -60,6 +63,7 @@ Handles content acquisition (getting files into the system), extraction (convert
 - `pdf.py` - PdfExtractor (Marker wrapper with quality validation)
 - `metadata.py` - MetadataHandler (CSL-JSON validation, citekey generation, field extraction)
 - `text_extraction.py` - TextMetadataExtractor, LLMExtractor, field extractors (extract_title, extract_authors, extract_date, extract_doc_type), build_csl_json converter
+- `markdown_cleanup.py` - cleanup_markdown (three-pass post-processing: HTML coercion, dehyphenation, paragraph reflow)
 - `zotero.py` - ZoteroAttachment, ZoteroItem, ZoteroCollection, ZoteroLibrary frozen dataclasses; ZoteroReader facade; CollectionResolver for collection queries; LibraryResolver for multi-library support
 
 ## Gotchas

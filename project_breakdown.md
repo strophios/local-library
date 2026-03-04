@@ -249,6 +249,21 @@ Just upgraded to Zotero 8, will need to go back and make sure M4 (Zotero import)
 
 
 
+Immediate to-do's: 
+
+- [x] Currently `search --json` does not output valid JSON (specifically, it seems to not escape new lines). I suspect this means that the structured JSON output is broken in general, though I haven't tested. Need to fix. 
+- [x] The FTS query fails with the following command, which seems odd, so I want to figure out why: `uv run local-library search "What makes transformer models so effective?"`
+- [ ] Improve extracted markdown quality. This could include (in roughly descending order of "let's do this right now"): 
+    - [ ] "Coercing" to human readable markdown or at least filtering out HTML. It seems like Marker outputs some HTML formatting sometimes (or some of the PDFs have it in their embedded text), but we want pure, human legible markdown.
+        - [ ] Related: stripping out other citation, cross reference, linking, etc. stuff (e.g., some pdfs make every citation a link to the relevant reference in the bibliography, but that's useless to a human reading the markdown). It's maybe worth thinking about whether there's ever a situation in which this kind of thing would end up being useful (for, e.g., future automated processing), but I think it's relatively unlikely. 
+    - [ ] Remove non-semantic linebreaks. Marker extracts text in the shape it was in on the original PDF page, leading to nonsensical linebreaks (i.e., where lines wrap rather than just where actual intentional line breaks have been inserted). It would be great to be able to remove these. 
+    - [ ] Potentially doing more aggressive removal of formatting for the text in chunks?
+- [ ] "Query improvement" - maybe using an llm to add additional context or something?
+- [ ] Is there something to be said for a multistep search process, e.g., first find the documents that, as a whole, have the lowest vector distance to the query and then search within those? 
+    - [ ] Is this related to the "late chunking" strategy we've previously talked about and was that the strategy we actually used?
+
+
+
 
 You seem to have been errored out during implementation. This has happened a couple of times; I don't think it's something with the code per se, but just in case, I want you to investigate the codebase and git history to establish where we are, make a note in @CLAUDE.md so that, in case there's an error, we can look at where this run started and see what progress was made, or if we keep erroring in the same place. Then continue with implementation using the executing-an-implementation-plan skill.
 

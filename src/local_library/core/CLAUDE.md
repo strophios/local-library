@@ -35,7 +35,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 
 ## Dependencies
 
-- **Uses**: `config` (paths), `ingestion` (ContentAcquirer, ContentExtractor protocols, MetadataHandler, TextMetadataExtractor), `embeddings` (MarkdownChunker, NomicEmbedder, EmbeddingStorage), `llm` (LLMClient, LiteLLMClient), `rag` (RAGInterface, RAGStream)
+- **Uses**: `config` (paths), `ingestion` (ContentAcquirer, ContentExtractor protocols, MetadataHandler, TextMetadataExtractor, cleanup_markdown), `embeddings` (MarkdownChunker, NomicEmbedder, EmbeddingStorage), `llm` (LLMClient, LiteLLMClient), `rag` (RAGInterface, RAGStream)
 - **Used by**: `cli`, `embeddings` (retrieval module imports from core.errors), `rag` (imports RAGResponse, ErrorCode)
 - **Boundary**: Core MUST NOT import from cli
 
@@ -52,6 +52,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 - **Citekey collision handling**: `get_unique_citekey()` appends suffixes (a, b, c...) to ensure uniqueness
 - **Citekey preservation**: Library.add() accepts optional `citekey` parameter that bypasses generation. Used when importing from external systems (Zotero) to preserve existing citekeys for deduplication
 - **Text extraction integration**: Library._process_text_extraction() handles metadata extraction from document text, sets NEEDS_REVIEW when confidence is low
+- **Markdown cleanup in add()**: Library.add() applies `cleanup_markdown()` between Marker extraction and disk write. Cleaned text is used for both the stored markdown file and metadata extraction. Uses a local variable (not `result` mutation) for transparency
 - **Citekey lookup**: Library.get_by_citekey() returns Document or None; Library.get_all_citekeys() returns all non-null citekeys
 - **Metadata updates**: Library.update_metadata() allows updating status, citekey, and csl_json with automatic indexed field extraction
 - **EmbeddingStatus enum**: Tracks embedding state separately from DocumentStatus (orthogonal concerns)

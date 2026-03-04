@@ -51,6 +51,7 @@ from local_library.core.storage import (
 from local_library.core.vec_extension import is_vec_available, load_vec_extension
 from local_library.ingestion.base import ContentAcquirer, ContentExtractor, compute_storage_path
 from local_library.ingestion.file import FileAcquirer
+from local_library.ingestion.markdown_cleanup import cleanup_markdown
 from local_library.ingestion.metadata import MetadataHandler
 from local_library.ingestion.pdf import PdfExtractor
 from local_library.ingestion.text_extraction import (
@@ -584,6 +585,9 @@ class Library:
             extractor = self._find_extractor(storage_path)
             result = extractor.extract_and_validate(storage_path)
 
+            # Clean up Marker extraction artifacts
+            cleaned_text = cleanup_markdown(result.text)
+
             # Write extracted markdown
             extracted_path = compute_storage_path(
                 doc.content_hash,
@@ -591,7 +595,7 @@ class Library:
                 self._extracted_dir,
             )
             extracted_path.parent.mkdir(parents=True, exist_ok=True)
-            extracted_path.write_text(result.text, encoding="utf-8")
+            extracted_path.write_text(cleaned_text, encoding="utf-8")
 
             # Update record to ready (temporarily - may change to NEEDS_REVIEW)
             doc = update_document_status(
@@ -607,7 +611,7 @@ class Library:
                 doc = self._process_metadata(doc, metadata, citekey=citekey)
             elif self._text_extractor:
                 # Extract metadata from text
-                doc = self._process_text_extraction(doc, result.text)
+                doc = self._process_text_extraction(doc, cleaned_text)
 
         except (ExtractionError, QualityError) as e:
             # Update record to failed

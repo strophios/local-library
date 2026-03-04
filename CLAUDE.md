@@ -72,7 +72,7 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 
 **Implemented:**
 - PDF ingestion from local filesystem
-- Text extraction via Marker with quality validation
+- Text extraction via Marker with quality validation and markdown cleanup (HTML coercion, dehyphenation, paragraph reflow)
 - CSL-JSON metadata validation with BetterBibTeX-style citekey generation
 - Indexed field extraction (title, authors, issued_date)
 - **Text-based metadata extraction**: heuristic extractors for title, authors, date, and document type with confidence scoring
@@ -233,6 +233,7 @@ src/local_library/
 │   ├── pdf.py           # PdfExtractor (Marker wrapper)
 │   ├── metadata.py      # MetadataHandler (CSL-JSON validation, citekey generation)
 │   ├── text_extraction.py  # TextMetadataExtractor (heuristic + LLM metadata extraction)
+│   ├── markdown_cleanup.py # Post-processing: HTML coercion, dehyphenation, paragraph reflow (Functional Core)
 │   └── zotero.py        # ZoteroReader facade (database + JSON backends, citekey mapping)
 └── cli/                 # CLI interface (Typer/Rich)
     ├── main.py          # Entry point, command registration
