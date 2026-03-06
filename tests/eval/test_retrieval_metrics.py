@@ -9,6 +9,7 @@ from tests.eval.retrieval_eval import (
     QueryResult,
     evaluate_query,
     mean_reciprocal_rank,
+    ndcg_at_k,
     precision_at_k,
     recall_at_k,
 )
@@ -107,6 +108,62 @@ class TestMeanReciprocalRank:
     def test_multiple_relevant_takes_first(self) -> None:
         """MRR uses the first relevant result only."""
         assert mean_reciprocal_rank(["x", "a", "b"], {"a", "b"}) == 0.5
+
+
+class TestNDCGAtK:
+    """Tests for NDCG@k metric."""
+
+    def test_perfect_ranking(self) -> None:
+        """All relevant docs at top positions yields NDCG of 1.0."""
+        retrieved = ["a", "b", "c", "d"]
+        relevant = {"a", "b"}
+        assert ndcg_at_k(retrieved, relevant, k=4) == pytest.approx(1.0)
+
+    def test_reversed_ranking(self) -> None:
+        """Relevant docs at bottom positions yields NDCG < 1.0."""
+        retrieved = ["c", "d", "a", "b"]
+        relevant = {"a", "b"}
+        result = ndcg_at_k(retrieved, relevant, k=4)
+        assert 0.0 < result < 1.0
+
+    def test_no_relevant_found(self) -> None:
+        """No relevant docs retrieved yields NDCG of 0.0."""
+        retrieved = ["c", "d", "e"]
+        relevant = {"a", "b"}
+        assert ndcg_at_k(retrieved, relevant, k=3) == pytest.approx(0.0)
+
+    def test_empty_retrieved(self) -> None:
+        """Empty retrieved list yields NDCG of 0.0."""
+        assert ndcg_at_k([], {"a", "b"}, k=5) == pytest.approx(0.0)
+
+    def test_empty_relevant(self) -> None:
+        """Empty relevant set yields NDCG of 0.0."""
+        assert ndcg_at_k(["a", "b"], set(), k=5) == pytest.approx(0.0)
+
+    def test_k_truncates(self) -> None:
+        """Only first k results considered."""
+        retrieved = ["c", "a", "b"]
+        relevant = {"a", "b"}
+        result_k1 = ndcg_at_k(retrieved, relevant, k=1)
+        result_k3 = ndcg_at_k(retrieved, relevant, k=3)
+        assert result_k1 == pytest.approx(0.0)
+        assert result_k3 > 0.0
+
+    def test_single_relevant_at_position_1(self) -> None:
+        """Single relevant doc at position 1 yields NDCG of 1.0."""
+        retrieved = ["a", "b", "c"]
+        relevant = {"a"}
+        assert ndcg_at_k(retrieved, relevant, k=3) == pytest.approx(1.0)
+
+    def test_known_value(self) -> None:
+        """Verify against hand-calculated NDCG@5 value."""
+        # Positions: 1=irrel, 2=rel, 3=irrel, 4=rel, 5=irrel
+        # DCG  = 0 + 1/log2(3) + 0 + 1/log2(5) = 0.6309 + 0.4307 = 1.0616
+        # IDCG = 1/log2(2) + 1/log2(3) = 1.0 + 0.6309 = 1.6309
+        # NDCG = 1.0616 / 1.6309 ≈ 0.6509
+        retrieved = ["c", "a", "d", "b", "e"]
+        relevant = {"a", "b"}
+        assert ndcg_at_k(retrieved, relevant, k=5) == pytest.approx(0.6509, abs=0.001)
 
 
 class TestEvaluateQuery:
