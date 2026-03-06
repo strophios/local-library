@@ -1,6 +1,6 @@
 """Retrieval evaluation framework.
 
-Computes standard IR metrics (Precision@k, Recall@k, MRR) against a labeled
+Computes standard IR metrics (Precision@k, Recall@k, MRR, NDCG@k) against a labeled
 test query set. Designed as a standalone script that can be run against any
 database with embedded documents.
 
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -109,8 +110,6 @@ def ndcg_at_k(
     """
     if not relevant_doc_ids or not retrieved_doc_ids or k <= 0:
         return 0.0
-
-    import math
 
     truncated = retrieved_doc_ids[:k]
 
