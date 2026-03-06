@@ -312,3 +312,20 @@ class TestAskCommand:
         result = runner.invoke(app, ["ask", "Q?", "--json"])
 
         assert result.exit_code == 1
+
+    @patch("local_library.cli.ask.is_vec_available", return_value=True)
+    @patch("local_library.cli.ask.Library")
+    def test_no_rerank_flag(
+        self, mock_lib_cls: MagicMock, _mock_vec: MagicMock
+    ) -> None:
+        """--no-rerank flag passes rerank=False to query."""
+        mock_lib = MagicMock()
+        mock_lib.__enter__ = MagicMock(return_value=mock_lib)
+        mock_lib.__exit__ = MagicMock(return_value=False)
+        mock_lib.query.return_value = _make_response()
+        mock_lib_cls.return_value = mock_lib
+
+        runner.invoke(app, ["ask", "test?", "--no-stream", "--no-rerank"])
+
+        _, kwargs = mock_lib.query.call_args
+        assert kwargs.get("rerank") is False
