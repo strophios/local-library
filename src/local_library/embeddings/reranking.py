@@ -9,6 +9,7 @@ CrossEncoderReranker is Imperative Shell (ML model I/O).
 
 from __future__ import annotations
 
+import math
 from uuid import UUID
 
 from local_library.embeddings.base import SearchResult
@@ -40,3 +41,24 @@ def _group_by_document(
         selected.extend(doc_results[:max_chunks_per_doc])
 
     return selected
+
+
+def _normalize_scores(logits: list[float]) -> list[float]:
+    """Sigmoid-normalize raw logits to the [0, 1] range.
+
+    Cross-encoder models output unbounded logits. Sigmoid maps them to
+    interpretable probabilities while preserving relative ordering.
+
+    Uses a numerically stable formulation to avoid overflow for extreme values.
+    """
+
+    def _sigmoid(x: float) -> float:
+        # Numerically stable: avoids exp(large_positive) overflow
+        if x >= 0:
+            z = math.exp(-x)
+            return 1.0 / (1.0 + z)
+        else:
+            z = math.exp(x)
+            return z / (1.0 + z)
+
+    return [_sigmoid(x) for x in logits]

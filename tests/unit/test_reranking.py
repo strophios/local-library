@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from local_library.embeddings.base import Chunk, SearchResult
-from local_library.embeddings.reranking import _group_by_document
+from local_library.embeddings.reranking import _group_by_document, _normalize_scores
 
 
 def _make_result(
@@ -84,3 +84,46 @@ class TestGroupByDocument:
         results = [_make_result(doc_id=doc_id, chunk_index=0, score=0.5)]
         grouped = _group_by_document(results, max_chunks_per_doc=3)
         assert len(grouped) == 1
+
+
+class TestNormalizeScores:
+    """Tests for sigmoid normalization of logit scores."""
+
+    def test_zero_maps_to_half(self) -> None:
+        """Sigmoid of 0 is exactly 0.5."""
+        assert _normalize_scores([0.0]) == pytest.approx([0.5])
+
+    def test_large_positive_maps_near_one(self) -> None:
+        """Large positive logits map close to 1.0."""
+        result = _normalize_scores([10.0])
+        assert result[0] > 0.999
+
+    def test_large_negative_maps_near_zero(self) -> None:
+        """Large negative logits map close to 0.0."""
+        result = _normalize_scores([-10.0])
+        assert result[0] < 0.001
+
+    def test_empty_input_returns_empty(self) -> None:
+        """Empty list returns empty list."""
+        assert _normalize_scores([]) == []
+
+    def test_preserves_relative_ordering(self) -> None:
+        """Higher logits produce higher normalized scores."""
+        logits = [-2.0, 0.0, 3.0, -5.0, 1.0]
+        scores = _normalize_scores(logits)
+        sorted_by_logit = sorted(range(len(logits)), key=lambda i: logits[i])
+        sorted_by_score = sorted(range(len(scores)), key=lambda i: scores[i])
+        assert sorted_by_logit == sorted_by_score
+
+    def test_output_bounded_zero_one(self) -> None:
+        """All outputs are strictly between 0 and 1."""
+        logits = [-100.0, -10.0, -1.0, 0.0, 1.0, 10.0, 100.0]
+        scores = _normalize_scores(logits)
+        for s in scores:
+            assert 0.0 <= s <= 1.0
+
+    def test_extreme_values_no_overflow(self) -> None:
+        """Extreme logits don't cause overflow errors."""
+        scores = _normalize_scores([-1000.0, 1000.0])
+        assert scores[0] == pytest.approx(0.0, abs=1e-10)
+        assert scores[1] == pytest.approx(1.0, abs=1e-10)
