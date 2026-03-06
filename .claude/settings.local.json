@@ -95,7 +95,9 @@
       "Bash(git -C /Users/strophios/development/local-library status --short)",
       "Bash(git -C /Users/strophios/development/local-library diff CLAUDE.md src/local_library/cli/CLAUDE.md src/local_library/core/CLAUDE.md src/local_library/embeddings/CLAUDE.md)",
       "Bash(git -C /Users/strophios/development/local-library add CLAUDE.md src/local_library/cli/CLAUDE.md src/local_library/core/CLAUDE.md src/local_library/embeddings/CLAUDE.md)",
-      "Bash(git -C:*)"
+      "Bash(git -C:*)",
+      "Bash(python:*)",
+      "Bash(xxd:*)"
     ]
   },
   "outputStyle": "Explanatory"

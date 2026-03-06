@@ -253,16 +253,22 @@ Immediate to-do's:
 
 - [x] Currently `search --json` does not output valid JSON (specifically, it seems to not escape new lines). I suspect this means that the structured JSON output is broken in general, though I haven't tested. Need to fix. 
 - [x] The FTS query fails with the following command, which seems odd, so I want to figure out why: `uv run local-library search "What makes transformer models so effective?"`
-- [ ] Improve extracted markdown quality. This could include (in roughly descending order of "let's do this right now"): 
-    - [ ] "Coercing" to human readable markdown or at least filtering out HTML. It seems like Marker outputs some HTML formatting sometimes (or some of the PDFs have it in their embedded text), but we want pure, human legible markdown.
-        - [ ] Related: stripping out other citation, cross reference, linking, etc. stuff (e.g., some pdfs make every citation a link to the relevant reference in the bibliography, but that's useless to a human reading the markdown). It's maybe worth thinking about whether there's ever a situation in which this kind of thing would end up being useful (for, e.g., future automated processing), but I think it's relatively unlikely. 
-    - [ ] Remove non-semantic linebreaks. Marker extracts text in the shape it was in on the original PDF page, leading to nonsensical linebreaks (i.e., where lines wrap rather than just where actual intentional line breaks have been inserted). It would be great to be able to remove these. 
+- [x] Improve extracted markdown quality. This could include (in roughly descending order of "let's do this right now"): 
+    - [x] "Coercing" to human readable markdown or at least filtering out HTML. It seems like Marker outputs some HTML formatting sometimes (or some of the PDFs have it in their embedded text), but we want pure, human legible markdown.
+        - [x] Related: stripping out other citation, cross reference, linking, etc. stuff (e.g., some pdfs make every citation a link to the relevant reference in the bibliography, but that's useless to a human reading the markdown). It's maybe worth thinking about whether there's ever a situation in which this kind of thing would end up being useful (for, e.g., future automated processing), but I think it's relatively unlikely. 
+    - [x] Remove non-semantic linebreaks. Marker extracts text in the shape it was in on the original PDF page, leading to nonsensical linebreaks (i.e., where lines wrap rather than just where actual intentional line breaks have been inserted). It would be great to be able to remove these. 
     - [ ] Potentially doing more aggressive removal of formatting for the text in chunks?
 - [ ] "Query improvement" - maybe using an llm to add additional context or something?
 - [ ] Is there something to be said for a multistep search process, e.g., first find the documents that, as a whole, have the lowest vector distance to the query and then search within those? 
     - [ ] Is this related to the "late chunking" strategy we've previously talked about and was that the strategy we actually used?
 
 
+- ideally, we could reduce latency (for the vector search portion, the LLM portion we just have less control over) (rewrite in Rust?)
+- I'm not sure the response rendering is working right
+    - not sure that responses are displaying incrementally
+    - responses display twice; first time they include the cite key cites the second time those are dropped and left as empty single spaces, but we do get a separate "Sources" section naming the individual included documents
+
+cross-encoder reranking: could we make this even more useful by running it not on the top n ranked candidate chunks, but on the top chunk from the top-n documents (or the top 2-3 chunks from all documents with at least one chunk in the top 100 or something)?
 
 
 You seem to have been errored out during implementation. This has happened a couple of times; I don't think it's something with the code per se, but just in case, I want you to investigate the codebase and git history to establish where we are, make a note in @CLAUDE.md so that, in case there's an error, we can look at where this run started and see what progress was made, or if we keep erroring in the same place. Then continue with implementation using the executing-an-implementation-plan skill.
@@ -273,6 +279,69 @@ other options for embedding:
 - BGE
 - E5-Mistral
 
+- RAG pipeline improvements
+    - eval loop with ladder of improvements until pass benchmarks (phase 1)
+    - is it possible to use claude code as the llm layer? (phase 2 to explore)
+- Neovim citation workflow
+    - some way to avoid cold starting the model for each call (probably a daemon, but not certain) (phase 2)
+    - basic citation search internals (tbd how different this is from current basic search command and/or ask command) (phase 2)
+    - Neovim plugin hooked into basic citation search with robust interface (visual select claim, send view key commands, floating window/picker to review different suggestions with different exit options (insert citekey, insert citekey + chunk, open source document, exit)) (phase 2)
+    - phase 3+ ideas to explore
+        - could have an alternative, more complex version, that runs through the LLM layer to improve the query we're searching with (before search) and/or to synthesize and rerank the returned results
+        - there are other ways we could improve this, like optionally passing a CSL-JSON bibliography file and preferentially searching those documents first, or using those titles as additional text in the query, or using the tags (which we'll eventually have) to search preferentially or use as query text, etc.
+        - instead of a simple vector search, it pulls an LLM into the process; potentially feeding the full open document as context to help it generate the optimum query and pick optimum results (while still having the objective of finding cites for the highlighted text). 
+        - mode that opens a small floating window into which you type your specific query which then gets sent straight to standard `search` or `ask` (depending, maybe we'll make both options, maybe just one, etc.)
+        - triage-based verification for (with claim text selected in visual mode) "what in my library might not support this claim?"
+        - triage-based verification for (with claim text + citekey(s) selected in visual mode) "does the cited source(s) potentially/likely support this claim?"
+        - allow the specification of text for augmenting the search string and/or improving the LLM context/query at the document (project?) level; maybe be a YAML header field, or maybe automatically pull in the abstract (if there is one)
+        - picker pulls in content from doc's associated note (if there is any), displays whether we've read this doc or not, etc.
+        - asking to open the source doc opens to the location of the selected chunk
+- Ingestion expansion/improvements
+    - web ingestion (phase 2)
+        - download content successfully (even when content is dynamically loaded)
+        - extract + clean text
+        - generate metadata (either from external source or content extraction; likely relies in part on the raw HTML)
+        - citekey generation
+        - ensure metadata satisfied CSL-JSON spec
+- Note management
+    - autocreate notes with YAML headers, organized filesystem layout for easy interop, CLI for generate/open (phase 2)
+    - bi-directional Zotero sync
+    - bi-directional sync to local-library database for properties like read/unread, tags, etc.
+- Autotagging/content management/automated content interaction? (all phase 3)
+    - automatic tag suggestion (based on existing manual tag system)
+    - automatic summaries
+    - dual embeddings 
+    - full automatic tag generation (via clustering + LLM review? or clustering + human review? etc.)
+
+
+My bad for missing this in the design phase, but this whole benchmarking step relies on having fully populated the `test_queries.json` for to allow for in-depth RAG evaluation and *we have not done that yet*. That's likely our next step after this, but for now, we really don't have the validated data to benchmark *with*. Given that, we've got a few options: 1) we could complete this phase more or less as written, but simply not run any benchmarks that rely on `test_queries.json`. Basically, we'd be building the infrastructure to use for testing, once the test set is ready, and we could leave a note in the documentation that we currently default to model x, but once the full test set is ready, we should run `benchmarking_stuff.py` to assess whether it would be worth changing to models y or z. 2) Dramatically change or cut down this step to only test things we can test without the full test set (e.g., we could use this step to get an empirical understanding of the latency piece of the tradeoff, even though we can't really see the quality piece yet). 3) Drop the step more or less entirely. In all cases we'd leave a note in the documentation explaining the potential model choices, their expected tradeoffs, and the planned benchmarking (and the current state of the infrastructure for doing it). 
+
+We don't care about auto-complete, and in fact it doesn't really make any sense as a feature. We do care about web ingest. We do, I think, care about note management and linking, at least somewhat? We do care about making everything citable with a site key that includes web content. We do care about a an interface with Zotero not with Zotero, with NVim such that we can highlight a sentence or a thought in visual mode and then call a query with an an automated system prompt of hey what can we cite for this
+
+We also care about whether there's a way to have this use Claude Code as the LLM layer. I know you can't do it through the API without, you know, API credits and so on. But can you do it via clawed code through the terminal program by just calling it from within our own app or would that have to be orchestrated separately or does it actually just not work?
+
+We actually don't really care about citation suggestion in the CLI; we might as well have it, since it's (as I understand it) extremely cheap to add as a CLI command once we've added the actual implementation in the program. 
+
+What we actually care about is having it smoothly integrated into Neovim and my citation workflow. So this has multiple parts: 
+
+- internal to local-library: 
+    - modification of the standard `search` flow (potentially we add different context etc.), but the basic version is very very similar (and could actually just use the search flow as-is if we wanted). 
+        - could have an alternative, more complex version, that runs through the LLM layer to improve the query we're searching with (before search) and/or to synthesize and rerank the returned results
+        - there are other ways we could improve this, like optionally passing a CSL-JSON bibliography file and preferentially searching those documents first, or using those titles as additional text in the query, or using the tags (which we'll eventually have) to search preferentially or use as query text, etc.
+            - although, worth noting that any query augmentation with document related text could be done entirely on the Neovim plug-in end of things (and will at the very least generally *require* some implementation there)
+    - any general modifications to the program to allow it to be smoothly, easily, and (ideally) quickly callable from an outside program (i.e., Neovim)
+        - does this requirement (and the fact that Neovim is going to be the primary interface) wind up with us leaning towards changing the "form factor"? like, maybe a CLI isn't the best way to do this if what we want to smooth and fast external calling. 
+        - how expensive (memory + computation-wise) would it be to have this running all the time, with the embedding model loaded in memory?
+- external to local-library / internal to a Neovim plugin (or set of plugins? or done as custom pickers for Telescope?)
+    - user enters visual mode, selects some text, uses a keyboard shortcut to send the selected text to local-library, local-library runs a (possibly modified, see above) search on it and returns the results to the plugin, the plugin displays them in an inset floating window (cf. a Telescope picker) with score, citekey, and truncated title for each chunk in the left pane (one per line, selectable by user) and the full text of the selected chunk in the right hand pane. then, the user either: 1) confirms the selected chunk which exits the floating window and inserts the citekey for the chunk's document (and adds it to the file's references.bib if there is one and it's not already there?), 2) uses a different command to confirm the selected chunk, inserting the citekey and (after a newline) the chunk text, 3) uses a third command to open the source document (the extracted text markdown doc) for the selected chunk in Neovim in the same floating window (or it splits the current document pane, or opens a new window, or tab; not sure; maybe make this configurable) (ideally it would open the doc *to the selected chunk*) (eventually also add the option to open the associated note, or both?), 4) exits the window and nothing happens.
+    - potential enhancements: 
+        - eventually we add alternative modes (some previously mentioned in the `future_roadmap.md`), including: 
+            - instead of a simple vector search, it pulls an LLM into the process; potentially feeding the full open document as context to help it generate the optimum query and pick optimum results (while still having the objective of finding cites for the highlighted text). 
+            - mode that opens a small floating window into which you type your specific query which then gets sent straight to standard `search` or `ask` (depending, maybe we'll make both options, maybe just one, etc.)
+            - triage-based verification for (with claim text selected in visual mode) "what in my library might not support this claim?"
+            - triage-based verification for (with claim text + citekey(s) selected in visual mode) "does the cited source(s) potentially/likely support this claim?"
+        - allow the specification of text for augmenting the search string and/or improving the LLM context/query at the document (project?) level; maybe be a YAML header field, or maybe automatically pull in the abstract (if there is one)
+        - side note: currently all the SQL is handled external to Neovim, but I do recall issues with another Neovim plugin where accessing a SQL database for search was *far* slower than opening the same bibliographic data as a CSL-JSON file. is the SQL database piece of this going to be a source of slow-down or friction at all? If so, how do we fix it?
 
 
 ## Implementation Layers (Build Order)
