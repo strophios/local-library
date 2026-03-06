@@ -124,8 +124,9 @@ def ask(
                 else:
                     _output_answer(response)
             else:
-                _stream_answer(lib, question, mode=mode, limit=limit, doc_ids=doc_ids,
-                              rerank=not no_rerank)
+                _stream_answer(
+                    lib, question, mode=mode, limit=limit, doc_ids=doc_ids, rerank=not no_rerank
+                )
 
     except (LookupError, EmbeddingError, RAGError, LLMError) as e:
         if json_output:
@@ -149,8 +150,7 @@ def _stream_answer(
     """Stream answer tokens with Rich Live display."""
     console.print("[dim]Searching...[/dim]")
 
-    stream = lib.query_stream(question, mode=mode, limit=limit, doc_ids=doc_ids,
-                             rerank=rerank)
+    stream = lib.query_stream(question, mode=mode, limit=limit, doc_ids=doc_ids, rerank=rerank)
 
     accumulated = ""
     try:

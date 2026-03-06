@@ -230,6 +230,4 @@ class TestSearchCommand:
 
         runner.invoke(app, ["search", "test query", "--no-rerank"])
 
-        mock_search_library.get_retriever.assert_called_once_with(
-            mode="hybrid", rerank=False
-        )
+        mock_search_library.get_retriever.assert_called_once_with(mode="hybrid", rerank=False)
