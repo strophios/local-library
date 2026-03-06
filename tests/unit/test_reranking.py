@@ -234,8 +234,7 @@ class TestRerankedRetriever:
     def inner_results(self) -> list[SearchResult]:
         """Pre-built results the mock inner retriever returns."""
         return [
-            _make_result(doc_id=uuid4(), chunk_index=0, score=0.5 + i * 0.05)
-            for i in range(10)
+            _make_result(doc_id=uuid4(), chunk_index=0, score=0.5 + i * 0.05) for i in range(10)
         ]
 
     @pytest.fixture()
@@ -248,10 +247,7 @@ class TestRerankedRetriever:
     @pytest.fixture()
     def reranked_results(self) -> list[SearchResult]:
         """Pre-built results the mock reranker returns."""
-        return [
-            _make_result(doc_id=uuid4(), chunk_index=0, score=0.9 - i * 0.1)
-            for i in range(5)
-        ]
+        return [_make_result(doc_id=uuid4(), chunk_index=0, score=0.9 - i * 0.1) for i in range(5)]
 
     @pytest.fixture()
     def mock_reranker(self, reranked_results: list[SearchResult]) -> MagicMock:
@@ -261,13 +257,9 @@ class TestRerankedRetriever:
         return reranker
 
     @pytest.fixture()
-    def retriever(
-        self, mock_inner: MagicMock, mock_reranker: MagicMock
-    ) -> RerankedRetriever:
+    def retriever(self, mock_inner: MagicMock, mock_reranker: MagicMock) -> RerankedRetriever:
         """RerankedRetriever with mocked dependencies."""
-        return RerankedRetriever(
-            inner=mock_inner, reranker=mock_reranker, pool_size=100
-        )
+        return RerankedRetriever(inner=mock_inner, reranker=mock_reranker, pool_size=100)
 
     def test_satisfies_retriever_protocol(
         self, mock_inner: MagicMock, mock_reranker: MagicMock
@@ -288,8 +280,10 @@ class TestRerankedRetriever:
     ) -> None:
         """When k * min_pool_ratio > pool_size, uses the larger value."""
         r = RerankedRetriever(
-            inner=mock_inner, reranker=mock_reranker,
-            pool_size=100, min_pool_ratio=3,
+            inner=mock_inner,
+            reranker=mock_reranker,
+            pool_size=100,
+            min_pool_ratio=3,
         )
         r.retrieve("query", k=50)
         # k=50 * min_pool_ratio=3 = 150 > pool_size=100
@@ -314,17 +308,13 @@ class TestRerankedRetriever:
         results = retriever.retrieve("query", k=5)
         assert results == reranked_results
 
-    def test_forwards_doc_ids(
-        self, retriever: RerankedRetriever, mock_inner: MagicMock
-    ) -> None:
+    def test_forwards_doc_ids(self, retriever: RerankedRetriever, mock_inner: MagicMock) -> None:
         """doc_ids parameter forwarded to inner retriever."""
         doc_ids = [uuid4(), uuid4()]
         retriever.retrieve("query", k=5, doc_ids=doc_ids)
         mock_inner.retrieve.assert_called_once_with("query", k=100, doc_ids=doc_ids)
 
-    def test_empty_inner_results(
-        self, mock_inner: MagicMock, mock_reranker: MagicMock
-    ) -> None:
+    def test_empty_inner_results(self, mock_inner: MagicMock, mock_reranker: MagicMock) -> None:
         """When inner retriever returns empty, reranker still called."""
         mock_inner.retrieve.return_value = []
         mock_reranker.rerank.return_value = []

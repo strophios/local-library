@@ -829,9 +829,7 @@ class TestGetRetrieverReranking:
     @pytestmark_vec
     def test_get_reranker_caches_instance(self, lib: Library) -> None:
         """_get_reranker() creates once and returns cached instance."""
-        with patch(
-            "local_library.embeddings.reranking.CrossEncoderReranker"
-        ) as mock_cls:
+        with patch("local_library.embeddings.reranking.CrossEncoderReranker") as mock_cls:
             mock_cls.return_value = MagicMock()
             r1 = lib._get_reranker()
             r2 = lib._get_reranker()
