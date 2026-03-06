@@ -19,16 +19,16 @@ reranker in the document-aware cross-encoder reranking pipeline.
 
 | Model | Load(s) | Latency(s) | NDCG@10* | MRR* |
 |-------|---------|-----------|----------|------|
-| baseline (no reranking) | 0.00 | 0.6118 | 2.3901 | 0.6000 |
-| cross-encoder/ms-marco-MiniLM-L-6-v2 | 4.36 | 0.4603 | 1.0937 | 0.5778 |
-| cross-encoder/ms-marco-MiniLM-L-12-v2 | 5.43 | 0.3097 | 1.1788 | 0.5944 |
-| BAAI/bge-reranker-v2-m3 | 45.58 | 2.3541 | 1.4488 | 0.7333 |
+| baseline (no reranking) | 0.00 | 0.6528 | 0.6000 | 0.6000 |
+| cross-encoder/ms-marco-MiniLM-L-6-v2 | 0.54 | 0.2058 | 0.6387 | 0.5867 |
+| cross-encoder/ms-marco-MiniLM-L-12-v2 | 0.62 | 0.3058 | 0.6518 | 0.6033 |
+| BAAI/bge-reranker-v2-m3 | 2.54 | 2.0756 | 0.7500 | 0.7333 |
 
 ## Selection
 
 Default model: `cross-encoder/ms-marco-MiniLM-L-12-v2`
 
-Rationale: MiniLM-L-12-v2 provides a strong latency/capability tradeoff. Per-query latency of 0.31s is well below the 2s target and represents a 49% improvement over the baseline. The model delivers consistent latency across queries with no outliers. While the larger BGE model shows better MRR (0.73), its 2.35s per-query latency (4x slower than MiniLM-L-12) makes it impractical for interactive RAG workflows without CPU acceleration. MiniLM-L-6-v2 is faster but adds less reranking value. MiniLM-L-12-v2 remains the recommended default for users with standard hardware.
+Rationale: MiniLM-L-12-v2 provides a strong latency/capability tradeoff. Per-query latency of 0.31s is well below the 2s target and represents a 53% improvement over the baseline (0.65s). The model delivers consistent latency across queries. While the larger BGE model shows better MRR (0.73), its 2.08s per-query latency (6.8x slower than MiniLM-L-12) makes it impractical for interactive RAG workflows without CPU acceleration. MiniLM-L-6-v2 is faster (0.21s) but shows only marginal NDCG improvement (0.64 vs 0.60 baseline). MiniLM-L-12-v2 provides better quality gains for reasonable latency, making it the recommended default.
 
 ## Quality Benchmarking (Deferred)
 
@@ -37,10 +37,6 @@ test set (12 total, 2 unanswerable) but are not reliable for model selection at 
 benchmarking should be re-run after the test query set is expanded to
 50-100 validated queries (see build_plan.md § "Post-M7: Pipeline Evaluation
 and Corpus Scaling").
-
-Note: NDCG values appear inflated (>1.0 in some cases) due to the limited
-query set and small corpus (20 documents, 180+ chunks). This is expected
-at small scale; metrics stabilize with larger corpora and query sets.
 
 To re-run the full benchmark:
 

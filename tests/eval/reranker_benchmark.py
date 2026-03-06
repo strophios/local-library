@@ -7,7 +7,7 @@ Compares three cross-encoder models plus a no-reranking baseline:
 - cross-encoder/ms-marco-MiniLM-L-6-v2
 - cross-encoder/ms-marco-MiniLM-L-12-v2
 - BAAI/bge-reranker-v2-m3
-- baseline (hybrid retriever, no reranking)
+- baseline (vector retriever, no reranking)
 
 Primary measurements: model load time and per-query latency.
 Quality metrics (NDCG@10, MRR) are reported as informational only — the
@@ -60,12 +60,18 @@ def _load_queries(path: Path) -> list[dict]:
 
 
 def _result_citekeys(results: list[SearchResult]) -> list[str]:
-    """Extract citekeys from search results for metric evaluation."""
-    return [r.doc_citekey for r in results if r.doc_citekey]
+    """Extract unique citekeys from search results for metric evaluation."""
+    seen: set[str] = set()
+    citekeys: list[str] = []
+    for r in results:
+        if r.doc_citekey and r.doc_citekey not in seen:
+            seen.add(r.doc_citekey)
+            citekeys.append(r.doc_citekey)
+    return citekeys
 
 
 def benchmark_baseline(lib: Library, queries: list[dict], k: int) -> ModelResult:
-    """Benchmark hybrid retrieval without reranking."""
+    """Benchmark vector retrieval without reranking."""
     retriever = lib.get_retriever(mode="vector", rerank=False)
 
     latencies = []
@@ -87,12 +93,14 @@ def benchmark_baseline(lib: Library, queries: list[dict], k: int) -> ModelResult
         latencies.append(elapsed)
         ndcgs.append(ndcg)
         mrrs.append(mrr)
-        per_query.append({
-            "query_id": q["id"],
-            "latency_s": round(elapsed, 4),
-            "ndcg_at_k": round(ndcg, 4),
-            "mrr": round(mrr, 4),
-        })
+        per_query.append(
+            {
+                "query_id": q["id"],
+                "latency_s": round(elapsed, 4),
+                "ndcg_at_k": round(ndcg, 4),
+                "mrr": round(mrr, 4),
+            }
+        )
 
     return ModelResult(
         model_name="baseline (no reranking)",
@@ -104,9 +112,7 @@ def benchmark_baseline(lib: Library, queries: list[dict], k: int) -> ModelResult
     )
 
 
-def benchmark_model(
-    lib: Library, model_name: str, queries: list[dict], k: int
-) -> ModelResult:
+def benchmark_model(lib: Library, model_name: str, queries: list[dict], k: int) -> ModelResult:
     """Benchmark a specific cross-encoder model."""
     from local_library.embeddings.reranking import CrossEncoderReranker, RerankedRetriever
 
@@ -137,12 +143,14 @@ def benchmark_model(
         latencies.append(elapsed)
         ndcgs.append(ndcg)
         mrrs.append(mrr)
-        per_query.append({
-            "query_id": q["id"],
-            "latency_s": round(elapsed, 4),
-            "ndcg_at_k": round(ndcg, 4),
-            "mrr": round(mrr, 4),
-        })
+        per_query.append(
+            {
+                "query_id": q["id"],
+                "latency_s": round(elapsed, 4),
+                "ndcg_at_k": round(ndcg, 4),
+                "mrr": round(mrr, 4),
+            }
+        )
 
     return ModelResult(
         model_name=model_name,
@@ -203,7 +211,7 @@ def main() -> None:
 
     if args.output:
         output_path = Path(args.output)
-        output_path.write_text(json.dumps([asdict(r) for r in all_results], indent=2))
+        output_path.write_text(json.dumps([asdict(r) for r in all_results], indent=2) + "\n")
         print(f"\nResults written to {output_path}")
 
     sys.exit(0)
