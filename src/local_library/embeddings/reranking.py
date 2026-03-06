@@ -124,9 +124,7 @@ class CrossEncoderReranker:
 
         # Score via cross-encoder
         pairs = [(query, r.chunk.text) for r in candidates]
-        raw_scores = self._model.predict(
-            pairs, batch_size=self._batch_size, convert_to_numpy=True
-        )
+        raw_scores = self._model.predict(pairs, batch_size=self._batch_size, convert_to_numpy=True)
         scores = _normalize_scores(raw_scores.tolist())
 
         # Build new frozen SearchResult instances with reranked scores
@@ -138,7 +136,7 @@ class CrossEncoderReranker:
                 doc_citekey=r.doc_citekey,
                 search_methods=r.search_methods,
             )
-            for r, s in zip(candidates, scores)
+            for r, s in zip(candidates, scores, strict=True)
         ]
 
         reranked.sort(key=lambda r: r.score, reverse=True)
