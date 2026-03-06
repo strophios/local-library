@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
 from uuid import UUID, uuid4
 
+import numpy as np
 import pytest
 
-from local_library.embeddings.base import Chunk, SearchResult
-from local_library.embeddings.reranking import _group_by_document, _normalize_scores
+from local_library.embeddings.base import Chunk, Reranker, SearchResult
+from local_library.embeddings.reranking import (
+    CrossEncoderReranker,
+    _group_by_document,
+    _normalize_scores,
+)
 
 
 def _make_result(
@@ -127,3 +133,126 @@ class TestNormalizeScores:
         scores = _normalize_scores([-1000.0, 1000.0])
         assert scores[0] == pytest.approx(0.0, abs=1e-10)
         assert scores[1] == pytest.approx(1.0, abs=1e-10)
+
+
+class TestCrossEncoderReranker:
+    """Tests for CrossEncoderReranker."""
+
+    @pytest.fixture()
+    def mock_model(self) -> MagicMock:
+        """Mock CrossEncoder model returning ascending scores as logits."""
+        model = MagicMock()
+        model.predict = MagicMock(
+            side_effect=lambda pairs, **kwargs: np.array(
+                [float(i) for i in range(len(pairs))]
+            )
+        )
+        return model
+
+    @pytest.fixture()
+    def reranker(self, mock_model: MagicMock) -> CrossEncoderReranker:
+        """CrossEncoderReranker with mock model injected."""
+        r = CrossEncoderReranker(lazy_load=True)
+        r._model = mock_model
+        return r
+
+    def test_satisfies_reranker_protocol(self) -> None:
+        """CrossEncoderReranker satisfies the Reranker protocol."""
+        r = CrossEncoderReranker(lazy_load=True)
+        assert isinstance(r, Reranker)
+
+    def test_reranks_by_cross_encoder_score(
+        self, reranker: CrossEncoderReranker
+    ) -> None:
+        """Results are reordered by cross-encoder scores."""
+        doc_a, doc_b = uuid4(), uuid4()
+        results = [
+            _make_result(doc_id=doc_a, chunk_index=0, score=0.9, text="low relevance"),
+            _make_result(doc_id=doc_b, chunk_index=0, score=0.1, text="high relevance"),
+        ]
+        reranked = reranker.rerank("test query", results, k=2)
+        # Mock returns ascending logits [0.0, 1.0], so second result scores higher
+        assert reranked[0].score > reranked[1].score
+
+    def test_returns_at_most_k_results(
+        self, reranker: CrossEncoderReranker
+    ) -> None:
+        """Rerank returns at most k results."""
+        results = [
+            _make_result(doc_id=uuid4(), chunk_index=0, score=0.5)
+            for _ in range(10)
+        ]
+        reranked = reranker.rerank("query", results, k=3)
+        assert len(reranked) <= 3
+
+    def test_empty_results_returns_empty(
+        self, reranker: CrossEncoderReranker
+    ) -> None:
+        """Empty input returns empty output without calling model."""
+        reranked = reranker.rerank("query", [], k=5)
+        assert reranked == []
+        reranker._model.predict.assert_not_called()
+
+    def test_scores_are_sigmoid_normalized(
+        self, reranker: CrossEncoderReranker
+    ) -> None:
+        """Output scores are in [0, 1] range (sigmoid-normalized)."""
+        results = [
+            _make_result(doc_id=uuid4(), chunk_index=0, score=0.5)
+            for _ in range(3)
+        ]
+        reranked = reranker.rerank("query", results, k=3)
+        for r in reranked:
+            assert 0.0 <= r.score <= 1.0
+
+    def test_preserves_search_methods(
+        self, reranker: CrossEncoderReranker
+    ) -> None:
+        """search_methods frozenset carries forward from original results."""
+        methods = frozenset({"vector", "fts"})
+        results = [_make_result(doc_id=uuid4(), score=0.5, search_methods=methods)]
+        reranked = reranker.rerank("query", results, k=1)
+        assert reranked[0].search_methods == methods
+
+    def test_preserves_doc_metadata(
+        self, reranker: CrossEncoderReranker
+    ) -> None:
+        """doc_title and doc_citekey carry forward from original results."""
+        chunk = Chunk.create(uuid4(), 0, "text")
+        result = SearchResult(
+            chunk=chunk,
+            score=0.5,
+            doc_title="Test Title",
+            doc_citekey="Author2023",
+            search_methods=frozenset({"vector"}),
+        )
+        reranked = reranker.rerank("query", [result], k=1)
+        assert reranked[0].doc_title == "Test Title"
+        assert reranked[0].doc_citekey == "Author2023"
+
+    def test_single_document_skips_grouping(
+        self, reranker: CrossEncoderReranker
+    ) -> None:
+        """When all results share doc_id, grouping is bypassed."""
+        doc_id = uuid4()
+        results = [
+            _make_result(doc_id=doc_id, chunk_index=i, score=0.5)
+            for i in range(5)
+        ]
+        reranked = reranker.rerank("query", results, k=5)
+        # All 5 chunks scored (no max_chunks_per_doc cap applied)
+        assert len(reranked) == 5
+
+    def test_lazy_loading_defers_model(self) -> None:
+        """With lazy_load=True, model is None until first rerank call."""
+        r = CrossEncoderReranker(lazy_load=True)
+        assert r._model is None
+
+    def test_creates_new_frozen_instances(
+        self, reranker: CrossEncoderReranker
+    ) -> None:
+        """Reranked results are new SearchResult instances, not mutated originals."""
+        results = [_make_result(doc_id=uuid4(), score=0.5)]
+        reranked = reranker.rerank("query", results, k=1)
+        assert reranked[0] is not results[0]
+        assert reranked[0].score != results[0].score

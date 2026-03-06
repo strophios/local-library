@@ -62,3 +62,84 @@ def _normalize_scores(logits: list[float]) -> list[float]:
             return z / (1.0 + z)
 
     return [_sigmoid(x) for x in logits]
+
+
+class CrossEncoderReranker:
+    """Document-aware cross-encoder reranker with lazy model loading.
+
+    Groups candidates by parent document, selects top chunks per document,
+    scores via cross-encoder, and returns top-k by reranked score.
+    """
+
+    # pattern: Imperative Shell
+
+    def __init__(
+        self,
+        model_name: str = "cross-encoder/ms-marco-MiniLM-L-12-v2",
+        max_chunks_per_doc: int = 3,
+        batch_size: int = 16,
+        lazy_load: bool = True,
+    ) -> None:
+        self._model_name = model_name
+        self._max_chunks_per_doc = max_chunks_per_doc
+        self._batch_size = batch_size
+        self._model = None
+        if not lazy_load:
+            self._load_model()
+
+    def _load_model(self) -> None:
+        """Load cross-encoder model on first use."""
+        if self._model is not None:
+            return
+        from sentence_transformers import CrossEncoder
+
+        self._model = CrossEncoder(
+            self._model_name,
+            trust_remote_code="bge" in self._model_name.lower(),
+        )
+
+    def rerank(
+        self,
+        query: str,
+        results: list[SearchResult],
+        k: int = 10,
+    ) -> list[SearchResult]:
+        """Rerank results using cross-encoder scoring with document-aware grouping.
+
+        When results span multiple documents, groups by doc_id and selects
+        top chunks per document before scoring. When all results share a
+        single doc_id (e.g. --doc flag), grouping is bypassed.
+        """
+        if not results:
+            return []
+
+        self._load_model()
+
+        # Single-document mode: skip grouping
+        doc_ids = {r.chunk.doc_id for r in results}
+        if len(doc_ids) == 1:
+            candidates = results
+        else:
+            candidates = _group_by_document(results, self._max_chunks_per_doc)
+
+        # Score via cross-encoder
+        pairs = [(query, r.chunk.text) for r in candidates]
+        raw_scores = self._model.predict(
+            pairs, batch_size=self._batch_size, convert_to_numpy=True
+        )
+        scores = _normalize_scores(raw_scores.tolist())
+
+        # Build new frozen SearchResult instances with reranked scores
+        reranked = [
+            SearchResult(
+                chunk=r.chunk,
+                score=s,
+                doc_title=r.doc_title,
+                doc_citekey=r.doc_citekey,
+                search_methods=r.search_methods,
+            )
+            for r, s in zip(candidates, scores)
+        ]
+
+        reranked.sort(key=lambda r: r.score, reverse=True)
+        return reranked[:k]
