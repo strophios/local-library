@@ -50,6 +50,10 @@ def search(
         bool,
         typer.Option("--json", "-j", help="Output results as JSON"),
     ] = False,
+    no_rerank: Annotated[
+        bool,
+        typer.Option("--no-rerank", help="Disable cross-encoder reranking"),
+    ] = False,
 ) -> None:
     """Search documents by content using semantic and keyword search.
 
@@ -98,7 +102,7 @@ def search(
                 doc = resolve_identifier(doc_id, lib)
                 doc_ids = [doc.id]
 
-            retriever = lib.get_retriever(mode=mode)
+            retriever = lib.get_retriever(mode=mode, rerank=not no_rerank)
             results = retriever.retrieve(query, k=limit, doc_ids=doc_ids)
 
             if json_output:

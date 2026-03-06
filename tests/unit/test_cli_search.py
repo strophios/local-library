@@ -75,7 +75,7 @@ class TestSearchCommand:
 
         assert result.exit_code == 0
         assert "machine learning" in result.output.lower() or "Search" in result.output
-        mock_search_library.get_retriever.assert_called_once_with(mode="hybrid")
+        mock_search_library.get_retriever.assert_called_once_with(mode="hybrid", rerank=True)
 
     def test_json_output(self, mock_search_library: MagicMock, mock_vec_available) -> None:
         """search --json outputs valid JSON with expected schema."""
@@ -117,7 +117,7 @@ class TestSearchCommand:
         result = runner.invoke(app, ["search", "query", "--mode", "vector"])
 
         assert result.exit_code == 0
-        mock_search_library.get_retriever.assert_called_once_with(mode="vector")
+        mock_search_library.get_retriever.assert_called_once_with(mode="vector", rerank=True)
 
     def test_mode_fts(self, mock_search_library: MagicMock, mock_vec_available) -> None:
         """search --mode fts uses FTS retriever."""
@@ -128,7 +128,7 @@ class TestSearchCommand:
         result = runner.invoke(app, ["search", "query", "--mode", "fts"])
 
         assert result.exit_code == 0
-        mock_search_library.get_retriever.assert_called_once_with(mode="fts")
+        mock_search_library.get_retriever.assert_called_once_with(mode="fts", rerank=True)
 
     def test_invalid_mode_rejected(self, mock_vec_available) -> None:
         """search --mode invalid exits with error."""
@@ -221,3 +221,15 @@ class TestSearchCommand:
         result = runner.invoke(app, ["search", "query", "--doc", "@Unknown"])
 
         assert result.exit_code == 1
+
+    def test_no_rerank_flag(self, mock_search_library: MagicMock, mock_vec_available) -> None:
+        """--no-rerank flag passes rerank=False to get_retriever."""
+        mock_retriever = MagicMock()
+        mock_retriever.retrieve.return_value = []
+        mock_search_library.get_retriever.return_value = mock_retriever
+
+        runner.invoke(app, ["search", "test query", "--no-rerank"])
+
+        mock_search_library.get_retriever.assert_called_once_with(
+            mode="hybrid", rerank=False
+        )
