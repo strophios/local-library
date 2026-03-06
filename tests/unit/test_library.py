@@ -1,6 +1,7 @@
 """Unit tests for Library orchestration."""
 
 import sqlite3
+from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -9,8 +10,14 @@ import pytest
 from local_library.core.errors import AcquisitionError, ErrorCode, ExtractionError, LookupError
 from local_library.core.library import Library
 from local_library.core.models import DocumentStatus
+from local_library.core.vec_extension import is_vec_available
 from local_library.ingestion.file import FileAcquirer
 from local_library.ingestion.pdf import PdfExtractor
+
+pytestmark_vec = pytest.mark.skipif(
+    not is_vec_available(),
+    reason="sqlite-vec extension not available",
+)
 
 
 class TestLibraryInit:
@@ -776,3 +783,83 @@ class TestLibraryQuery:
 
         with pytest.raises(EmbeddingError, match="vec unavailable"):
             library.query("Q?", retriever=mock_retriever)
+
+
+class TestGetRetrieverReranking:
+    """Tests for get_retriever reranking integration."""
+
+    @pytest.fixture()
+    def lib(self, tmp_path: Path) -> Generator[Library, None, None]:
+        """Library instance with temp dirs for reranking tests."""
+        with Library(
+            db_path=tmp_path / "test.db",
+            storage_dir=tmp_path / "storage",
+            extracted_dir=tmp_path / "extracted",
+        ) as lib:
+            yield lib
+
+    @pytestmark_vec
+    def test_rerank_true_returns_reranked_retriever(self, lib: Library) -> None:
+        """get_retriever(rerank=True) wraps base retriever with RerankedRetriever."""
+        from local_library.embeddings.reranking import RerankedRetriever
+
+        lib._embedder = MagicMock()
+        lib._reranker = MagicMock()
+        retriever = lib.get_retriever(mode="hybrid", rerank=True)
+        assert isinstance(retriever, RerankedRetriever)
+
+    @pytestmark_vec
+    def test_rerank_false_returns_base_retriever(self, lib: Library) -> None:
+        """get_retriever(rerank=False) returns unwrapped HybridRetriever."""
+        from local_library.embeddings.retrieval import HybridRetriever
+
+        lib._embedder = MagicMock()
+        retriever = lib.get_retriever(mode="hybrid", rerank=False)
+        assert isinstance(retriever, HybridRetriever)
+
+    @pytestmark_vec
+    def test_fts_mode_with_rerank(self, lib: Library) -> None:
+        """FTS mode also wraps with RerankedRetriever when rerank=True."""
+        from local_library.embeddings.reranking import RerankedRetriever
+
+        lib._reranker = MagicMock()
+        retriever = lib.get_retriever(mode="fts", rerank=True)
+        assert isinstance(retriever, RerankedRetriever)
+
+    @pytestmark_vec
+    def test_get_reranker_caches_instance(self, lib: Library) -> None:
+        """_get_reranker() creates once and returns cached instance."""
+        with patch("local_library.embeddings.reranking.CrossEncoderReranker") as mock_cls:
+            mock_cls.return_value = MagicMock()
+            r1 = lib._get_reranker()
+            r2 = lib._get_reranker()
+            assert r1 is r2
+            mock_cls.assert_called_once()
+
+    @pytestmark_vec
+    def test_query_forwards_rerank(self, lib: Library) -> None:
+        """query() passes rerank parameter to get_retriever when retriever is None."""
+        with patch.object(lib, "get_retriever") as mock_get:
+            mock_retriever = MagicMock()
+            mock_retriever.retrieve.return_value = []
+            mock_get.return_value = mock_retriever
+            with patch.object(lib, "_get_rag_interface") as mock_rag:
+                mock_rag_inst = MagicMock()
+                mock_rag.return_value = mock_rag_inst
+                mock_rag_inst.query.return_value = MagicMock()
+                lib.query("test question", rerank=False)
+                mock_get.assert_called_once_with(mode="hybrid", rerank=False)
+
+    @pytestmark_vec
+    def test_query_stream_forwards_rerank(self, lib: Library) -> None:
+        """query_stream() passes rerank parameter to get_retriever when retriever is None."""
+        with patch.object(lib, "get_retriever") as mock_get:
+            mock_retriever = MagicMock()
+            mock_retriever.retrieve.return_value = []
+            mock_get.return_value = mock_retriever
+            with patch.object(lib, "_get_rag_interface") as mock_rag:
+                mock_rag_inst = MagicMock()
+                mock_rag.return_value = mock_rag_inst
+                mock_rag_inst.query_stream.return_value = MagicMock()
+                lib.query_stream("test question", rerank=False)
+                mock_get.assert_called_once_with(mode="hybrid", rerank=False)

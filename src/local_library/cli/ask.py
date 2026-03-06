@@ -52,6 +52,10 @@ def ask(
         bool,
         typer.Option("--no-stream", help="Disable streaming (wait for full answer)"),
     ] = False,
+    no_rerank: Annotated[
+        bool,
+        typer.Option("--no-rerank", help="Disable cross-encoder reranking"),
+    ] = False,
 ) -> None:
     """Ask a question and get a RAG-generated answer from your library.
 
@@ -113,13 +117,16 @@ def ask(
                     mode=mode,
                     limit=limit,
                     doc_ids=doc_ids,
+                    rerank=not no_rerank,
                 )
                 if json_output:
                     _output_json(response)
                 else:
                     _output_answer(response)
             else:
-                _stream_answer(lib, question, mode=mode, limit=limit, doc_ids=doc_ids)
+                _stream_answer(
+                    lib, question, mode=mode, limit=limit, doc_ids=doc_ids, rerank=not no_rerank
+                )
 
     except (LookupError, EmbeddingError, RAGError, LLMError) as e:
         if json_output:
@@ -138,11 +145,12 @@ def _stream_answer(
     mode: str,
     limit: int,
     doc_ids: list[UUID] | None,
+    rerank: bool = True,
 ) -> None:
     """Stream answer tokens with Rich Live display."""
     console.print("[dim]Searching...[/dim]")
 
-    stream = lib.query_stream(question, mode=mode, limit=limit, doc_ids=doc_ids)
+    stream = lib.query_stream(question, mode=mode, limit=limit, doc_ids=doc_ids, rerank=rerank)
 
     accumulated = ""
     try:

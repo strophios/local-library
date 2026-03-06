@@ -213,3 +213,17 @@ class Retriever(Protocol):
             List of SearchResult objects, sorted by score descending
         """
         ...
+
+
+@runtime_checkable
+class Reranker(Protocol):
+    """Scores (query, result) pairs and returns reranked results."""
+
+    def rerank(
+        self,
+        query: str,
+        results: list[SearchResult],
+        k: int = 10,
+    ) -> list[SearchResult]:
+        """Rerank results for the given query, returning top-k."""
+        ...

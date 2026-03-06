@@ -1,6 +1,6 @@
 # Core Domain
 
-Last verified: 2026-03-04
+Last verified: 2026-03-06
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 
 ## Contracts
 
-- **Exposes**: Document, DocumentStatus (PENDING, READY, FAILED, NEEDS_REVIEW), EmbeddingStatus (PENDING, CURRENT, STALE), RAGResponse, AddResult, FieldExtraction, TextExtractionResult, ErrorCode hierarchy (including MetadataError, ZoteroError, EmbeddingError, LLMError, RAGError), Library class (with get_by_citekey, get_all_citekeys, update_metadata, embed, embed_all, get_retriever, query, query_stream), storage functions, vec_extension module
+- **Exposes**: Document, DocumentStatus (PENDING, READY, FAILED, NEEDS_REVIEW), EmbeddingStatus (PENDING, CURRENT, STALE), RAGResponse, AddResult, FieldExtraction, TextExtractionResult, ErrorCode hierarchy (including MetadataError, ZoteroError, EmbeddingError, LLMError, RAGError), Library class (with get_by_citekey, get_all_citekeys, update_metadata, embed, embed_all, get_retriever, query, query_stream; reranking enabled by default), storage functions, vec_extension module
 - **Guarantees**:
   - Document.id is UUID, globally unique
   - Document.content_hash is SHA-256, content-addressable
@@ -26,16 +26,16 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
   - Library.embed_all() processes all PENDING/STALE documents
   - Library.delete() cascades to remove embeddings
   - Library.add() embeds by default when embed_on_add=True and sqlite-vec available
-  - Library.get_retriever() factory method returns Retriever protocol-compliant instances (HybridRetriever, VectorRetriever, or FTSRetriever)
-  - Library.query() retrieves context chunks and generates a RAG answer (blocking); returns RAGResponse
-  - Library.query_stream() retrieves context chunks and returns RAGStream for token-by-token answer generation
+  - Library.get_retriever(mode, rerank=True) factory method returns Retriever protocol-compliant instances; wraps with RerankedRetriever by default (cross-encoder reranking)
+  - Library.query(rerank=True) retrieves context chunks and generates a RAG answer (blocking); returns RAGResponse
+  - Library.query_stream(rerank=True) retrieves context chunks and returns RAGStream for token-by-token answer generation
   - Library accepts `rag_model` parameter (default: "gemini/gemini-2.0-flash") for RAG query LLM selection
   - RAGInterface lazily initialized on first query() or query_stream() call
 - **Expects**: Sources handled by at least one registered acquirer; files handled by at least one extractor
 
 ## Dependencies
 
-- **Uses**: `config` (paths), `ingestion` (ContentAcquirer, ContentExtractor protocols, MetadataHandler, TextMetadataExtractor, cleanup_markdown), `embeddings` (MarkdownChunker, NomicEmbedder, EmbeddingStorage), `llm` (LLMClient, LiteLLMClient), `rag` (RAGInterface, RAGStream)
+- **Uses**: `config` (paths), `ingestion` (ContentAcquirer, ContentExtractor protocols, MetadataHandler, TextMetadataExtractor, cleanup_markdown), `embeddings` (MarkdownChunker, NomicEmbedder, EmbeddingStorage, CrossEncoderReranker, RerankedRetriever), `llm` (LLMClient, LiteLLMClient), `rag` (RAGInterface, RAGStream)
 - **Used by**: `cli`, `embeddings` (retrieval module imports from core.errors), `rag` (imports RAGResponse, ErrorCode)
 - **Boundary**: Core MUST NOT import from cli
 
@@ -62,6 +62,8 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 - **embed_on_add config**: Defaults to True; controlled via Library constructor parameter
 - **LLMClient injection**: Library creates LLMClient at Library level for text extraction (if enabled) and RAG queries. TextMetadataExtractor receives LLMClient via constructor injection rather than managing its own LiteLLM dependency
 - **Lazy RAG initialization**: RAGInterface and its LLMClient created on first query()/query_stream() call, avoiding unnecessary LLM client setup when only doing document management
+- **Reranking by default**: get_retriever(rerank=True) wraps base retriever with RerankedRetriever; _get_reranker() lazily initializes CrossEncoderReranker on first use. Cross-encoder model loaded on first rerank call, not at Library construction
+- **Rerank parameter forwarding**: query() and query_stream() accept rerank parameter, forwarded to get_retriever()
 - **RAGResponse dataclass**: Frozen dataclass capturing question, answer, context_chunks (tuple of SearchResult), model, and retrieval_mode for display and serialization
 
 ## Invariants
@@ -78,7 +80,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 - `models.py` - Document, AcquisitionResult, ExtractionResult, AddResult, FieldExtraction, TextExtractionResult, RAGResponse, EmbeddingStatus
 - `errors.py` - ErrorCode enum, exception hierarchy (includes ACQUISITION_*, EXTRACTION_*, METADATA_*, ZOTERO_*, EMBEDDING_*, RAG_*, LLM_* codes; LLMError, RAGError exceptions)
 - `storage.py` - SQLite CRUD (get_connection, init_schema, create/get/update/delete), schema v3 with chunks and FTS5
-- `library.py` - Library orchestrator (add, get, get_by_citekey, get_all_citekeys, list, delete, embed, embed_all, update_metadata, get_retriever, query, query_stream) with handler dispatch, text extraction integration, and lazy RAG initialization
+- `library.py` - Library orchestrator (add, get, get_by_citekey, get_all_citekeys, list, delete, embed, embed_all, update_metadata, get_retriever, query, query_stream) with handler dispatch, text extraction integration, lazy RAG initialization, and lazy cross-encoder reranking
 - `vec_extension.py` - sqlite-vec extension loading, vec0 table creation, availability checking
 
 ## Gotchas
@@ -98,3 +100,5 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 - Embedding failure in add() is non-fatal; document created but embedding_status stays PENDING
 - embed_on_add respects sqlite-vec availability; disabled automatically if extension unavailable
 - Library.get_retriever() raises EmbeddingError if sqlite-vec unavailable; factory method handles embedder lazy-init for vector/hybrid modes
+- Library.get_retriever(rerank=True) is the default; callers must pass rerank=False explicitly to disable. Cross-encoder model (~50 MB) downloaded on first rerank call
+- _get_reranker() is a private method; external callers should use get_retriever(rerank=True) rather than accessing the reranker directly

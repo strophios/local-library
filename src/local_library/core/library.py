@@ -15,6 +15,7 @@ from uuid import UUID
 if TYPE_CHECKING:
     from local_library.core.models import RAGResponse
     from local_library.embeddings.base import Retriever
+    from local_library.embeddings.reranking import CrossEncoderReranker
     from local_library.rag.interface import RAGInterface, RAGStream
 
 from local_library.config import (
@@ -187,6 +188,9 @@ class Library:
         self._llm_client = None  # Lazy: created on first query
         self._rag_interface = None  # Lazy: created on first query
 
+        # Reranking (lazy init on first get_retriever(rerank=True) call)
+        self._reranker = None
+
     @property
     def conn(self) -> sqlite3.Connection:
         """Get the database connection."""
@@ -221,14 +225,16 @@ class Library:
 
         return self._embedding_storage
 
-    def get_retriever(self, mode: str = "hybrid") -> Retriever:
+    def get_retriever(self, mode: str = "hybrid", rerank: bool = True) -> Retriever:
         """Get a retriever instance for searching documents.
 
         Factory method that wires up retriever dependencies (storage, embedder)
-        and returns the requested implementation.
+        and returns the requested implementation. When rerank=True, wraps the
+        base retriever with cross-encoder reranking.
 
         Args:
             mode: Retriever type - "hybrid" (default), "vector", or "fts"
+            rerank: Whether to wrap with cross-encoder reranking (default: True)
 
         Returns:
             A Retriever protocol-compliant instance
@@ -252,24 +258,31 @@ class Library:
                 ErrorCode.EMBEDDING_EXTENSION_UNAVAILABLE,
             )
 
+        # Build base retriever
         if mode == "fts":
-            return FTSRetriever(storage)
-
-        # Vector and hybrid modes need an embedder
-        if self._embedder is None:
-            self._embedder = NomicEmbedder()
-
-        if mode == "vector":
-            return VectorRetriever(storage, self._embedder)
-
-        if mode == "hybrid":
+            base = FTSRetriever(storage)
+        elif mode == "vector":
+            if self._embedder is None:
+                self._embedder = NomicEmbedder()
+            base = VectorRetriever(storage, self._embedder)
+        elif mode == "hybrid":
+            if self._embedder is None:
+                self._embedder = NomicEmbedder()
             vector_ret = VectorRetriever(storage, self._embedder)
             fts_ret = FTSRetriever(storage)
-            return HybridRetriever(vector_ret, fts_ret)
+            base = HybridRetriever(vector_ret, fts_ret)
+        else:
+            raise ValueError(
+                f"unknown retriever mode: {mode!r} (expected 'hybrid', 'vector', or 'fts')"
+            )
 
-        raise ValueError(
-            f"unknown retriever mode: {mode!r} (expected 'hybrid', 'vector', or 'fts')"
-        )
+        # Optionally wrap with cross-encoder reranking
+        if rerank:
+            from local_library.embeddings.reranking import RerankedRetriever
+
+            return RerankedRetriever(inner=base, reranker=self._get_reranker())
+
+        return base
 
     def _mark_embeddings_stale(self, doc_id: UUID) -> None:
         """Mark document's embeddings as stale.
@@ -992,6 +1005,21 @@ class Library:
 
         return self._rag_interface
 
+    def _get_reranker(self) -> CrossEncoderReranker:
+        """Get or create CrossEncoderReranker instance.
+
+        Lazily initializes the cross-encoder model on first call.
+
+        Returns:
+            Configured CrossEncoderReranker instance.
+        """
+        if self._reranker is None:
+            from local_library.embeddings.reranking import CrossEncoderReranker
+
+            self._reranker = CrossEncoderReranker(lazy_load=True)
+
+        return self._reranker
+
     def query(
         self,
         question: str,
@@ -999,6 +1027,7 @@ class Library:
         mode: str = "hybrid",
         limit: int = 10,
         doc_ids: list[UUID] | None = None,
+        rerank: bool = True,
     ) -> RAGResponse:
         """Ask a question and get a RAG-generated answer.
 
@@ -1011,6 +1040,7 @@ class Library:
             mode: Retrieval mode if creating retriever ("hybrid", "vector", "fts").
             limit: Maximum number of context chunks to retrieve.
             doc_ids: Optional document ID filter.
+            rerank: Whether to use cross-encoder reranking (default: True).
 
         Returns:
             RAGResponse with answer, source chunks, and model info.
@@ -1020,7 +1050,7 @@ class Library:
             EmbeddingError: If retriever creation fails (sqlite-vec unavailable).
         """
         if retriever is None:
-            retriever = self.get_retriever(mode=mode)
+            retriever = self.get_retriever(mode=mode, rerank=rerank)
 
         search_results = retriever.retrieve(question, k=limit, doc_ids=doc_ids)
 
@@ -1034,6 +1064,7 @@ class Library:
         mode: str = "hybrid",
         limit: int = 10,
         doc_ids: list[UUID] | None = None,
+        rerank: bool = True,
     ) -> RAGStream:
         """Ask a question and get a streaming RAG-generated answer.
 
@@ -1046,6 +1077,7 @@ class Library:
             mode: Retrieval mode if creating retriever ("hybrid", "vector", "fts").
             limit: Maximum number of context chunks to retrieve.
             doc_ids: Optional document ID filter.
+            rerank: Whether to use cross-encoder reranking (default: True).
 
         Returns:
             RAGStream yielding answer tokens.
@@ -1055,7 +1087,7 @@ class Library:
             EmbeddingError: If retriever creation fails (sqlite-vec unavailable).
         """
         if retriever is None:
-            retriever = self.get_retriever(mode=mode)
+            retriever = self.get_retriever(mode=mode, rerank=rerank)
 
         search_results = retriever.retrieve(question, k=limit, doc_ids=doc_ids)
 

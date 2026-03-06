@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-03-04
+Last verified: 2026-03-06
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -83,13 +83,14 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - **Embed-on-add**: documents automatically embedded during `add` and `zotero import` (use `--skip-embed` to defer)
 - **CLI `embed` command**: manual embedding/re-embedding with `--pending`, `--all`, `--force`, `--dry-run` options
 - **Graceful degradation**: library functions without sqlite-vec for document storage; embedding operations fail clearly
-- **Retrieval system**: VectorRetriever (cosine similarity), FTSRetriever (BM25 via FTS5), HybridRetriever (RRF fusion with configurable weights)
-- **Retriever protocol**: Protocol-based extensibility; `Library.get_retriever()` factory method wires up dependencies
-- **CLI `search` command**: hybrid/vector/fts modes, document-scoped search (--doc), JSON output (--json), configurable result limit (--limit)
-- **Retrieval evaluation framework**: IR metrics (Precision@k, Recall@k, MRR, NDCG@k), seed query set (test_queries.json), automated evaluation harness
+- **Retrieval system**: VectorRetriever (cosine similarity), FTSRetriever (BM25 via FTS5), HybridRetriever (RRF fusion with configurable weights), **cross-encoder reranking** via RerankedRetriever decorator (enabled by default)
+- **Retriever protocol**: Protocol-based extensibility; `Library.get_retriever()` factory method wires up dependencies; `Reranker` protocol for pluggable reranking
+- **Cross-encoder reranking**: Document-aware CrossEncoderReranker groups candidates by document, limits chunks per document, scores via cross-encoder/ms-marco-MiniLM-L-12-v2, applies sigmoid normalization. RerankedRetriever wraps any Retriever with broadened candidate pool + reranking
+- **CLI `search` command**: hybrid/vector/fts modes, document-scoped search (--doc), JSON output (--json), configurable result limit (--limit), reranking on by default (--no-rerank to disable)
+- **Retrieval evaluation framework**: IR metrics (Precision@k, Recall@k, MRR, NDCG@k), seed query set (test_queries.json), automated evaluation harness, reranker benchmark script
 - **LLM abstraction layer**: LLMClient protocol with LiteLLMClient implementation; provider-agnostic LLM access with error mapping to ErrorCode hierarchy
 - **RAG query interface**: RAGInterface orchestrates context assembly, prompt construction, and LLM generation; RAGStream supports streaming with token accumulation; pre-LLM gate skips API call when no context retrieved
-- **CLI `ask` command**: streaming answers with Rich Live display, --no-stream, --json, --model, --mode, --doc, --limit options; source citations with citekey attribution
+- **CLI `ask` command**: streaming answers with Rich Live display, --no-stream, --json, --model, --mode, --doc, --limit, --no-rerank options; source citations with citekey attribution
 - SQLite storage with content-addressable file layout (schema v3)
 - CLI interface (add, list, show, delete, open, update, review, embed, search, ask commands)
 - @citekey identifier support with fuzzy matching suggestions
@@ -107,7 +108,7 @@ Five horizontal concerns cut across the system:
 
 1. **Storage**: SQLite schema, CRUD operations, sqlite-vec, FTS5
 2. **Ingestion**: Content acquisition, extraction (Marker), metadata handling
-3. **Embeddings + Retrieval**: Chunking, nomic-embed-text, similarity operations, FTS5 search, hybrid retrieval (RRF fusion)
+3. **Embeddings + Retrieval**: Chunking, nomic-embed-text, similarity operations, FTS5 search, hybrid retrieval (RRF fusion), cross-encoder reranking
 4. **LLM + RAG**: LLMClient protocol, LiteLLM provider abstraction, context assembly, prompt construction, answer generation
 5. **Interface**: CLI, (later) daemon, Neovim plugin, HTTP API
 
@@ -116,6 +117,7 @@ Five horizontal concerns cut across the system:
 - **Web extraction**: trafilatura, readability-lxml
 - **PDF extraction**: Marker (primary), olmOCR (for scanned historical documents on remote GPU)
 - **Embeddings**: nomic-embed-text-v1.5 (local, 768 dims, 8192 context) via sentence-transformers
+- **Reranking**: cross-encoder/ms-marco-MiniLM-L-12-v2 via sentence-transformers CrossEncoder
 - **Metadata**: CrossRef API, GROBID (for academic PDFs), Open Graph tags (for web)
 - **Vector storage**: sqlite-vec (v0.1.6+), SQLite FTS5 for hybrid search
 - **LLM interface**: Custom RAGInterface + LiteLLM for provider abstraction
@@ -143,6 +145,16 @@ Comprehensive research on the RAG pipeline is documented in `RAG_background/`. T
 - olmOCR on remote NVIDIA GPU for scanned historical documents only
 - Benchmark claims between tools are contested; Marker is the conservative choice
 
+### Reranking: Document-Aware Cross-Encoder
+- **Model**: cross-encoder/ms-marco-MiniLM-L-12-v2 (~50 MB, ~33M params)
+- Selected via benchmark against 5 candidates; best balance of NDCG@10 improvement and latency
+- **Document-aware grouping**: Prevents single document from monopolizing top results; limits chunks per document before scoring
+- **Decorator pattern**: RerankedRetriever wraps any Retriever, broadens candidate pool (default 100 or 3x k), reranks to final k
+- **Enabled by default**: `Library.get_retriever(rerank=True)` is the default; CLI `--no-rerank` flag to disable
+- **Lazy loading**: Model loaded on first rerank call, not at Library init
+- **Sigmoid normalization**: Raw cross-encoder logits mapped to [0, 1] for interpretable scores
+- See `docs/benchmarks/2026-03-06-reranker-model-selection.md` for model comparison data
+
 ### Citation Tooling: Triage over Automated Verification
 - NLI models achieve only ~77-78% accuracy on academic text (vs ~90%+ general)
 - Reframe verification as "triage for human review" rather than "automated decision"
@@ -153,6 +165,7 @@ A retrieval evaluation framework has been implemented in `tests/eval/`. Current 
 - **IR metrics**: `retrieval_eval.py` provides Precision@k, Recall@k, MRR, NDCG@k with unit tests (`test_retrieval_metrics.py`)
 - **Seed query set**: `test_queries.json` contains 12 labeled test queries across 5 categories (factual, conceptual, comparative, methodology, adversarial)
 - **Comparative harness**: Runs all three retriever modes (vector, FTS, hybrid) with per-category breakdowns
+- **Reranker benchmark**: `reranker_benchmark.py` evaluates cross-encoder models across retriever modes with NDCG@10 and latency metrics; results in `reranker_results.json`
 - **Planned expansion (post-M7)**: Query set expansion to 50-100 queries, quality targets, latency benchmarks, and end-to-end RAG evaluation are planned for after M7 — see `build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling" for rationale and sequencing
 
 ### What Would Change These Decisions
@@ -192,11 +205,13 @@ All commands accepting document IDs support both UUID (full or partial) and @cit
 - `uv run local-library search "<query>"` - Search documents (hybrid mode by default; use `--mode vector` or `--mode fts`)
 - `uv run local-library search "<query>" --doc @Author2023` - Search within a specific document
 - `uv run local-library search "<query>" --limit 20 --json` - Get more results as JSON
-- `uv run local-library ask "<question>"` - Ask a question and get a RAG-generated answer (streams by default)
+- `uv run local-library search "<query>" --no-rerank` - Search without cross-encoder reranking
+- `uv run local-library ask "<question>"` - Ask a question and get a RAG-generated answer (streams by default, reranked by default)
 - `uv run local-library ask "<question>" --model anthropic/claude-3-haiku` - Use a specific LLM model
 - `uv run local-library ask "<question>" --doc @Author2023` - Scope to a specific document
 - `uv run local-library ask "<question>" --json` - Get structured JSON output (implies --no-stream)
 - `uv run local-library ask "<question>" --no-stream` - Wait for full answer before displaying
+- `uv run local-library ask "<question>" --no-rerank` - Disable cross-encoder reranking
 - `uv run local-library zotero import` - Batch import from Zotero (embeds by default; use `--skip-embed` to defer; `--library NAME`, `--collection NAME`, `--dry-run`)
 - `uv run local-library zotero collections` - List Zotero collections (personal library by default; use `--library NAME` or `--all-libraries`)
 - `uv run local-library zotero libraries` - List available Zotero libraries (personal and group)
@@ -216,10 +231,11 @@ src/local_library/
 │   ├── storage.py       # SQLite CRUD operations, schema v3 (Imperative Shell)
 │   ├── library.py       # Library orchestrator (Imperative Shell)
 │   └── vec_extension.py # sqlite-vec extension loading and availability checking
-├── embeddings/          # Domain: chunking, embedding computation, vector storage, retrieval
-│   ├── base.py          # Chunk, ChunkEmbedding, SearchResult dataclasses; Chunker, Embedder, Retriever protocols
+├── embeddings/          # Domain: chunking, embedding computation, vector storage, retrieval, reranking
+│   ├── base.py          # Chunk, ChunkEmbedding, SearchResult dataclasses; Chunker, Embedder, Retriever, Reranker protocols
 │   ├── chunking.py      # MarkdownChunker (section-aware markdown splitting)
 │   ├── nomic.py         # NomicEmbedder (nomic-embed-text-v1.5 via sentence-transformers)
+│   ├── reranking.py     # CrossEncoderReranker, RerankedRetriever, _group_by_document, _normalize_scores
 │   ├── retrieval.py     # VectorRetriever, FTSRetriever, HybridRetriever, _rrf_fuse
 │   └── storage.py       # EmbeddingStorage (sqlite-vec CRUD, FTS5 search, status functions)
 ├── llm/                 # Domain: LLM provider abstraction
@@ -238,12 +254,12 @@ src/local_library/
 └── cli/                 # CLI interface (Typer/Rich)
     ├── main.py          # Entry point, command registration
     ├── add.py           # Add command (--skip-embed flag)
-    ├── ask.py           # Ask command (RAG queries with streaming)
+    ├── ask.py           # Ask command (RAG queries with streaming, --no-rerank)
     ├── list.py          # List command (pagination with --limit/--all, embed status column)
     ├── show.py          # Show command (@citekey support)
     ├── delete.py        # Delete command (@citekey support)
     ├── embed.py         # Embed command (--pending, --all, --force, --dry-run)
-    ├── search.py        # Search command (--limit, --mode, --doc, --json)
+    ├── search.py        # Search command (--limit, --mode, --doc, --json, --no-rerank)
     ├── open.py          # Open command (markdown/PDF viewing)
     ├── update.py        # Update command (editor-based metadata editing)
     ├── review.py        # Review command (combined open + update)

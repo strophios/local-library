@@ -258,6 +258,9 @@ class TestAskCommand:
         mock_lib.query_stream.assert_called_once()
         mock_lib.query.assert_not_called()
         mock_stream.to_response.assert_called_once()
+        # Verify rerank=True is passed by default
+        _, kwargs = mock_lib.query_stream.call_args
+        assert kwargs.get("rerank") is True
 
     @patch("local_library.cli.ask.is_vec_available", return_value=True)
     @patch("local_library.cli.ask.Library")
@@ -312,3 +315,42 @@ class TestAskCommand:
         result = runner.invoke(app, ["ask", "Q?", "--json"])
 
         assert result.exit_code == 1
+
+    @patch("local_library.cli.ask.is_vec_available", return_value=True)
+    @patch("local_library.cli.ask.Library")
+    def test_no_rerank_flag(self, mock_lib_cls: MagicMock, _mock_vec: MagicMock) -> None:
+        """--no-rerank flag passes rerank=False to query."""
+        mock_lib = MagicMock()
+        mock_lib.__enter__ = MagicMock(return_value=mock_lib)
+        mock_lib.__exit__ = MagicMock(return_value=False)
+        mock_lib.query.return_value = _make_response()
+        mock_lib_cls.return_value = mock_lib
+
+        runner.invoke(app, ["ask", "test?", "--no-stream", "--no-rerank"])
+
+        _, kwargs = mock_lib.query.call_args
+        assert kwargs.get("rerank") is False
+
+    @patch("local_library.cli.ask.is_vec_available", return_value=True)
+    @patch("local_library.cli.ask.Library")
+    def test_no_rerank_flag_streaming(self, mock_lib_cls: MagicMock, _mock_vec: MagicMock) -> None:
+        """--no-rerank on streaming path passes rerank=False to query_stream."""
+        from local_library.rag.interface import RAGStream
+
+        response = _make_response()
+        mock_lib = MagicMock()
+        mock_lib.__enter__ = MagicMock(return_value=mock_lib)
+        mock_lib.__exit__ = MagicMock(return_value=False)
+
+        # Create a mock stream that yields tokens and returns response
+        mock_stream = MagicMock(spec=RAGStream)
+        mock_stream.__iter__ = MagicMock(return_value=iter(["test"]))
+        mock_stream.to_response.return_value = response
+        mock_lib.query_stream.return_value = mock_stream
+        mock_lib_cls.return_value = mock_lib
+
+        runner.invoke(app, ["ask", "test?", "--no-rerank"])
+
+        # Verify query_stream was called with rerank=False
+        _, kwargs = mock_lib.query_stream.call_args
+        assert kwargs.get("rerank") is False

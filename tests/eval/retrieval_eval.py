@@ -1,6 +1,6 @@
 """Retrieval evaluation framework.
 
-Computes standard IR metrics (Precision@k, Recall@k, MRR) against a labeled
+Computes standard IR metrics (Precision@k, Recall@k, MRR, NDCG@k) against a labeled
 test query set. Designed as a standalone script that can be run against any
 database with embedded documents.
 
@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -87,6 +88,45 @@ def mean_reciprocal_rank(retrieved_doc_ids: list[str], relevant_doc_ids: set[str
         if doc_id in relevant_doc_ids:
             return 1.0 / rank
     return 0.0
+
+
+def ndcg_at_k(
+    retrieved_doc_ids: list[str],
+    relevant_doc_ids: set[str],
+    k: int,
+) -> float:
+    """Compute Normalized Discounted Cumulative Gain at k.
+
+    Uses binary relevance (1 if relevant, 0 otherwise) with
+    log2 discounting.
+
+    Args:
+        retrieved_doc_ids: Ordered list of retrieved document identifiers.
+        relevant_doc_ids: Set of known-relevant document identifiers.
+        k: Cutoff position.
+
+    Returns:
+        NDCG@k in [0.0, 1.0]. Returns 0.0 if relevant set is empty.
+    """
+    if not relevant_doc_ids or not retrieved_doc_ids or k <= 0:
+        return 0.0
+
+    truncated = retrieved_doc_ids[:k]
+
+    # DCG with binary relevance
+    dcg = 0.0
+    for i, doc_id in enumerate(truncated):
+        if doc_id in relevant_doc_ids:
+            dcg += 1.0 / math.log2(i + 2)  # +2 because positions are 1-indexed
+
+    # Ideal DCG: all relevant docs at top positions
+    n_relevant_in_k = min(len(relevant_doc_ids), k)
+    idcg = sum(1.0 / math.log2(i + 2) for i in range(n_relevant_in_k))
+
+    if idcg == 0.0:
+        return 0.0
+
+    return dcg / idcg
 
 
 def evaluate_query(

@@ -1,6 +1,6 @@
 # CLI Domain
 
-Last verified: 2026-03-03
+Last verified: 2026-03-06
 
 ## Purpose
 
@@ -21,6 +21,7 @@ Command-line interface for the local-library system. Provides user-facing comman
   - search command validates --mode against (hybrid, vector, fts) before executing
   - search --doc supports UUID and @citekey identifiers for document-scoped search
   - FTS query syntax errors caught and reported with suggestion to use --mode vector
+  - --no-rerank flag available on search and ask to disable cross-encoder reranking (reranking enabled by default)
   - --skip-embed flag available on add and zotero import for batch workflows
   - ask command requires sqlite-vec; fails gracefully with helpful error if unavailable
   - ask command validates --mode against (hybrid, vector, fts) before executing
@@ -51,13 +52,14 @@ Command-line interface for the local-library system. Provides user-facing comman
 - **Embed command modes**: Three orthogonal modes (single doc, --pending, --all) with mutual exclusivity validation; --force re-embeds existing; --dry-run non-destructive
 - **Skip embed flags**: --skip-embed on add/zotero import defers embedding to separate batch operation for faster ingestion; allows bulk embedding in single batch call
 - **Batch error logging**: Batch embedding catches exceptions and logs them to stderr per-document for visibility; --json output suppresses per-document logs but includes final count
-- **Search command**: `search` command delegates to `Library.get_retriever()` factory; supports hybrid/vector/fts modes, document-scoped search via --doc, and JSON output
+- **Search command**: `search` command delegates to `Library.get_retriever()` factory; supports hybrid/vector/fts modes, document-scoped search via --doc, JSON output, and --no-rerank to disable cross-encoder reranking
 - **Search error handling**: Three error types caught (LookupError for --doc resolution, FTSQueryError for syntax, EmbeddingError for sqlite-vec); each provides mode-appropriate error messages
 - **Search output formats**: Rich table (default) shows rank, score, source, methods, text preview; --json outputs structured array for programmatic use
 - **Ask command streaming**: Uses Rich Live display for token-by-token streaming; graceful Ctrl+C shows partial answer; sources footer printed after stream completes
 - **Ask command JSON output**: --json implies --no-stream (must collect full response for structured output); outputs question, answer, model, retrieval_mode, and aggregated sources with chunk counts
 - **Ask command model override**: --model flag passed to Library via `rag_model` parameter; overrides default "gemini/gemini-2.0-flash"
 - **Ask command error handling**: Four error types caught (LookupError, EmbeddingError, RAGError, LLMError); JSON mode outputs error with code, non-JSON prints styled error
+- **Reranking opt-out pattern**: Both search and ask use `--no-rerank` (negated boolean) because reranking is on by default. Forwarded as `rerank=not no_rerank` to Library methods
 
 ## Invariants
 
@@ -71,7 +73,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 - `main.py` - Entry point, command registration
 - `utils.py` - `resolve_identifier()`, `suggest_citekeys()`, `levenshtein_distance()`, `LibraryProtocol`
 - `add.py` - Add command with --metadata flag
-- `ask.py` - Ask command with streaming, --no-stream, --json, --model, --mode, --doc, --limit options
+- `ask.py` - Ask command with streaming, --no-stream, --json, --model, --mode, --doc, --limit, --no-rerank options
 - `list.py` - List command with --limit/--all pagination
 - `show.py` - Show command with @citekey support
 - `delete.py` - Delete command with @citekey support
@@ -79,7 +81,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 - `update.py` - Update command with editor-based validation loop
 - `review.py` - Review command (open --both + update composition)
 - `embed.py` - Embed command with --pending, --all, --force, --dry-run options
-- `search.py` - Search command with --limit, --mode, --doc, --json options
+- `search.py` - Search command with --limit, --mode, --doc, --json, --no-rerank options
 - `zotero.py` - Zotero command group with `import` (batch import with progress) and `collections` (list collections)
 
 ## Gotchas
