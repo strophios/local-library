@@ -12,6 +12,7 @@ from __future__ import annotations
 import math
 from uuid import UUID
 
+from local_library.core.errors import EmbeddingError, ErrorCode
 from local_library.embeddings.base import SearchResult
 
 
@@ -88,15 +89,32 @@ class CrossEncoderReranker:
             self._load_model()
 
     def _load_model(self) -> None:
-        """Load cross-encoder model on first use."""
+        """Load cross-encoder model on first use.
+
+        Raises:
+            EmbeddingError: If model loading fails
+        """
         if self._model is not None:
             return
-        from sentence_transformers import CrossEncoder
 
-        self._model = CrossEncoder(
-            self._model_name,
-            trust_remote_code="bge" in self._model_name.lower(),
-        )
+        try:
+            from sentence_transformers import CrossEncoder
+
+            self._model = CrossEncoder(
+                self._model_name,
+                trust_remote_code="bge" in self._model_name.lower(),
+            )
+        except ImportError as e:
+            raise EmbeddingError(
+                "sentence-transformers not installed",
+                ErrorCode.EMBEDDING_MODEL_LOAD_FAILED,
+            ) from e
+        except Exception as e:
+            raise EmbeddingError(
+                f"failed to load cross-encoder model: {e}",
+                ErrorCode.EMBEDDING_MODEL_LOAD_FAILED,
+                details={"model_name": self._model_name},
+            ) from e
 
     def rerank(
         self,
