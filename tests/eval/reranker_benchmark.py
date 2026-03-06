@@ -26,9 +26,10 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from retrieval_eval import mean_reciprocal_rank, ndcg_at_k
+
 from local_library.core.library import Library
 from local_library.embeddings.base import SearchResult
-from tests.eval.retrieval_eval import mean_reciprocal_rank, ndcg_at_k
 
 MODELS = [
     "cross-encoder/ms-marco-MiniLM-L-6-v2",
@@ -65,7 +66,7 @@ def _result_citekeys(results: list[SearchResult]) -> list[str]:
 
 def benchmark_baseline(lib: Library, queries: list[dict], k: int) -> ModelResult:
     """Benchmark hybrid retrieval without reranking."""
-    retriever = lib.get_retriever(mode="hybrid", rerank=False)
+    retriever = lib.get_retriever(mode="vector", rerank=False)
 
     latencies = []
     ndcgs = []
@@ -114,7 +115,7 @@ def benchmark_model(
     reranker = CrossEncoderReranker(model_name=model_name, lazy_load=False)
     load_time = time.perf_counter() - load_start
 
-    base_retriever = lib.get_retriever(mode="hybrid", rerank=False)
+    base_retriever = lib.get_retriever(mode="vector", rerank=False)
     retriever = RerankedRetriever(inner=base_retriever, reranker=reranker)
 
     latencies = []

@@ -1,0 +1,278 @@
+[
+  {
+    "model_name": "baseline (no reranking)",
+    "load_time_s": 0.0,
+    "mean_latency_s": 0.6117556542390957,
+    "mean_ndcg_at_10": 2.390143392368157,
+    "mean_mrr": 0.6,
+    "per_query": [
+      {
+        "query_id": "factual_001",
+        "latency_s": 5.7871,
+        "ndcg_at_k": 4.5436,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "factual_002",
+        "latency_s": 0.0366,
+        "ndcg_at_k": 0.0,
+        "mrr": 0.0
+      },
+      {
+        "query_id": "factual_003",
+        "latency_s": 0.0832,
+        "ndcg_at_k": 3.4641,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "conceptual_001",
+        "latency_s": 0.0448,
+        "ndcg_at_k": 4.0436,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "conceptual_002",
+        "latency_s": 0.0219,
+        "ndcg_at_k": 0.0,
+        "mrr": 0.0
+      },
+      {
+        "query_id": "conceptual_003",
+        "latency_s": 0.0222,
+        "ndcg_at_k": 0.0,
+        "mrr": 0.0
+      },
+      {
+        "query_id": "methodology_001",
+        "latency_s": 0.0149,
+        "ndcg_at_k": 4.2545,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "methodology_002",
+        "latency_s": 0.0323,
+        "ndcg_at_k": 4.5436,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "comparative_001",
+        "latency_s": 0.035,
+        "ndcg_at_k": 3.0522,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "comparative_002",
+        "latency_s": 0.0396,
+        "ndcg_at_k": 0.0,
+        "mrr": 0.0
+      }
+    ]
+  },
+  {
+    "model_name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+    "load_time_s": 4.36,
+    "mean_latency_s": 0.4602623000275344,
+    "mean_ndcg_at_10": 1.093687925072092,
+    "mean_mrr": 0.5777777777777777,
+    "per_query": [
+      {
+        "query_id": "factual_001",
+        "latency_s": 0.8634,
+        "ndcg_at_k": 2.1309,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "factual_002",
+        "latency_s": 0.7441,
+        "ndcg_at_k": 0.5,
+        "mrr": 0.3333
+      },
+      {
+        "query_id": "factual_003",
+        "latency_s": 0.5302,
+        "ndcg_at_k": 2.1309,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "conceptual_001",
+        "latency_s": 0.4829,
+        "ndcg_at_k": 1.3562,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "conceptual_002",
+        "latency_s": 0.4256,
+        "ndcg_at_k": 0.301,
+        "mrr": 0.1111
+      },
+      {
+        "query_id": "conceptual_003",
+        "latency_s": 0.4819,
+        "ndcg_at_k": 0.0,
+        "mrr": 0.0
+      },
+      {
+        "query_id": "methodology_001",
+        "latency_s": 0.271,
+        "ndcg_at_k": 1.5,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "methodology_002",
+        "latency_s": 0.3433,
+        "ndcg_at_k": 2.1309,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "comparative_001",
+        "latency_s": 0.2964,
+        "ndcg_at_k": 0.8869,
+        "mrr": 0.3333
+      },
+      {
+        "query_id": "comparative_002",
+        "latency_s": 0.1638,
+        "ndcg_at_k": 0.0,
+        "mrr": 0.0
+      }
+    ]
+  },
+  {
+    "model_name": "cross-encoder/ms-marco-MiniLM-L-12-v2",
+    "load_time_s": 5.43,
+    "mean_latency_s": 0.3096888417378068,
+    "mean_ndcg_at_10": 1.178799514486025,
+    "mean_mrr": 0.5944444444444444,
+    "per_query": [
+      {
+        "query_id": "factual_001",
+        "latency_s": 0.1451,
+        "ndcg_at_k": 2.1309,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "factual_002",
+        "latency_s": 0.2929,
+        "ndcg_at_k": 0.5,
+        "mrr": 0.3333
+      },
+      {
+        "query_id": "factual_003",
+        "latency_s": 0.4399,
+        "ndcg_at_k": 2.1309,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "conceptual_001",
+        "latency_s": 0.4115,
+        "ndcg_at_k": 1.7431,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "conceptual_002",
+        "latency_s": 0.311,
+        "ndcg_at_k": 0.301,
+        "mrr": 0.1111
+      },
+      {
+        "query_id": "conceptual_003",
+        "latency_s": 0.2401,
+        "ndcg_at_k": 0.0,
+        "mrr": 0.0
+      },
+      {
+        "query_id": "methodology_001",
+        "latency_s": 0.3217,
+        "ndcg_at_k": 1.5,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "methodology_002",
+        "latency_s": 0.2862,
+        "ndcg_at_k": 2.1309,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "comparative_001",
+        "latency_s": 0.4146,
+        "ndcg_at_k": 1.3511,
+        "mrr": 0.5
+      },
+      {
+        "query_id": "comparative_002",
+        "latency_s": 0.234,
+        "ndcg_at_k": 0.0,
+        "mrr": 0.0
+      }
+    ]
+  },
+  {
+    "model_name": "BAAI/bge-reranker-v2-m3",
+    "load_time_s": 45.58,
+    "mean_latency_s": 2.354050324903801,
+    "mean_ndcg_at_10": 1.4487803584181722,
+    "mean_mrr": 0.7333333333333333,
+    "per_query": [
+      {
+        "query_id": "factual_001",
+        "latency_s": 2.1672,
+        "ndcg_at_k": 2.1309,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "factual_002",
+        "latency_s": 2.1485,
+        "ndcg_at_k": 1.5,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "factual_003",
+        "latency_s": 2.9688,
+        "ndcg_at_k": 2.1309,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "conceptual_001",
+        "latency_s": 2.7194,
+        "ndcg_at_k": 2.1309,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "conceptual_002",
+        "latency_s": 3.1614,
+        "ndcg_at_k": 0.801,
+        "mrr": 0.3333
+      },
+      {
+        "query_id": "conceptual_003",
+        "latency_s": 1.8341,
+        "ndcg_at_k": 0.0,
+        "mrr": 0.0
+      },
+      {
+        "query_id": "methodology_001",
+        "latency_s": 2.1831,
+        "ndcg_at_k": 1.9871,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "methodology_002",
+        "latency_s": 1.9861,
+        "ndcg_at_k": 2.1309,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "comparative_001",
+        "latency_s": 2.7065,
+        "ndcg_at_k": 1.6759,
+        "mrr": 1.0
+      },
+      {
+        "query_id": "comparative_002",
+        "latency_s": 1.6656,
+        "ndcg_at_k": 0.0,
+        "mrr": 0.0
+      }
+    ]
+  }
+]
