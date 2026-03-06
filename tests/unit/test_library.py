@@ -1,6 +1,7 @@
 """Unit tests for Library orchestration."""
 
 import sqlite3
+from collections.abc import Generator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -788,7 +789,7 @@ class TestGetRetrieverReranking:
     """Tests for get_retriever reranking integration."""
 
     @pytest.fixture()
-    def lib(self, tmp_path: Path):
+    def lib(self, tmp_path: Path) -> Generator[Library, None, None]:
         """Library instance with temp dirs for reranking tests."""
         with Library(
             db_path=tmp_path / "test.db",

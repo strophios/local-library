@@ -15,6 +15,7 @@ from uuid import UUID
 if TYPE_CHECKING:
     from local_library.core.models import RAGResponse
     from local_library.embeddings.base import Retriever
+    from local_library.embeddings.reranking import CrossEncoderReranker
     from local_library.rag.interface import RAGInterface, RAGStream
 
 from local_library.config import (
@@ -1004,7 +1005,7 @@ class Library:
 
         return self._rag_interface
 
-    def _get_reranker(self):
+    def _get_reranker(self) -> CrossEncoderReranker:
         """Get or create CrossEncoderReranker instance.
 
         Lazily initializes the cross-encoder model on first call.
