@@ -55,7 +55,7 @@ To re-run the full benchmark:
 - Default model configured in `CrossEncoderReranker.__init__()` as `cross-encoder/ms-marco-MiniLM-L-12-v2`
 - Model is lazy-loaded on first rerank call (not during initialization)
 - Model download (~33-50 MB) occurs on first use; subsequent queries within same session reuse loaded model
-- Load time (4.36-5.43s per model) is per-session cost, not per-query
+- Load time (0.54-2.54s per model) is per-session cost, not per-query. First-run load times will be higher due to model download from Hugging Face
 - Benchmark uses `RerankedRetriever` wrapper with default pool_size=100 and min_pool_ratio=3
 
 ## Recommendations for Future Work
