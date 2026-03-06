@@ -13,7 +13,7 @@ import math
 from uuid import UUID
 
 from local_library.core.errors import EmbeddingError, ErrorCode
-from local_library.embeddings.base import SearchResult
+from local_library.embeddings.base import Reranker, Retriever, SearchResult
 
 
 def _group_by_document(
@@ -159,3 +159,40 @@ class CrossEncoderReranker:
 
         reranked.sort(key=lambda r: r.score, reverse=True)
         return reranked[:k]
+
+
+class RerankedRetriever:
+    """Retriever wrapper that applies cross-encoder reranking.
+
+    Implements the Retriever protocol by delegating to an inner retriever
+    with a broadened candidate pool, then passing results through a Reranker.
+    """
+
+    # pattern: Imperative Shell
+
+    def __init__(
+        self,
+        inner: Retriever,
+        reranker: Reranker,
+        pool_size: int = 100,
+        min_pool_ratio: int = 3,
+    ) -> None:
+        self._inner = inner
+        self._reranker = reranker
+        self._pool_size = pool_size
+        self._min_pool_ratio = min_pool_ratio
+
+    def retrieve(
+        self,
+        query: str,
+        k: int = 10,
+        doc_ids: list[UUID] | None = None,
+    ) -> list[SearchResult]:
+        """Retrieve and rerank results.
+
+        Fetches a broadened candidate pool from the inner retriever,
+        then applies the reranker to select the final top-k.
+        """
+        effective_pool = max(self._pool_size, k * self._min_pool_ratio)
+        candidates = self._inner.retrieve(query, k=effective_pool, doc_ids=doc_ids)
+        return self._reranker.rerank(query, candidates, k=k)
