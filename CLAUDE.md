@@ -98,9 +98,16 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - Zotero read-only access: ZoteroReader facade with database and JSON export backends, BetterBibTeX citekey mapping, attachment resolution, collection and library filtering
 - **Batch import from Zotero**: `zotero import` command with library/collection filtering, dry-run mode, progress tracking, and continue-on-error (defaults to personal library)
 
-**Next milestones:** Post-M7 evaluation pass (end-to-end RAG quality assessment, pipeline improvements, full Zotero corpus import, evaluation query expansion to 50-100). See `build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling" for rationale.
+**Immediate next step:** Post-M7 evaluation pass — the quality gate before scaling to the full Zotero corpus (~1400 docs). Expand evaluation query set (50-100), establish quality targets, iterate on pipeline improvements (cross-encoder reranking designed, others queued), then import full corpus. See `build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling" for rationale.
 
-**Deferred to later phases:** M3b (metadata extraction is functionally complete, but does not yet hit benchmarks; that has been deferred), M3c (API metadata enrichment), web content ingestion, Zotero sync, citation tooling, auto-tagging, note management, Neovim plugin. See `future_roadmap.md` for full details.
+**Beyond Phase 1:** Development is organized into five feature areas, each with its own progression. See `roadmap.md` for the overview and `docs/feature-areas/` for detailed planning per area:
+- **Neovim Citation Workflow** (headline) — library daemon, Neovim plugin for visual-mode citation search
+- **Web Content Ingestion** — `add <url>` with trafilatura, making web content citable
+- **Note Management** — auto-generated markdown stubs with YAML frontmatter
+- **Automated Content Analysis** — auto-tagging, clustering, triage-based verification
+- **RAG Pipeline Improvements** — cross-encoder reranking, query expansion, embedding strategy
+
+**Also deferred:** M3b benchmarks (extraction functional but untested at scale), M3c (API metadata enrichment), Zotero tag export, bidirectional note sync. See individual feature area READMEs for context.
 
 ### Architectural Layers
 
@@ -271,11 +278,14 @@ See `src/local_library/core/CLAUDE.md`, `src/local_library/llm/CLAUDE.md`, `src/
 
 ## Background Documentation
 
-### Build Planning
-- `build_plan.md`: Milestone overview and layer responsibilities
+### Planning and Roadmap
+- `roadmap.md`: **Central overview** — feature areas, current focus, cross-cutting dependencies
+- `docs/feature-areas/`: **Feature area planning** — one directory per area with canonical README and supporting material
+- `build_plan.md`: Phase 1 milestone overview and layer responsibilities (historical reference once Phase 1 complete)
 - `build_philosophy.md`: Pipeline-first, layer-complete development approach
-- `future_roadmap.md`: Deferred features with context and implementation notes
-- `docs/implementation-plans/2025-01-20-m1-m2-record-storage-extraction/`: Detailed implementation plans for M1-M2 (8 phases)
+- `future_roadmap.md`: Original deferred features document (contents being migrated to feature area READMEs)
+- `docs/design-plans/`: Point-in-time design specifications (date-prefixed)
+- `docs/implementation-plans/`: Point-in-time implementation plans (date-prefixed, phased)
 
 ### RAG System Research (authoritative for implementation details)
 - `RAG_background/00_final_summary_report.md`: Consolidated recommendations — code patterns, schemas, library configuration
