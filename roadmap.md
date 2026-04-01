@@ -1,21 +1,22 @@
 # Roadmap
 
-Last updated: 2026-03-06
+Last updated: 2026-04-01
 
 This document provides a high-level overview of the project's feature areas and current focus. For detailed planning within each area, see the linked feature area documents. For the development approach, see `build_philosophy.md`.
 
-## Current Focus: Finishing Phase 1
+## Current Focus: Evaluation Quality Gate
 
-The Phase 1 PDF pipeline (M1-M7) is functionally complete. The remaining step is the **evaluation and quality gate** before scaling to the full Zotero corpus (~1400 documents).
+The Phase 1 PDF pipeline (M1-M7) is functionally complete. The **evaluation and quality gate** is in progress, gating the full Zotero corpus import (~1400 documents).
 
-**Sequencing:**
-1. Expand evaluation query set (50-100 queries with relevance annotations)
-2. Establish quality targets (Precision@5, MRR, answer quality rubric)
-3. Iterative improvement loop: evaluate → improve → re-evaluate (see RAG Pipeline Improvements)
-4. Import full Zotero corpus when benchmarks are met
-5. Re-evaluate with full corpus
+**Progress:**
+1. ✓ Expanded evaluation query set to 76 queries with graded relevance (3-tier)
+2. ✓ Ran baseline: hybrid+rerank achieves MRR=0.913, NDCG@10=0.896 on ~20-doc dev corpus
+3. ✓ Initial improvement cycle: FTS stop-word/OR-mode fix, RRF weight tuning, cross-encoder reranking
+4. **Next**: Establish quality targets, investigate conceptual query gap (NDCG@10=0.784), determine next pipeline improvement
+5. Import full Zotero corpus when quality targets are met
+6. Re-evaluate with full corpus
 
-See `build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling" for the full rationale. The build plan remains the active reference for Phase 1 work.
+See `tests/eval/README.md` for detailed baseline results and findings. See `build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling" for the full rationale.
 
 ---
 

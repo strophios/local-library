@@ -1,6 +1,6 @@
 # RAG Pipeline Improvements
 
-Last updated: 2026-03-06
+Last updated: 2026-04-01
 
 ## Vision
 
@@ -10,50 +10,57 @@ Unlike the other feature areas, this isn't building toward a single deliverable.
 
 ## Current State
 
-The pipeline is functional end-to-end:
+The pipeline is functional end-to-end with competitive retrieval quality on the dev corpus:
 - **Chunking**: Section-aware markdown splitting (~512 tokens, ~15% overlap) via `MarkdownChunker`
 - **Embeddings**: nomic-embed-text-v1.5 (768-dim) via sentence-transformers with `search_document:`/`search_query:` prefixes
-- **Retrieval**: `VectorRetriever` (cosine similarity), `FTSRetriever` (BM25 via FTS5), `HybridRetriever` (RRF fusion)
+- **Retrieval**: `VectorRetriever` (cosine similarity), `FTSRetriever` (BM25 via FTS5 with stop-word removal + OR-mode), `HybridRetriever` (RRF fusion, 2:1 vector-to-FTS weight ratio)
+- **Reranking**: Document-aware `CrossEncoderReranker` (ms-marco-MiniLM-L-12-v2) via `RerankedRetriever` decorator; enabled by default. Selected via benchmark against 5 candidates (see `docs/benchmarks/2026-03-06-reranker-model-selection.md`)
 - **RAG**: `RAGInterface` orchestrates context assembly → prompt construction → LLM generation (LiteLLM)
-- **Evaluation**: 12 labeled test queries with Precision@k, Recall@k, MRR, NDCG@k metrics
+- **Evaluation**: 76 labeled queries with graded relevance (3-tier), Precision@k, Recall@k, MRR, NDCG@k metrics. See `tests/eval/README.md` for full details
 
-The cross-encoder reranking stage has been designed (`docs/design-plans/2026-03-05-document-aware-cross-encoder-reranking.md`) but not implemented.
+**Baseline results** (hybrid+rerank, ~20-doc dev corpus): MRR=0.913, Recall@10=0.926, NDCG@10=0.896. Conceptual queries are the weakest category (NDCG@10=0.784). Full results in `tests/eval/baseline_results.json`.
 
-## Near-Term: Post-M7 Evaluation Pass
+## Near-Term: Evaluation Pass and Corpus Scaling
 
-This is the immediate work, gated before full corpus import. See `build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling".
+The evaluation pass is underway, gated before full corpus import. See `build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling".
 
-### Evaluation Framework Expansion
-- Expand test query set from 12 to 50-100 queries
-- Write queries against documents actually read and queried (not synthetic)
-- Annotate with relevance judgments at chunk level (not just document level)
-- Establish quality targets: Precision@5, MRR, answer quality rubric
-- Add latency benchmarks per operation
+### Done
+- ✓ Expanded query set to 76 queries with graded relevance and annotation rubric
+- ✓ Cross-encoder reranking implemented, benchmarked, enabled by default
+- ✓ FTS5 query preprocessing: stop-word removal, OR-mode, sanitizer hardening
+- ✓ RRF weight tuning (2:1 vector-to-FTS ratio)
+- ✓ Baseline evaluation run across all configurations
 
-### Iterative Improvement Loop
+### In Progress
+- Establish quality targets based on baseline analysis
+- Investigate conceptual query gap (NDCG@10=0.784 vs 0.896 overall)
+- Determine which pipeline improvement to target next
 
-Evaluate → identify weaknesses → implement next improvement → re-evaluate. Stop when benchmarks are met. The improvement queue, roughly ordered by cost/complexity:
+### Remaining Before Corpus Import
+- Meet quality targets on dev corpus
+- Import full Zotero corpus (~1400 docs)
+- Re-evaluate with full corpus
 
-1. **Cross-encoder reranking** (design complete)
-   - Document-aware grouping + cross-encoder rescoring
-   - Expected: significant precision improvement with modest latency cost
-   - See `docs/design-plans/2026-03-05-document-aware-cross-encoder-reranking.md`
+### Improvement Queue
 
-2. **Query preprocessing**
-   - FTS5 query sanitization (partially implemented — natural language queries now handled)
-   - Query expansion: synonym injection, acronym resolution
+The iterative improvement loop continues. Items completed are struck through; remaining items ordered by expected impact:
+
+1. ~~**Cross-encoder reranking**~~ — Implemented. Document-aware grouping, MiniLM-L-12-v2, sigmoid normalization, broadened candidate pool. Recall@10 improved ~7% over plain vector.
+
+2. ~~**FTS query preprocessing**~~ — Implemented. Stop-word removal + explicit OR mode made FTS viable (was returning 0 results). Asymmetric RRF weights tuned.
+
+3. **Conceptual query improvement** (next target)
+   - Queries about mechanisms/arguments score NDCG@10=0.784 vs 0.967 factual
+   - Likely causes: distributed arguments across chunks, abstract vocabulary, chunk boundary issues
+   - Potential approaches: query expansion, increased chunk overlap, chunk merging at retrieval time, document-level scoring
+
+4. **Query expansion**
+   - Synonym injection, acronym resolution
    - Potentially: LLM-based query rewriting (pre-search)
 
-3. **Chunk preprocessing**
-   - More aggressive markdown/formatting cleanup for chunk text (partially addressed)
+5. **Chunk preprocessing**
    - Filter non-semantic content from chunks (headers, footers, reference lists)
    - Consider: separate "display text" vs. "embedding text" per chunk
-
-4. **Retrieval parameter tuning**
-   - RRF k parameter (currently 60)
-   - Vector/FTS weight balance
-   - Candidate pool sizes
-   - Cross-encoder model selection (MiniLM-L-6 vs L-12 vs BGE-reranker-v2-m3)
 
 If the above aren't sufficient:
 
@@ -93,9 +100,10 @@ If the above aren't sufficient:
 
 ## Open Questions
 
-- What quality targets are appropriate? Need to establish these during the evaluation pass.
-- Should the evaluation framework test end-to-end RAG answer quality, or just retrieval quality? (The build plan suggests both, with retrieval as baseline and answer quality as the more informative signal.)
-- At what corpus size does performance become a concern? Currently running against ~20 documents.
+- What quality targets are appropriate? Baseline is established (MRR=0.913, NDCG@10=0.896); targets need to be set based on this and expected degradation at scale.
+- What's the right approach for the conceptual query gap? Chunk overlap tuning is cheap; query expansion is more complex but potentially higher impact.
+- Should the evaluation framework test end-to-end RAG answer quality, or just retrieval quality? Retrieval is now well-measured; answer quality evaluation is the remaining gap.
+- At what corpus size does performance become a concern? ~20 documents currently; need to reassess after full corpus import (~1400 docs, ~100K+ vectors).
 - Is there a meaningful difference between "good retrieval" and "good for citation search"? The Neovim workflow may need different tuning than general RAG queries.
 
 ## Dependencies
