@@ -98,14 +98,14 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - Zotero read-only access: ZoteroReader facade with database and JSON export backends, BetterBibTeX citekey mapping, attachment resolution, collection and library filtering
 - **Batch import from Zotero**: `zotero import` command with library/collection filtering, dry-run mode, progress tracking, and continue-on-error (defaults to personal library)
 
-**Immediate next step:** Post-M7 evaluation pass — the quality gate before scaling to the full Zotero corpus (~1400 docs). Expand evaluation query set (50-100), establish quality targets, iterate on pipeline improvements (cross-encoder reranking designed, others queued), then import full corpus. See `build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling" for rationale.
+**Immediate next step:** Post-M7 evaluation quality gate — establish quality targets, investigate the conceptual query gap, and determine the next pipeline improvement before scaling to the full Zotero corpus (~1400 docs). See `roadmap.md` for current progress and sequencing.
 
-**Beyond Phase 1:** Development is organized into five feature areas, each with its own progression. See `roadmap.md` for the overview and `docs/feature-areas/` for detailed planning per area:
+**Beyond Phase 1:** Development is organized into five feature areas, each with its own progression. **`roadmap.md` is the central overview** — check it for current focus, progress tracking, and cross-cutting dependencies. Feature area READMEs in `docs/feature-areas/` have detailed planning per area:
 - **Neovim Citation Workflow** (headline) — library daemon, Neovim plugin for visual-mode citation search
 - **Web Content Ingestion** — `add <url>` with trafilatura, making web content citable
 - **Note Management** — auto-generated markdown stubs with YAML frontmatter
 - **Automated Content Analysis** — auto-tagging, clustering, triage-based verification
-- **RAG Pipeline Improvements** — cross-encoder reranking, query expansion, embedding strategy
+- **RAG Pipeline Improvements** — evaluation, retrieval quality, query processing (see feature area README for current status)
 
 **Also deferred:** M3b benchmarks (extraction functional but untested at scale), M3c (API metadata enrichment), Zotero tag export, bidirectional note sync. See individual feature area READMEs for context.
 
