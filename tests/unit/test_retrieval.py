@@ -75,8 +75,10 @@ class TestSanitizeFtsQuery:
         """Query with trailing ? is stripped."""
         query = "What makes transformer models so effective?"
         result = _sanitize_fts_query(query)
-        assert result == "What makes transformer models so effective"
         assert "?" not in result
+        assert "transformer" in result
+        assert "models" in result
+        assert "effective" in result
 
     def test_query_with_multiple_punctuation(self) -> None:
         """Query with multiple punctuation marks is cleaned."""
@@ -111,18 +113,49 @@ class TestSanitizeFtsQuery:
         assert "language" in result
         assert "processing" in result
 
-    def test_normal_alphanumeric_query_unchanged(self) -> None:
-        """Normal alphanumeric query remains unchanged."""
+    def test_normal_alphanumeric_query_or_joined(self) -> None:
+        """Normal alphanumeric query gets OR-joined."""
         query = "machine learning algorithms"
         result = _sanitize_fts_query(query)
-        assert result == "machine learning algorithms"
+        assert result == "machine OR learning OR algorithms"
 
-    def test_hyphenated_words_preserved(self) -> None:
-        """Hyphenated words like state-of-the-art are preserved."""
+    def test_hyphens_between_words_replaced_with_spaces(self) -> None:
+        """Hyphens between words are replaced with spaces.
+
+        FTS5's unicode61 tokenizer splits on hyphens when indexing, so
+        the indexed tokens are already separate words. But FTS5's query
+        parser interprets hyphens as the NOT operator, so 'actor-network'
+        becomes 'actor NOT network'. Replacing hyphens with spaces makes
+        the query match the indexed tokens correctly.
+        """
         query = "state-of-the-art deep-learning"
         result = _sanitize_fts_query(query)
-        assert "state-of-the-art" in result
-        assert "deep-learning" in result
+        assert "-" not in result
+        assert "state" in result
+        assert "art" in result
+        assert "deep" in result
+        assert "learning" in result
+
+    def test_hyphenated_query_no_fts_column_error(self) -> None:
+        """Queries with hyphens must not produce FTS5 column filter syntax.
+
+        Without this fix, 'actor-network theory' causes FTS5 to interpret
+        'network' as a column name, raising 'no such column: network'.
+        """
+        query = "How does actor-network theory work?"
+        result = _sanitize_fts_query(query)
+        assert "-" not in result
+        assert "actor" in result
+        assert "network" in result
+        assert "theory" in result
+
+    def test_apostrophes_removed(self) -> None:
+        """Apostrophes/single quotes are removed (FTS5 string delimiter)."""
+        query = "the worker's condition"
+        result = _sanitize_fts_query(query)
+        assert "'" not in result
+        assert "worker" in result
+        assert "condition" in result
 
     def test_standalone_plus_sign_removed(self) -> None:
         """Standalone + operators are removed."""
@@ -141,16 +174,16 @@ class TestSanitizeFtsQuery:
         assert "networks" in result
 
     def test_multiple_spaces_collapsed(self) -> None:
-        """Multiple consecutive spaces are collapsed to single space."""
+        """Multiple consecutive spaces are collapsed (OR-joined output)."""
         query = "machine   learning    algorithms"
         result = _sanitize_fts_query(query)
-        assert result == "machine learning algorithms"
+        assert result == "machine OR learning OR algorithms"
 
     def test_leading_trailing_whitespace_stripped(self) -> None:
         """Leading and trailing whitespace is removed."""
         query = "   machine learning   "
         result = _sanitize_fts_query(query)
-        assert result == "machine learning"
+        assert result == "machine OR learning"
 
     def test_parentheses_removed(self) -> None:
         """Parentheses are removed."""
@@ -205,12 +238,84 @@ class TestSanitizeFtsQuery:
         assert "processing" in result
         assert "analysis" in result
 
+    def test_stop_words_removed(self) -> None:
+        """Common stop words are removed from queries.
+
+        FTS5 uses implicit AND by default, so stop words like 'what', 'is',
+        'the' overly constrain the match — every word must appear in the chunk.
+        Removing stop words lets FTS5 focus on content-bearing terms.
+        """
+        query = "What is the role of social identity in intergroup behavior"
+        result = _sanitize_fts_query(query)
+        # Stop words removed (check raw terms, not OR-joined output)
+        terms = [t for t in result.split() if t != "OR"]
+        for stop in ["what", "is", "the", "of", "in"]:
+            assert stop not in [t.lower() for t in terms]
+        # Content words preserved
+        for word in ["role", "social", "identity", "intergroup", "behavior"]:
+            assert word in result.lower()
+
+    def test_stop_word_removal_case_insensitive(self) -> None:
+        """Stop words are removed regardless of case."""
+        query = "The Role Of Identity"
+        result = _sanitize_fts_query(query)
+        assert "role" in result.lower()
+        assert "identity" in result.lower()
+        for stop in ["the", "of"]:
+            assert stop not in result.lower().split()
+
+    def test_query_of_only_stop_words_raises_error(self) -> None:
+        """Query containing only stop words raises FTSQueryError."""
+        query = "what is the"
+        with pytest.raises(FTSQueryError):
+            _sanitize_fts_query(query)
+
+    def test_stop_words_not_removed_from_quoted_phrases(self) -> None:
+        """Stop words inside quoted phrases are preserved.
+
+        Quoted strings in FTS5 are phrase matches — the exact sequence
+        matters, so stop words must stay to preserve phrase semantics.
+        """
+        query = '"state of the art" embeddings'
+        result = _sanitize_fts_query(query)
+        assert '"state of the art"' in result
+        assert "embeddings" in result
+
+    def test_terms_joined_with_or(self) -> None:
+        """Non-quoted terms are joined with OR for disjunctive BM25 matching.
+
+        FTS5 defaults to implicit AND, but natural language queries need
+        disjunctive matching — BM25 naturally ranks multi-term matches
+        higher without requiring ALL terms to appear.
+        """
+        query = "social identity intergroup behavior"
+        result = _sanitize_fts_query(query)
+        assert result == "social OR identity OR intergroup OR behavior"
+
+    def test_or_mode_with_quoted_phrase(self) -> None:
+        """Quoted phrases and OR terms coexist correctly."""
+        query = '"state of the art" embeddings retrieval'
+        result = _sanitize_fts_query(query)
+        assert '"state of the art"' in result
+        assert "OR" in result
+        assert "embeddings" in result
+        assert "retrieval" in result
+
+    def test_single_content_word_no_or(self) -> None:
+        """Single remaining term has no OR operator."""
+        query = "What is embeddings?"
+        result = _sanitize_fts_query(query)
+        assert result == "embeddings"
+        assert "OR" not in result
+
     def test_real_world_query_example(self) -> None:
         """Real-world example: natural language question with punctuation."""
         query = "What makes transformer models so effective?"
         result = _sanitize_fts_query(query)
-        # Should be searchable as "What makes transformer models so effective"
-        assert result == "What makes transformer models so effective"
+        assert "transformer" in result
+        assert "models" in result
+        assert "effective" in result
+        assert "OR" in result
 
 
 class TestSearchFts:

@@ -15,12 +15,87 @@ from local_library.core.models import EmbeddingStatus
 from local_library.core.vec_extension import require_vec_extension
 from local_library.embeddings.base import Chunk, ChunkEmbedding
 
+# Stop words to remove from FTS5 queries. FTS5 uses implicit AND, so
+# function words constrain matches without adding relevance signal.
+# Kept short (~50 words) to avoid removing content-bearing terms.
+_FTS_STOP_WORDS = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "been",
+        "but",
+        "by",
+        "can",
+        "do",
+        "does",
+        "for",
+        "from",
+        "had",
+        "has",
+        "have",
+        "he",
+        "her",
+        "his",
+        "how",
+        "i",
+        "if",
+        "in",
+        "into",
+        "is",
+        "it",
+        "its",
+        "may",
+        "me",
+        "my",
+        "no",
+        "not",
+        "of",
+        "on",
+        "or",
+        "our",
+        "she",
+        "so",
+        "than",
+        "that",
+        "the",
+        "their",
+        "them",
+        "then",
+        "there",
+        "these",
+        "they",
+        "this",
+        "to",
+        "us",
+        "was",
+        "we",
+        "what",
+        "when",
+        "where",
+        "which",
+        "while",
+        "who",
+        "why",
+        "will",
+        "with",
+        "would",
+        "you",
+        "your",
+    }
+)
+
 
 def _sanitize_fts_query(query: str) -> str:
     """Sanitize a query string for FTS5 compatibility.
 
-    Removes characters that are invalid in FTS5 query syntax while preserving
-    alphanumeric words and hyphenated terms.
+    Removes FTS5 syntax characters, replaces hyphens/plus signs with spaces,
+    strips stop words (outside of quoted phrases), and validates the result
+    is non-empty.
 
     Args:
         query: Raw query string (may contain punctuation and special chars)
@@ -29,23 +104,45 @@ def _sanitize_fts_query(query: str) -> str:
         Cleaned query string safe for FTS5 MATCH clause
 
     Raises:
-        FTSQueryError: If the sanitized query is empty
+        FTSQueryError: If the sanitized query is empty after processing
     """
-    # Remove characters that FTS5 treats as syntax errors
-    # Includes: ?!.,;:[]{}()^~\
-    cleaned = re.sub(r"[?!.,;:\[\]{}()^~\\]", " ", query)
+    # Remove characters that FTS5 treats as syntax errors or special operators
+    # Includes: ?!.,;:[]{}()^~\ and single quotes (FTS5 string delimiter)
+    cleaned = re.sub(r"[?!.,;:\[\]{}()^~\\']", " ", query)
 
-    # Remove standalone + or - (keep hyphenated words like "state-of-the-art")
-    # Pattern: preceded by non-word OR start of string, AND followed by non-word OR end
-    cleaned = re.sub(r"(?<!\w)[+\-](?!\w)", " ", cleaned)
+    # Replace all hyphens and plus signs with spaces.
+    # FTS5's query parser interprets - as NOT and + as required-term operators.
+    # The unicode61 tokenizer already splits on hyphens when indexing, so
+    # "actor-network" is indexed as ["actor", "network"]. Replacing hyphens
+    # with spaces in the query produces the correct implicit-AND match.
+    cleaned = cleaned.replace("-", " ").replace("+", " ")
 
     # Handle unbalanced quotes by removing all quotes if count is odd
     # (FTS5 uses quotes for phrase matching, but unbalanced ones cause errors)
     if cleaned.count('"') % 2 != 0:
         cleaned = cleaned.replace('"', " ")
 
-    # Collapse multiple spaces and strip
-    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    # Remove stop words and convert to disjunctive (OR) mode.
+    #
+    # Stop words (outside quoted phrases) are removed because FTS5's implicit
+    # AND makes them overly restrictive. Remaining terms are joined with
+    # explicit OR so BM25 can rank by term overlap rather than requiring all
+    # terms to appear. Quoted phrases are preserved intact (exact sequence
+    # matters for phrase matching) and participate in the OR disjunction.
+    query_parts: list[str] = []  # phrases and OR-joined term groups
+    in_quote = False
+    for segment in cleaned.split('"'):
+        if in_quote:
+            # Inside quotes — preserve everything including stop words
+            query_parts.append(f'"{segment}"')
+        else:
+            # Outside quotes — remove stop words, collect content terms
+            words = [w for w in segment.split() if w.lower() not in _FTS_STOP_WORDS]
+            query_parts.extend(words)
+        in_quote = not in_quote
+
+    # Join all parts (phrases + terms) with OR for disjunctive matching
+    cleaned = " OR ".join(p for p in query_parts if p.strip())
 
     if not cleaned:
         raise FTSQueryError(

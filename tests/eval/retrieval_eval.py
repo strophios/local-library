@@ -34,6 +34,8 @@ class QueryResult:
     precision_at_10: float
     recall_at_10: float
     mrr: float
+    ndcg_at_5: float
+    ndcg_at_10: float
     retrieved_docs: list[str]
     relevant_docs: list[str]
 
@@ -92,36 +94,46 @@ def mean_reciprocal_rank(retrieved_doc_ids: list[str], relevant_doc_ids: set[str
 
 def ndcg_at_k(
     retrieved_doc_ids: list[str],
-    relevant_doc_ids: set[str],
+    relevance: set[str] | dict[str, int],
     k: int,
 ) -> float:
     """Compute Normalized Discounted Cumulative Gain at k.
 
-    Uses binary relevance (1 if relevant, 0 otherwise) with
-    log2 discounting.
+    Supports both binary relevance (set of relevant doc IDs) and graded
+    relevance (dict mapping doc ID to integer grade). When a set is passed,
+    all members receive grade 1 (backward compatible).
 
     Args:
         retrieved_doc_ids: Ordered list of retrieved document identifiers.
-        relevant_doc_ids: Set of known-relevant document identifiers.
+        relevance: Either a set of relevant doc IDs (binary, grade 1) or a
+            dict mapping doc ID to relevance grade (higher = more relevant).
         k: Cutoff position.
 
     Returns:
-        NDCG@k in [0.0, 1.0]. Returns 0.0 if relevant set is empty.
+        NDCG@k in [0.0, 1.0]. Returns 0.0 if relevance is empty.
     """
-    if not relevant_doc_ids or not retrieved_doc_ids or k <= 0:
+    if not relevance or not retrieved_doc_ids or k <= 0:
         return 0.0
+
+    # Normalize to dict[str, int] for uniform handling
+    if isinstance(relevance, set):
+        grades: dict[str, int] = dict.fromkeys(relevance, 1)
+    else:
+        grades = relevance
 
     truncated = retrieved_doc_ids[:k]
 
-    # DCG with binary relevance
+    # DCG with graded relevance
     dcg = 0.0
     for i, doc_id in enumerate(truncated):
-        if doc_id in relevant_doc_ids:
-            dcg += 1.0 / math.log2(i + 2)  # +2 because positions are 1-indexed
+        grade = grades.get(doc_id, 0)
+        if grade > 0:
+            dcg += grade / math.log2(i + 2)  # +2 because positions are 1-indexed
 
-    # Ideal DCG: all relevant docs at top positions
-    n_relevant_in_k = min(len(relevant_doc_ids), k)
-    idcg = sum(1.0 / math.log2(i + 2) for i in range(n_relevant_in_k))
+    # Ideal DCG: docs sorted by grade descending at top positions
+    sorted_grades = sorted(grades.values(), reverse=True)
+    n_grades_in_k = min(len(sorted_grades), k)
+    idcg = sum(sorted_grades[i] / math.log2(i + 2) for i in range(n_grades_in_k))
 
     if idcg == 0.0:
         return 0.0
@@ -135,14 +147,28 @@ def evaluate_query(
 ) -> QueryResult:
     """Evaluate a single query against its labeled relevance judgments.
 
+    Builds graded relevance from relevant_docs (grade 2) and also_relevant
+    (grade 1). Binary metrics (precision, recall, MRR) treat both grades
+    as relevant. NDCG uses graded relevance.
+
     Args:
-        query: Query dict with keys: id, text, category, relevant_docs
+        query: Query dict with keys: id, text, category, relevant_docs,
+            and optional also_relevant
         retrieved_citekeys: Ordered list of citekeys from search results
 
     Returns:
         QueryResult with computed metrics
     """
-    relevant = set(query["relevant_docs"])
+    # Binary relevance: both relevant_docs and also_relevant count
+    also_relevant = query.get("also_relevant", [])
+    relevant = set(query["relevant_docs"]) | set(also_relevant)
+
+    # Graded relevance for NDCG: relevant_docs=2, also_relevant=1
+    grades: dict[str, int] = dict.fromkeys(query["relevant_docs"], 2)
+    for doc_id in also_relevant:
+        if doc_id not in grades:  # relevant_docs takes precedence
+            grades[doc_id] = 1
+
     return QueryResult(
         query_id=query["id"],
         query_text=query["text"],
@@ -151,6 +177,8 @@ def evaluate_query(
         precision_at_10=precision_at_k(retrieved_citekeys, relevant, 10),
         recall_at_10=recall_at_k(retrieved_citekeys, relevant, 10),
         mrr=mean_reciprocal_rank(retrieved_citekeys, relevant),
+        ndcg_at_5=ndcg_at_k(retrieved_citekeys, grades, 5),
+        ndcg_at_10=ndcg_at_k(retrieved_citekeys, grades, 10),
         retrieved_docs=retrieved_citekeys[:10],
         relevant_docs=query["relevant_docs"],
     )
@@ -194,6 +222,20 @@ class EvalReport:
             return 0.0
         return sum(r.mrr for r in self.results) / len(self.results)
 
+    @property
+    def mean_ndcg_at_5(self) -> float:
+        """Mean NDCG@5 across all queries (graded relevance)."""
+        if not self.results:
+            return 0.0
+        return sum(r.ndcg_at_5 for r in self.results) / len(self.results)
+
+    @property
+    def mean_ndcg_at_10(self) -> float:
+        """Mean NDCG@10 across all queries (graded relevance)."""
+        if not self.results:
+            return 0.0
+        return sum(r.ndcg_at_10 for r in self.results) / len(self.results)
+
     def results_by_category(self) -> dict[str, list[QueryResult]]:
         """Group results by query category."""
         by_cat: dict[str, list[QueryResult]] = {}
@@ -210,6 +252,8 @@ class EvalReport:
             f"  Precision@10: {self.mean_precision_at_10:.3f}",
             f"  Recall@10:    {self.mean_recall_at_10:.3f}",
             f"  MRR:          {self.mean_mrr:.3f}",
+            f"  NDCG@5:       {self.mean_ndcg_at_5:.3f}",
+            f"  NDCG@10:      {self.mean_ndcg_at_10:.3f}",
             "",
             "By category:",
         ]
@@ -219,7 +263,11 @@ class EvalReport:
             p5 = sum(r.precision_at_5 for r in results) / n
             r10 = sum(r.recall_at_10 for r in results) / n
             mrr = sum(r.mrr for r in results) / n
-            lines.append(f"  {cat} ({n} queries): P@5={p5:.3f}  R@10={r10:.3f}  MRR={mrr:.3f}")
+            ndcg10 = sum(r.ndcg_at_10 for r in results) / n
+            lines.append(
+                f"  {cat} ({n} queries): P@5={p5:.3f}  R@10={r10:.3f}"
+                f"  MRR={mrr:.3f}  NDCG@10={ndcg10:.3f}"
+            )
 
         return "\n".join(lines)
 
@@ -231,6 +279,8 @@ class EvalReport:
             "mean_precision_at_10": round(self.mean_precision_at_10, 4),
             "mean_recall_at_10": round(self.mean_recall_at_10, 4),
             "mean_mrr": round(self.mean_mrr, 4),
+            "mean_ndcg_at_5": round(self.mean_ndcg_at_5, 4),
+            "mean_ndcg_at_10": round(self.mean_ndcg_at_10, 4),
             "by_category": {
                 cat: {
                     "count": len(results),
@@ -239,6 +289,7 @@ class EvalReport:
                     ),
                     "recall_at_10": round(sum(r.recall_at_10 for r in results) / len(results), 4),
                     "mrr": round(sum(r.mrr for r in results) / len(results), 4),
+                    "ndcg_at_10": round(sum(r.ndcg_at_10 for r in results) / len(results), 4),
                 }
                 for cat, results in sorted(self.results_by_category().items())
             },
@@ -255,7 +306,8 @@ def load_test_queries(path: Path) -> list[dict[str, Any]]:
         path: Path to test_queries.json
 
     Returns:
-        List of query dicts with keys: id, text, category, relevant_docs
+        List of query dicts with keys: id, text, category, relevant_docs,
+        and optional also_relevant (for graded relevance)
     """
     with open(path) as f:
         data = json.load(f)
