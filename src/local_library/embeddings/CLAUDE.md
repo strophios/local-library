@@ -1,6 +1,6 @@
 # Embeddings Domain
 
-Last verified: 2026-03-06
+Last verified: 2026-04-01
 
 ## Purpose
 
@@ -21,7 +21,7 @@ Handles document chunking, embedding computation, vector storage, and retrieval 
   - `VectorRetriever` converts cosine distance to similarity (1.0 - distance)
   - `FTSRetriever` negates BM25 scores (FTS5 returns negative; more negative = better)
   - `HybridRetriever` fuses results via RRF; falls back to vector-only on FTS syntax errors
-  - `EmbeddingStorage.search_fts()` raises `FTSQueryError` on invalid FTS5 syntax
+  - `EmbeddingStorage.search_fts()` sanitizes queries via `_sanitize_fts_query()`: removes FTS5 syntax chars and apostrophes, replaces hyphens/plus signs with spaces, strips stop words (outside quoted phrases), joins remaining terms with OR for disjunctive BM25 matching. Raises `FTSQueryError` on queries that become empty after sanitization
   - `Reranker.rerank()` takes query and SearchResult list, returns reranked list sorted by score descending
   - `CrossEncoderReranker` groups candidates by document ID, limits chunks per document, scores via cross-encoder model, and applies sigmoid normalization
   - `_group_by_document()` partitions results by doc_id, keeps top-N chunks per document by score, returns flattened list
@@ -49,6 +49,8 @@ Handles document chunking, embedding computation, vector storage, and retrieval 
 - **Metadata enrichment**: Retrievers batch-lookup doc title/citekey via `_lookup_doc_metadata()` to populate SearchResult display fields
 - **FTS fallback in hybrid**: HybridRetriever catches `FTSQueryError` and degrades to vector-only with a warning (queries with special characters can break FTS5 syntax)
 - **Candidate multiplier**: HybridRetriever retrieves k * candidate_multiplier (default 3x) from each backend before RRF fusion to improve recall
+- **Asymmetric RRF weights**: HybridRetriever defaults to vector_weight=1.0, fts_weight=0.5 (2:1 ratio). Vector semantic signal dominates; FTS provides lexical boosting. Tuned empirically against 74-query eval set
+- **FTS query preprocessing**: `_sanitize_fts_query()` removes stop words and joins terms with OR. FTS5's default implicit-AND is too restrictive for natural language queries; disjunctive (OR) mode lets BM25 rank by term overlap. Stop words removed outside quoted phrases only (phrase semantics preserved)
 - **Document-aware reranking**: CrossEncoderReranker groups by document to prevent one document from monopolizing top results; each document contributes at most max_chunks_per_doc candidates to scoring
 - **Sigmoid normalization**: Cross-encoder raw logits are converted to [0, 1] range using numerically stable sigmoid, preserving relative ordering
 - **Model loading with error handling**: CrossEncoderReranker._load_model() wraps ImportError and generic Exception, raising EmbeddingError with ErrorCode.EMBEDDING_MODEL_LOAD_FAILED
@@ -86,7 +88,9 @@ Handles document chunking, embedding computation, vector storage, and retrieval 
 - `search_similar()` returns (Chunk, distance) tuples sorted by distance ascending
 - `search_fts()` returns (Chunk, bm25_score) tuples; BM25 scores are negative (more negative = better match)
 - `_rrf_fuse()` is module-private (underscore prefix) but tested directly; stable interface for HybridRetriever
-- FTS5 MATCH can fail on queries with special characters (quotes, parentheses, etc.); `search_fts()` wraps these as `FTSQueryError`
+- FTS5 MATCH can fail on queries with special characters; `_sanitize_fts_query()` handles most cases but `search_fts()` wraps remaining failures as `FTSQueryError`
+- `_sanitize_fts_query()` converts queries to disjunctive OR mode — callers should not assume FTS5 implicit-AND semantics
+- `_FTS_STOP_WORDS` is a module-level frozenset (~60 words); adding words changes FTS query behavior globally
 - Retrievers access `EmbeddingStorage._conn` directly for metadata lookup (internal coupling, acceptable given shared domain)
 - Cross-encoder models require `trust_remote_code=True` for BGE models (parameterized by model name)
 - CrossEncoderReranker._load_model() raises EmbeddingError on ImportError or model loading failure (matches NomicEmbedder pattern)

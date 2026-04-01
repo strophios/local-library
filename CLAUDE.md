@@ -87,7 +87,7 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - **Retriever protocol**: Protocol-based extensibility; `Library.get_retriever()` factory method wires up dependencies; `Reranker` protocol for pluggable reranking
 - **Cross-encoder reranking**: Document-aware CrossEncoderReranker groups candidates by document, limits chunks per document, scores via cross-encoder/ms-marco-MiniLM-L-12-v2, applies sigmoid normalization. RerankedRetriever wraps any Retriever with broadened candidate pool + reranking
 - **CLI `search` command**: hybrid/vector/fts modes, document-scoped search (--doc), JSON output (--json), configurable result limit (--limit), reranking on by default (--no-rerank to disable)
-- **Retrieval evaluation framework**: IR metrics (Precision@k, Recall@k, MRR, NDCG@k), seed query set (test_queries.json), automated evaluation harness, reranker benchmark script
+- **Retrieval evaluation framework**: IR metrics (Precision@k, Recall@k, MRR, NDCG@k with graded relevance), 76-query evaluation set across 5 categories with 3-tier relevance grading, automated comparative evaluation harness, reranker benchmark script. Baseline: hybrid+rerank achieves MRR=0.913, NDCG@10=0.896 on ~20-doc dev corpus
 - **LLM abstraction layer**: LLMClient protocol with LiteLLMClient implementation; provider-agnostic LLM access with error mapping to ErrorCode hierarchy
 - **RAG query interface**: RAGInterface orchestrates context assembly, prompt construction, and LLM generation; RAGStream supports streaming with token accumulation; pre-LLM gate skips API call when no context retrieved
 - **CLI `ask` command**: streaming answers with Rich Live display, --no-stream, --json, --model, --mode, --doc, --limit, --no-rerank options; source citations with citekey attribution
@@ -167,13 +167,14 @@ Comprehensive research on the RAG pipeline is documented in `RAG_background/`. T
 - Reframe verification as "triage for human review" rather than "automated decision"
 - Same infrastructure, lower accuracy bar, immediate utility
 
-### Evaluation Framework (Initial)
-A retrieval evaluation framework has been implemented in `tests/eval/`. Current state:
-- **IR metrics**: `retrieval_eval.py` provides Precision@k, Recall@k, MRR, NDCG@k with unit tests (`test_retrieval_metrics.py`)
-- **Seed query set**: `test_queries.json` contains 12 labeled test queries across 5 categories (factual, conceptual, comparative, methodology, adversarial)
-- **Comparative harness**: Runs all three retriever modes (vector, FTS, hybrid) with per-category breakdowns
-- **Reranker benchmark**: `reranker_benchmark.py` evaluates cross-encoder models across retriever modes with NDCG@10 and latency metrics; results in `reranker_results.json`
-- **Planned expansion (post-M7)**: Query set expansion to 50-100 queries, quality targets, latency benchmarks, and end-to-end RAG evaluation are planned for after M7 — see `build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling" for rationale and sequencing
+### Evaluation Framework
+A retrieval evaluation framework is implemented in `tests/eval/`. See `tests/eval/README.md` for full documentation including baseline results and findings.
+- **IR metrics**: `retrieval_eval.py` provides Precision@k, Recall@k, MRR, NDCG@k (with graded relevance) and unit tests (`test_retrieval_metrics.py`)
+- **Query set**: `test_queries.json` v2.0 contains 76 labeled queries across 6 categories with 3-tier graded relevance (see `annotation_rubric.md`)
+- **Comparative harness**: Runs all retriever modes (vector, FTS, hybrid) with/without reranking, per-category breakdowns
+- **Baseline results**: hybrid+rerank achieves MRR=0.913, NDCG@10=0.896 on ~20-doc dev corpus. Conceptual queries are the weak spot (NDCG@10=0.784). Full results in `baseline_results.json`
+- **Reranker benchmark**: `reranker_benchmark.py` evaluates cross-encoder models; results in `reranker_results.json`
+- **Next steps**: Establish quality targets, investigate conceptual query gap, scale to full Zotero corpus (~1400 docs)
 
 ### What Would Change These Decisions
 - Scale beyond 250K vectors → migrate to LanceDB
