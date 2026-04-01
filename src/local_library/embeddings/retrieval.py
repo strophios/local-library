@@ -250,7 +250,7 @@ class HybridRetriever:
         fts_retriever: FTSRetriever,
         rrf_k: int = 60,
         vector_weight: float = 1.0,
-        fts_weight: float = 1.0,
+        fts_weight: float = 0.5,
         candidate_multiplier: int = 3,
     ) -> None:
         """Initialize with sub-retrievers and RRF parameters.
@@ -259,8 +259,10 @@ class HybridRetriever:
             vector_retriever: VectorRetriever instance
             fts_retriever: FTSRetriever instance
             rrf_k: RRF smoothing constant (default 60)
-            vector_weight: Weight for vector results in RRF
-            fts_weight: Weight for FTS results in RRF
+            vector_weight: Weight for vector results in RRF (default 1.0)
+            fts_weight: Weight for FTS results in RRF (default 0.5; FTS
+                provides lexical boosting but semantic signal should
+                dominate for natural language queries)
             candidate_multiplier: Retrieve k * multiplier candidates per method
         """
         self._vector = vector_retriever
