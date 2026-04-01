@@ -509,6 +509,98 @@ class TestLibraryDelete:
         assert library._storage_dir.exists()
 
 
+class TestLibraryReextract:
+    """Tests for Library.reextract() method."""
+
+    @pytest.fixture
+    def library_with_doc(self, temp_dir: Path) -> tuple[Library, str]:
+        """Provide a Library with one document added via mocked extraction."""
+        library = Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=False,
+        )
+
+        pdf_path = temp_dir / "sample.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 test content")
+
+        with patch.object(library._extractors[0], "extract_and_validate") as mock_extract:
+            mock_extract.return_value = MagicMock(text="Original extraction" * 20)
+            result = library.add(str(pdf_path))
+
+        return library, str(result.document.id)
+
+    def test_reextract_updates_markdown(
+        self, library_with_doc: tuple[Library, str]
+    ) -> None:
+        """reextract() should overwrite the extracted markdown with new text."""
+        library, doc_id = library_with_doc
+        doc = library.get(doc_id)
+        old_text = Path(doc.extracted_path).read_text()
+
+        with patch.object(library._extractors[0], "extract_and_validate") as mock_extract:
+            mock_extract.return_value = MagicMock(text="Improved extraction" * 20)
+            updated = library.reextract(doc_id)
+
+        new_text = Path(updated.extracted_path).read_text()
+        assert new_text != old_text
+        assert "Improved" in new_text
+
+    def test_reextract_marks_embeddings_stale(
+        self, library_with_doc: tuple[Library, str]
+    ) -> None:
+        """reextract() should mark embeddings as STALE."""
+        library, doc_id = library_with_doc
+
+        with patch.object(library._extractors[0], "extract_and_validate") as mock_extract:
+            mock_extract.return_value = MagicMock(text="New extraction" * 20)
+            updated = library.reextract(doc_id)
+
+        from local_library.core.models import EmbeddingStatus
+
+        assert updated.embedding_status == EmbeddingStatus.STALE
+
+    def test_reextract_preserves_metadata(
+        self, library_with_doc: tuple[Library, str]
+    ) -> None:
+        """reextract() should not modify existing metadata."""
+        library, doc_id = library_with_doc
+        doc = library.get(doc_id)
+        original_citekey = doc.citekey
+        original_csl = doc.csl_json
+
+        with patch.object(library._extractors[0], "extract_and_validate") as mock_extract:
+            mock_extract.return_value = MagicMock(text="New extraction" * 20)
+            updated = library.reextract(doc_id)
+
+        assert updated.citekey == original_citekey
+        assert updated.csl_json == original_csl
+
+    def test_reextract_returns_ready_document(
+        self, library_with_doc: tuple[Library, str]
+    ) -> None:
+        """reextract() should return document with READY status."""
+        library, doc_id = library_with_doc
+
+        with patch.object(library._extractors[0], "extract_and_validate") as mock_extract:
+            mock_extract.return_value = MagicMock(text="New extraction" * 20)
+            updated = library.reextract(doc_id)
+
+        assert updated.status == DocumentStatus.READY
+
+    def test_reextract_not_found_raises(
+        self, library_with_doc: tuple[Library, str]
+    ) -> None:
+        """reextract() should raise LookupError for nonexistent ID."""
+        library, _ = library_with_doc
+
+        with pytest.raises(LookupError) as exc_info:
+            library.reextract("nonexistent-id")
+
+        assert exc_info.value.code == ErrorCode.NOT_FOUND
+
+
 class TestLibraryPdfLLMConfiguration:
     """Tests for Library PDF LLM extraction configuration."""
 

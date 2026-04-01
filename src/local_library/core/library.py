@@ -50,9 +50,9 @@ from local_library.core.storage import (
     update_document_status,
 )
 from local_library.core.vec_extension import is_vec_available, load_vec_extension
+from local_library.ingestion.artifact_cleanup import clean_artifacts
 from local_library.ingestion.base import ContentAcquirer, ContentExtractor, compute_storage_path
 from local_library.ingestion.file import FileAcquirer
-from local_library.ingestion.artifact_cleanup import clean_artifacts
 from local_library.ingestion.markdown_cleanup import cleanup_markdown
 from local_library.ingestion.metadata import MetadataHandler
 from local_library.ingestion.pdf import PdfExtractor
@@ -869,6 +869,54 @@ class Library:
             List of all non-null citekeys
         """
         return get_all_citekeys(self._conn)
+
+    def reextract(self, doc_id: str) -> Document:
+        """Re-extract text from a document's stored PDF.
+
+        Re-runs the extraction pipeline on the stored PDF, applies artifact
+        cleanup and markdown formatting, overwrites the extracted markdown
+        file, and marks embeddings as STALE. Does not modify metadata.
+
+        Args:
+            doc_id: Document UUID (full or partial) or @citekey
+
+        Returns:
+            Updated Document with new extracted_path and STALE embeddings
+
+        Raises:
+            LookupError: If document not found
+            ExtractionError: If extraction fails
+        """
+        doc = self.get(doc_id)
+        storage_path = Path(doc.storage_path)
+
+        extractor = self._find_extractor(storage_path)
+        result = extractor.extract_and_validate(storage_path)
+
+        cleaned_text = clean_artifacts(result.text)
+        cleaned_text = cleanup_markdown(cleaned_text)
+
+        # Write to existing extracted_path, or compute new one
+        if doc.extracted_path:
+            extracted_path = Path(doc.extracted_path)
+        else:
+            extracted_path = compute_storage_path(doc.content_hash, ".md", self._extracted_dir)
+        extracted_path.parent.mkdir(parents=True, exist_ok=True)
+        extracted_path.write_text(cleaned_text, encoding="utf-8")
+
+        # Update record status and extracted_path
+        update_document_status(
+            self._conn,
+            doc.id,
+            DocumentStatus.READY,
+            extracted_path=str(extracted_path),
+        )
+
+        # Mark embeddings stale so they get re-embedded
+        self._mark_embeddings_stale(doc.id)
+
+        # Re-fetch to include stale embedding status
+        return self.get(str(doc.id))
 
     def update_metadata(
         self,
