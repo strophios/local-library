@@ -35,9 +35,12 @@ def _sanitize_fts_query(query: str) -> str:
     # Includes: ?!.,;:[]{}()^~\
     cleaned = re.sub(r"[?!.,;:\[\]{}()^~\\]", " ", query)
 
-    # Remove standalone + or - (keep hyphenated words like "state-of-the-art")
-    # Pattern: preceded by non-word OR start of string, AND followed by non-word OR end
-    cleaned = re.sub(r"(?<!\w)[+\-](?!\w)", " ", cleaned)
+    # Replace all hyphens and plus signs with spaces.
+    # FTS5's query parser interprets - as NOT and + as required-term operators.
+    # The unicode61 tokenizer already splits on hyphens when indexing, so
+    # "actor-network" is indexed as ["actor", "network"]. Replacing hyphens
+    # with spaces in the query produces the correct implicit-AND match.
+    cleaned = cleaned.replace("-", " ").replace("+", " ")
 
     # Handle unbalanced quotes by removing all quotes if count is odd
     # (FTS5 uses quotes for phrase matching, but unbalanced ones cause errors)

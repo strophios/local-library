@@ -117,12 +117,35 @@ class TestSanitizeFtsQuery:
         result = _sanitize_fts_query(query)
         assert result == "machine learning algorithms"
 
-    def test_hyphenated_words_preserved(self) -> None:
-        """Hyphenated words like state-of-the-art are preserved."""
+    def test_hyphens_between_words_replaced_with_spaces(self) -> None:
+        """Hyphens between words are replaced with spaces.
+
+        FTS5's unicode61 tokenizer splits on hyphens when indexing, so
+        the indexed tokens are already separate words. But FTS5's query
+        parser interprets hyphens as the NOT operator, so 'actor-network'
+        becomes 'actor NOT network'. Replacing hyphens with spaces makes
+        the query match the indexed tokens correctly.
+        """
         query = "state-of-the-art deep-learning"
         result = _sanitize_fts_query(query)
-        assert "state-of-the-art" in result
-        assert "deep-learning" in result
+        assert "-" not in result
+        assert "state" in result
+        assert "art" in result
+        assert "deep" in result
+        assert "learning" in result
+
+    def test_hyphenated_query_no_fts_column_error(self) -> None:
+        """Queries with hyphens must not produce FTS5 column filter syntax.
+
+        Without this fix, 'actor-network theory' causes FTS5 to interpret
+        'network' as a column name, raising 'no such column: network'.
+        """
+        query = "How does actor-network theory work?"
+        result = _sanitize_fts_query(query)
+        assert "-" not in result
+        assert "actor" in result
+        assert "network" in result
+        assert "theory" in result
 
     def test_standalone_plus_sign_removed(self) -> None:
         """Standalone + operators are removed."""
