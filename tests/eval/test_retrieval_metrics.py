@@ -166,11 +166,78 @@ class TestNDCGAtK:
         assert ndcg_at_k(retrieved, relevant, k=5) == pytest.approx(0.6509, abs=0.001)
 
 
+class TestNDCGAtKGraded:
+    """Tests for NDCG@k with graded relevance (dict mapping doc_id → grade)."""
+
+    def test_perfect_graded_ranking(self) -> None:
+        """Grade-2 doc first, grade-1 second yields NDCG of 1.0."""
+        retrieved = ["a", "b", "c", "d"]
+        relevance = {"a": 2, "b": 1}
+        assert ndcg_at_k(retrieved, relevance, k=4) == pytest.approx(1.0)
+
+    def test_swapped_grades_less_than_perfect(self) -> None:
+        """Grade-1 doc before grade-2 doc yields NDCG < 1.0.
+
+        This is the key distinction from binary relevance: with binary,
+        both orderings would score 1.0. With graded, putting the
+        higher-grade doc first matters.
+        """
+        # DCG  = 1/log2(2) + 2/log2(3) = 1.0 + 1.2619 = 2.2619
+        # IDCG = 2/log2(2) + 1/log2(3) = 2.0 + 0.6309 = 2.6309
+        # NDCG = 2.2619 / 2.6309 ≈ 0.8597
+        retrieved = ["b", "a", "c", "d"]
+        relevance = {"a": 2, "b": 1}
+        result = ndcg_at_k(retrieved, relevance, k=4)
+        assert result == pytest.approx(0.8597, abs=0.001)
+        assert result < 1.0  # strictly less than perfect
+
+    def test_known_graded_value(self) -> None:
+        """Verify against hand-calculated graded NDCG@5.
+
+        retrieved = [irrel, grade2, irrel, grade1, irrel]
+        DCG  = 0 + 2/log2(3) + 0 + 1/log2(5) = 1.2619 + 0.4307 = 1.6926
+        IDCG = 2/log2(2) + 1/log2(3)           = 2.0    + 0.6309 = 2.6309
+        NDCG = 1.6926 / 2.6309 ≈ 0.6432
+        """
+        retrieved = ["c", "a", "d", "b", "e"]
+        relevance = {"a": 2, "b": 1}
+        assert ndcg_at_k(retrieved, relevance, k=5) == pytest.approx(0.6432, abs=0.001)
+
+    def test_graded_empty_relevance(self) -> None:
+        """Empty relevance dict yields NDCG of 0.0."""
+        assert ndcg_at_k(["a", "b"], {}, k=5) == pytest.approx(0.0)
+
+    def test_graded_no_relevant_found(self) -> None:
+        """No relevant docs in retrieved list yields 0.0."""
+        retrieved = ["c", "d", "e"]
+        relevance = {"a": 2, "b": 1}
+        assert ndcg_at_k(retrieved, relevance, k=3) == pytest.approx(0.0)
+
+    def test_set_still_works_as_binary(self) -> None:
+        """Passing a set uses binary relevance (backward compat)."""
+        # Same as the existing test_known_value
+        retrieved = ["c", "a", "d", "b", "e"]
+        relevant = {"a", "b"}
+        assert ndcg_at_k(retrieved, relevant, k=5) == pytest.approx(0.6509, abs=0.001)
+
+    def test_graded_three_levels(self) -> None:
+        """Multiple grade levels with distinct values.
+
+        retrieved = [grade3, grade1, grade2]
+        DCG  = 3/log2(2) + 1/log2(3) + 2/log2(4) = 3.0 + 0.6309 + 1.0 = 4.6309
+        IDCG = 3/log2(2) + 2/log2(3) + 1/log2(4) = 3.0 + 1.2619 + 0.5 = 4.7619
+        NDCG = 4.6309 / 4.7619 ≈ 0.9725
+        """
+        retrieved = ["a", "c", "b"]
+        relevance = {"a": 3, "b": 2, "c": 1}
+        assert ndcg_at_k(retrieved, relevance, k=3) == pytest.approx(0.9725, abs=0.001)
+
+
 class TestEvaluateQuery:
     """Tests for evaluate_query."""
 
     def test_computes_all_metrics(self) -> None:
-        """evaluate_query returns QueryResult with all metrics."""
+        """evaluate_query returns QueryResult with all metrics including NDCG."""
         query = {
             "id": "q1",
             "text": "test query",
@@ -187,6 +254,60 @@ class TestEvaluateQuery:
         assert result.precision_at_5 == pytest.approx(2 / 5)
         assert result.recall_at_10 == 1.0  # Both found in top 5
         assert result.mrr == 1.0  # First result is relevant
+        assert result.ndcg_at_5 > 0.0
+        assert result.ndcg_at_10 > 0.0
+
+    def test_also_relevant_counted_for_binary_metrics(self) -> None:
+        """also_relevant docs count as relevant for precision/recall/MRR."""
+        query = {
+            "id": "q2",
+            "text": "test query",
+            "category": "factual",
+            "relevant_docs": ["a"],
+            "also_relevant": ["b"],
+        }
+        # "b" is grade 1, should count as relevant for binary metrics
+        retrieved = ["b", "x", "a", "y", "z"]
+
+        result = evaluate_query(query, retrieved)
+
+        # Both a (grade 2) and b (grade 1) are relevant for binary metrics
+        assert result.precision_at_5 == pytest.approx(2 / 5)
+        assert result.recall_at_10 == 1.0
+        assert result.mrr == 1.0  # "b" is first and is relevant
+
+    def test_also_relevant_graded_ndcg(self) -> None:
+        """NDCG uses graded relevance: relevant_docs=2, also_relevant=1."""
+        query = {
+            "id": "q3",
+            "text": "test query",
+            "category": "factual",
+            "relevant_docs": ["a"],
+            "also_relevant": ["b"],
+        }
+        # Optimal order: a (grade 2) first, b (grade 1) second
+        # Actual: a first, b second → perfect NDCG
+        retrieved = ["a", "b", "x", "y", "z"]
+        result_perfect = evaluate_query(query, retrieved)
+
+        # Reversed: b first, a second → less than perfect NDCG
+        retrieved_swapped = ["b", "a", "x", "y", "z"]
+        result_swapped = evaluate_query(query, retrieved_swapped)
+
+        assert result_perfect.ndcg_at_5 == pytest.approx(1.0)
+        assert result_swapped.ndcg_at_5 < 1.0
+
+    def test_missing_also_relevant_defaults_empty(self) -> None:
+        """Queries without also_relevant field work (backward compat)."""
+        query = {
+            "id": "q4",
+            "text": "test query",
+            "category": "factual",
+            "relevant_docs": ["a"],
+        }
+        retrieved = ["a", "x", "y"]
+        result = evaluate_query(query, retrieved)
+        assert result.ndcg_at_5 == pytest.approx(1.0)
 
 
 class TestEvalReport:
@@ -198,6 +319,7 @@ class TestEvalReport:
         assert report.mean_precision_at_5 == 0.0
         assert report.mean_recall_at_10 == 0.0
         assert report.mean_mrr == 0.0
+        assert report.mean_ndcg_at_10 == 0.0
 
     def test_aggregate_metrics(self) -> None:
         """Report computes correct averages across queries."""
@@ -211,6 +333,8 @@ class TestEvalReport:
                 precision_at_10=0.6,
                 recall_at_10=1.0,
                 mrr=1.0,
+                ndcg_at_5=1.0,
+                ndcg_at_10=1.0,
                 retrieved_docs=[],
                 relevant_docs=[],
             )
@@ -224,6 +348,8 @@ class TestEvalReport:
                 precision_at_10=0.3,
                 recall_at_10=0.5,
                 mrr=0.5,
+                ndcg_at_5=0.6,
+                ndcg_at_10=0.4,
                 retrieved_docs=[],
                 relevant_docs=[],
             )
@@ -231,6 +357,7 @@ class TestEvalReport:
 
         assert report.mean_precision_at_5 == pytest.approx(0.6)
         assert report.mean_mrr == pytest.approx(0.75)
+        assert report.mean_ndcg_at_10 == pytest.approx(0.7)
 
     def test_results_by_category(self) -> None:
         """Report groups results by category."""
@@ -244,6 +371,8 @@ class TestEvalReport:
                 precision_at_10=0.6,
                 recall_at_10=1.0,
                 mrr=1.0,
+                ndcg_at_5=1.0,
+                ndcg_at_10=1.0,
                 retrieved_docs=[],
                 relevant_docs=[],
             )
@@ -257,6 +386,8 @@ class TestEvalReport:
                 precision_at_10=0.3,
                 recall_at_10=0.5,
                 mrr=0.5,
+                ndcg_at_5=0.6,
+                ndcg_at_10=0.4,
                 retrieved_docs=[],
                 relevant_docs=[],
             )
@@ -279,6 +410,8 @@ class TestEvalReport:
                 precision_at_10=0.6,
                 recall_at_10=1.0,
                 mrr=1.0,
+                ndcg_at_5=1.0,
+                ndcg_at_10=1.0,
                 retrieved_docs=[],
                 relevant_docs=[],
             )
@@ -288,6 +421,7 @@ class TestEvalReport:
         assert "Precision@5" in summary
         assert "Recall@10" in summary
         assert "MRR" in summary
+        assert "NDCG@10" in summary
 
     def test_to_dict(self) -> None:
         """to_dict produces JSON-serializable output."""
@@ -301,6 +435,8 @@ class TestEvalReport:
                 precision_at_10=0.6,
                 recall_at_10=1.0,
                 mrr=1.0,
+                ndcg_at_5=1.0,
+                ndcg_at_10=1.0,
                 retrieved_docs=[],
                 relevant_docs=[],
             )
@@ -310,4 +446,5 @@ class TestEvalReport:
         assert "total_queries" in d
         assert d["total_queries"] == 1
         assert "mean_precision_at_5" in d
+        assert "mean_ndcg_at_10" in d
         assert "by_category" in d
