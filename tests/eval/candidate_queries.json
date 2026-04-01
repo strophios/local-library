@@ -1,0 +1,753 @@
+{
+  "description": "Candidate evaluation queries for human review. Accept, reject, or edit each.",
+  "queries": [
+    {
+      "id": "cited_Tajfel1979_1",
+      "text": "How do people's group memberships shape their self-concept and drive favoritism toward their own group?",
+      "category": "conceptual",
+      "relevant_docs": [
+        "Tajfel1979"
+      ],
+      "also_relevant": [
+        "Melucci1995"
+      ],
+      "source_context": "Dissertation text on social identity theory grounding affective polarization",
+      "difficulty": "easy"
+    },
+    {
+      "id": "cited_Tajfel1979_2",
+      "text": "What is the relationship between realistic conflict theory and social categorization approaches to prejudice?",
+      "category": "conceptual",
+      "relevant_docs": [
+        "Tajfel1979"
+      ],
+      "also_relevant": [],
+      "source_context": "Huddy reading notes noting that social identity theory builds on realistic conflict theory",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cited_Tajfel1979_3",
+      "text": "Can minimal group membership alone produce discriminatory behavior between groups?",
+      "category": "factual",
+      "relevant_docs": [
+        "Tajfel1979"
+      ],
+      "also_relevant": [],
+      "source_context": "Dissertation paragraph on how even meaningless group identification creates ingroup favoritism",
+      "difficulty": "easy"
+    },
+    {
+      "id": "cited_Tajfel1979_4",
+      "text": "How does perceived danger from an opposing group strengthen identification with one's own group?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "Tajfel1979"
+      ],
+      "also_relevant": [
+        "Goodwin2011"
+      ],
+      "source_context": "Dissatisfaction paper noting that threat can itself motivate identification",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cited_Tajfel1979_5",
+      "text": "What is the continuum between individually motivated and group-driven behavior in intergroup relations?",
+      "category": "conceptual",
+      "relevant_docs": [
+        "Tajfel1979"
+      ],
+      "also_relevant": [],
+      "source_context": "Huddy reading notes referencing Tajfel's continuum",
+      "difficulty": "hard"
+    },
+    {
+      "id": "cited_Melucci1995_1",
+      "text": "How do social movements develop a shared sense of who they are as a group?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "Melucci1995"
+      ],
+      "also_relevant": [],
+      "source_context": "Immigration project citing Melucci on collective identity",
+      "difficulty": "easy"
+    },
+    {
+      "id": "cited_Melucci1995_2",
+      "text": "What role does reflexive self-awareness play in the formation and maintenance of protest movements?",
+      "category": "conceptual",
+      "relevant_docs": [
+        "Melucci1995"
+      ],
+      "also_relevant": [
+        "Goodwin2011"
+      ],
+      "source_context": "Immigration draft discussing collective identity and reflexivity",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cited_Melucci1995_3",
+      "text": "Why is it difficult for fragmented activist groups to build a sustained campaign without a unifying collective identity?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "Melucci1995"
+      ],
+      "also_relevant": [
+        "Goodwin2011"
+      ],
+      "source_context": "Immigration project on diasporic domain's fragmentation",
+      "difficulty": "hard"
+    },
+    {
+      "id": "cited_Goodwin2011_1",
+      "text": "What motivates people to protest when political conditions are getting worse rather than better?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "Goodwin2011"
+      ],
+      "also_relevant": [
+        "Tajfel1979"
+      ],
+      "source_context": "Lit review on threat as contracting opportunities motivating defensive contention",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cited_Goodwin2011_2",
+      "text": "Are protesters primarily motivated by strategic calculation of political opportunities?",
+      "category": "conceptual",
+      "relevant_docs": [
+        "Goodwin2011"
+      ],
+      "also_relevant": [],
+      "source_context": "Goodwin's fifty tests of whether protesters are opportunists",
+      "difficulty": "easy"
+    },
+    {
+      "id": "cited_Goodwin2011_3",
+      "text": "How should we distinguish between threat as an external assessment and fear as an internal emotional response in contentious politics?",
+      "category": "conceptual",
+      "relevant_docs": [
+        "Goodwin2011"
+      ],
+      "also_relevant": [
+        "Tajfel1979"
+      ],
+      "source_context": "Dissatisfaction paper footnote defining threat vs fear",
+      "difficulty": "hard"
+    },
+    {
+      "id": "cited_Goodwin2011_4",
+      "text": "Do people sometimes engage in collective action out of general concern even without favorable political conditions?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "Goodwin2011"
+      ],
+      "also_relevant": [],
+      "source_context": "Lit review on disconnected activism and baseline mobilization",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cited_Sewell1996a_1",
+      "text": "How can singular historical occurrences transform social structures in ways that path-dependent models cannot explain?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "Sewell1996a"
+      ],
+      "also_relevant": [],
+      "source_context": "Hess2004 reading notes referencing Sewell's concept of transformative events",
+      "difficulty": "hard"
+    },
+    {
+      "id": "cited_Sewell1996a_2",
+      "text": "What is eventful sociology and how does it account for the role of contingent events in historical change?",
+      "category": "factual",
+      "relevant_docs": [
+        "Sewell1996a"
+      ],
+      "also_relevant": [],
+      "source_context": "Reading notes on Hess2004 discussing backfire as transformative event",
+      "difficulty": "easy"
+    },
+    {
+      "id": "cited_Hanna2017_1",
+      "text": "How can machine learning be used to automatically identify reports of protest events in newspaper archives?",
+      "category": "methodology",
+      "relevant_docs": [
+        "Hanna2017"
+      ],
+      "also_relevant": [
+        "Dhingra2022"
+      ],
+      "source_context": "ML memo discussing ML for protest event identification",
+      "difficulty": "easy"
+    },
+    {
+      "id": "cited_Hanna2017_2",
+      "text": "What are the main subtasks involved in computationally extracting structured event data from news text about collective action?",
+      "category": "methodology",
+      "relevant_docs": [
+        "Hanna2017"
+      ],
+      "also_relevant": [],
+      "source_context": "ML memo on haystack task, closed-ended coding, and open-ended coding",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cited_Hanna2017_3",
+      "text": "Why is defining what counts as a protest so difficult for automated classification systems?",
+      "category": "conceptual",
+      "relevant_docs": [
+        "Hanna2017"
+      ],
+      "also_relevant": [],
+      "source_context": "ML memo on heterogeneity and boundary problems of protest",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cited_Hanna2017_4",
+      "text": "What happens when a classifier trained on hand-coded protest data is applied back to the source newspaper corpus?",
+      "category": "factual",
+      "relevant_docs": [
+        "Hanna2017"
+      ],
+      "also_relevant": [],
+      "source_context": "Hanna's finding that 31 of 50 false positives were actually correct",
+      "difficulty": "hard"
+    },
+    {
+      "id": "cited_Tushnet2004_1",
+      "text": "What is constitutional hardball and how does it differ from ordinary partisan politics?",
+      "category": "factual",
+      "relevant_docs": [
+        "Tushnet2004"
+      ],
+      "also_relevant": [],
+      "source_context": "Dissertation defining constitutional hardball",
+      "difficulty": "easy"
+    },
+    {
+      "id": "cited_Tushnet2004_2",
+      "text": "How do political actors exploit informal norms and conventions to gain strategic advantages within a constitutional system?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "Tushnet2004"
+      ],
+      "also_relevant": [],
+      "source_context": "Dissertation on norm violation as partisan strategy",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cited_Tushnet2004_3",
+      "text": "What role has deliberate norm-breaking played in the asymmetric radicalization of American political parties?",
+      "category": "comparative",
+      "relevant_docs": [
+        "Tushnet2004"
+      ],
+      "also_relevant": [
+        "Tajfel1979"
+      ],
+      "source_context": "Both dissertation papers arguing Republican Party as primary polarizing actor",
+      "difficulty": "hard"
+    },
+    {
+      "id": "cited_Wilson-Mendenhall2018_1",
+      "text": "How does the brain construct emotional experiences using the same cognitive processes it uses for other concepts?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "Wilson-Mendenhall2018"
+      ],
+      "also_relevant": [],
+      "source_context": "BNA writing sample on emotions as concepts",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cited_Wilson-Mendenhall2018_2",
+      "text": "What is the role of conceptual processing and situated memory in generating affective states?",
+      "category": "conceptual",
+      "relevant_docs": [
+        "Wilson-Mendenhall2018"
+      ],
+      "also_relevant": [],
+      "source_context": "Emotion notes on conceptual processing approaches to emotion",
+      "difficulty": "hard"
+    },
+    {
+      "id": "cited_Wilson-Mendenhall2018_3",
+      "text": "Are emotions fundamentally different from propositional beliefs or do they share underlying cognitive architecture?",
+      "category": "conceptual",
+      "relevant_docs": [
+        "Wilson-Mendenhall2018"
+      ],
+      "also_relevant": [],
+      "source_context": "BNA paper arguing affect and attitude are more similar than assumed",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cited_Wilson-Mendenhall2018_4",
+      "text": "How should researchers distinguish between feelings and opinions when categorizing survey responses about politics?",
+      "category": "methodology",
+      "relevant_docs": [
+        "Wilson-Mendenhall2018"
+      ],
+      "also_relevant": [],
+      "source_context": "BNA paper on distinction between affective and attitudinal survey items",
+      "difficulty": "hard"
+    },
+    {
+      "id": "cited_Zambrana2009_1",
+      "text": "How do race, gender, and socioeconomic background interact to create compounding barriers to university access?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "Zambrana2009"
+      ],
+      "also_relevant": [],
+      "source_context": "Citational inequality paper on intersecting exclusions",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cited_Zambrana2009_2",
+      "text": "What institutional policies have historically restricted access to higher education for underrepresented groups?",
+      "category": "factual",
+      "relevant_docs": [
+        "Zambrana2009"
+      ],
+      "also_relevant": [],
+      "source_context": "Citational inequality paper listing institutional mechanisms of exclusion",
+      "difficulty": "easy"
+    },
+    {
+      "id": "cited_Massachusetts2024_1",
+      "text": "How much heating assistance can low-income households receive from LIHEAP in Massachusetts?",
+      "category": "factual",
+      "relevant_docs": [
+        "Massachusetts2024"
+      ],
+      "also_relevant": [],
+      "source_context": "Link Health documents citing LIHEAP benefit levels",
+      "difficulty": "easy"
+    },
+    {
+      "id": "cited_Massachusetts2024_2",
+      "text": "What are the income eligibility requirements for energy assistance programs in Massachusetts?",
+      "category": "factual",
+      "relevant_docs": [
+        "Massachusetts2024"
+      ],
+      "also_relevant": [],
+      "source_context": "Document title references HEAP eligibility",
+      "difficulty": "easy"
+    },
+    {
+      "id": "cited_Massachusetts2024_3",
+      "text": "What government benefit programs help address energy insecurity among patients seen in healthcare settings?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "Massachusetts2024"
+      ],
+      "also_relevant": [
+        "CBPP2015"
+      ],
+      "source_context": "Link Health proposals describing LIHEAP alongside other programs",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cited_NIST2023_1",
+      "text": "What framework exists for identifying and managing risks in artificial intelligence systems?",
+      "category": "factual",
+      "relevant_docs": [
+        "NIST2023"
+      ],
+      "also_relevant": [],
+      "source_context": "AHRQ grant describing NIST AI RMF",
+      "difficulty": "easy"
+    },
+    {
+      "id": "cited_NIST2023_2",
+      "text": "What characteristics define a trustworthy AI system according to federal guidelines?",
+      "category": "factual",
+      "relevant_docs": [
+        "NIST2023"
+      ],
+      "also_relevant": [],
+      "source_context": "Grant proposal mapping seven characteristics of trustworthy AI",
+      "difficulty": "easy"
+    },
+    {
+      "id": "cited_NIST2023_3",
+      "text": "How should healthcare organizations evaluate the safety of generative AI tools used in patient-facing applications?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "NIST2023"
+      ],
+      "also_relevant": [],
+      "source_context": "AHRQ grant using NIST AI RMF alongside RE-AIM",
+      "difficulty": "hard"
+    },
+    {
+      "id": "cited_NIST2023_4",
+      "text": "What are the key dimensions of responsible AI deployment including fairness, transparency, and privacy?",
+      "category": "conceptual",
+      "relevant_docs": [
+        "NIST2023"
+      ],
+      "also_relevant": [],
+      "source_context": "Grant proposal listing AI characteristics",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cited_CBPP2015_1",
+      "text": "What is the WIC program and what nutritional support does it provide to low-income families?",
+      "category": "factual",
+      "relevant_docs": [
+        "CBPP2015"
+      ],
+      "also_relevant": [],
+      "source_context": "Link Health grants citing WIC benefit levels",
+      "difficulty": "easy"
+    },
+    {
+      "id": "cited_CBPP2015_2",
+      "text": "How much financial assistance do participants receive from federal nutrition programs for women and young children?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "CBPP2015"
+      ],
+      "also_relevant": [],
+      "source_context": "Grants citing CBPP2015 for WIC benefit amounts",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cited_CBPP2015_3",
+      "text": "What federal programs provide food assistance to pregnant women and children under five?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "CBPP2015"
+      ],
+      "also_relevant": [
+        "Massachusetts2024"
+      ],
+      "source_context": "Grant proposals listing WIC alongside SNAP and LIHEAP",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cited_Chalkidis2020_1",
+      "text": "Does pre-training language models on domain-specific legal text improve performance on legal NLP tasks?",
+      "category": "methodology",
+      "relevant_docs": [
+        "Chalkidis2020"
+      ],
+      "also_relevant": [
+        "Dhingra2022"
+      ],
+      "source_context": "ML memo on domain-adaptive pretraining in legal domain",
+      "difficulty": "easy"
+    },
+    {
+      "id": "cited_Chalkidis2020_2",
+      "text": "How does adapting a pretrained transformer to a specialized corpus compare to building a model from scratch on that corpus?",
+      "category": "comparative",
+      "relevant_docs": [
+        "Chalkidis2020"
+      ],
+      "also_relevant": [
+        "Dhingra2022"
+      ],
+      "source_context": "ML memo noting DAPT is comparable to training from scratch",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cited_Dhingra2022_1",
+      "text": "How can temporal information be incorporated into language model training to improve understanding of text from different time periods?",
+      "category": "methodology",
+      "relevant_docs": [
+        "Dhingra2022"
+      ],
+      "also_relevant": [],
+      "source_context": "ML memo on bundling time tokens with text",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cited_Dhingra2022_2",
+      "text": "Can language models serve as knowledge bases that understand when facts were true?",
+      "category": "conceptual",
+      "relevant_docs": [
+        "Dhingra2022"
+      ],
+      "also_relevant": [],
+      "source_context": "Document title reference",
+      "difficulty": "medium"
+    },
+    {
+      "id": "cited_Dhingra2022_3",
+      "text": "What techniques allow NLP models to handle linguistic and semantic changes in text across decades of newspaper archives?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "Dhingra2022"
+      ],
+      "also_relevant": [
+        "Chalkidis2020",
+        "Hanna2017"
+      ],
+      "source_context": "ML memo on expanding protest classifier across NYT corpus 1900-2007",
+      "difficulty": "hard"
+    },
+    {
+      "id": "uncited_Marx1968_1",
+      "text": "How does capitalist production affect workers' relationship to their own productive activity and its products?",
+      "category": "conceptual",
+      "relevant_docs": [
+        "Marx1968"
+      ],
+      "also_relevant": [
+        "Callon1998"
+      ],
+      "source_context": "Marx's analysis of alienated labor",
+      "difficulty": "medium"
+    },
+    {
+      "id": "uncited_Marx1968_2",
+      "text": "Why does the worker's condition worsen even when society's overall wealth is growing?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "Marx1968"
+      ],
+      "also_relevant": [
+        "Rideout2016",
+        "Zambrana2009"
+      ],
+      "source_context": "Marx's argument about worker suffering across wealth states",
+      "difficulty": "medium"
+    },
+    {
+      "id": "uncited_Marx1968_3",
+      "text": "What is the relationship between the division of labor and the dehumanization of the working class in political economy?",
+      "category": "conceptual",
+      "relevant_docs": [
+        "Marx1968"
+      ],
+      "also_relevant": [],
+      "source_context": "Marx's discussion of division of labor making workers machine-like",
+      "difficulty": "hard"
+    },
+    {
+      "id": "uncited_Callon1998_1",
+      "text": "How do economic theories actively shape and construct the markets they claim to merely describe?",
+      "category": "conceptual",
+      "relevant_docs": [
+        "Callon1998"
+      ],
+      "also_relevant": [],
+      "source_context": "Callon's performativity of economics thesis",
+      "difficulty": "medium"
+    },
+    {
+      "id": "uncited_Callon1998_2",
+      "text": "What conditions are necessary for economic agents to engage in rational calculation, and why are cognitive or cultural explanations insufficient?",
+      "category": "conceptual",
+      "relevant_docs": [
+        "Callon1998"
+      ],
+      "also_relevant": [],
+      "source_context": "Callon's critique of cognitive and culturalist approaches",
+      "difficulty": "hard"
+    },
+    {
+      "id": "uncited_Callon1998_3",
+      "text": "How does the concept of framing and overflowing relate to the boundaries of market transactions?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "Callon1998"
+      ],
+      "also_relevant": [],
+      "source_context": "Callon on framing as disentanglement and overflowing",
+      "difficulty": "hard"
+    },
+    {
+      "id": "uncited_Schutz1944_1",
+      "text": "Why does an outsider trying to join a new community experience their taken-for-granted cultural knowledge as unreliable?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "Schutz1944"
+      ],
+      "also_relevant": [
+        "Tajfel1979",
+        "Melucci1995"
+      ],
+      "source_context": "Schutz on stranger's 'thinking as usual' breaking down",
+      "difficulty": "medium"
+    },
+    {
+      "id": "uncited_Schutz1944_2",
+      "text": "What role do implicit knowledge and unspoken assumptions play in making someone a competent member of a social group?",
+      "category": "conceptual",
+      "relevant_docs": [
+        "Schutz1944"
+      ],
+      "also_relevant": [
+        "Tajfel1979"
+      ],
+      "source_context": "Schutz on in-group members' reliance on implicit 'recipes'",
+      "difficulty": "medium"
+    },
+    {
+      "id": "uncited_Schutz1944_3",
+      "text": "How does the immigrant's lack of shared history with the host society affect their ability to navigate everyday social situations?",
+      "category": "factual",
+      "relevant_docs": [
+        "Schutz1944"
+      ],
+      "also_relevant": [
+        "Rideout2016",
+        "Zambrana2009"
+      ],
+      "source_context": "Schutz on stranger as 'man without a history'",
+      "difficulty": "easy"
+    },
+    {
+      "id": "uncited_Benjamin1996_1",
+      "text": "What is the difference between force that establishes a legal order and force that maintains an existing one?",
+      "category": "conceptual",
+      "relevant_docs": [
+        "Benjamin1996",
+        "Benjamin2014"
+      ],
+      "also_relevant": [
+        "Tushnet2004"
+      ],
+      "source_context": "Benjamin's law-making vs law-preserving violence distinction",
+      "difficulty": "medium"
+    },
+    {
+      "id": "uncited_Benjamin1996_2",
+      "text": "How does the state's monopoly on legitimate coercion relate to its need to protect the legal system itself rather than specific legal ends?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "Benjamin1996",
+        "Benjamin2014"
+      ],
+      "also_relevant": [
+        "Tushnet2004"
+      ],
+      "source_context": "Benjamin on law's interest in monopolizing violence",
+      "difficulty": "hard"
+    },
+    {
+      "id": "uncited_Benjamin1996_3",
+      "text": "Can the general strike be understood as a form of coercion, and how does this differ between political and proletarian versions?",
+      "category": "comparative",
+      "relevant_docs": [
+        "Benjamin1996",
+        "Benjamin2014"
+      ],
+      "also_relevant": [
+        "Goodwin2011",
+        "Marx1968"
+      ],
+      "source_context": "Benjamin on Sorel's distinction between types of general strike",
+      "difficulty": "hard"
+    },
+    {
+      "id": "uncited_Benjamin2014_1",
+      "text": "Why does natural law theory fail to provide an adequate framework for evaluating the moral status of coercive means?",
+      "category": "conceptual",
+      "relevant_docs": [
+        "Benjamin2014",
+        "Benjamin1996"
+      ],
+      "also_relevant": [],
+      "source_context": "Benjamin's opening argument against natural law's approach to violence",
+      "difficulty": "medium"
+    },
+    {
+      "id": "uncited_Hu2018_1",
+      "text": "How can neural networks generate sentences with independently controllable properties like emotional tone and grammatical tense?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "Hu2018"
+      ],
+      "also_relevant": [
+        "NIST2023"
+      ],
+      "source_context": "Hu et al.'s VAE + discriminator model for controlled text generation",
+      "difficulty": "easy"
+    },
+    {
+      "id": "uncited_Hu2018_2",
+      "text": "What techniques address the non-differentiability problem when using discriminator feedback for discrete text generation?",
+      "category": "methodology",
+      "relevant_docs": [
+        "Hu2018"
+      ],
+      "also_relevant": [
+        "Chalkidis2020"
+      ],
+      "source_context": "Softmax temperature annealing for gradient propagation",
+      "difficulty": "medium"
+    },
+    {
+      "id": "uncited_Hu2018_3",
+      "text": "How can a generative model learn sentence-level attribute control from only word-level annotations?",
+      "category": "methodology",
+      "relevant_docs": [
+        "Hu2018"
+      ],
+      "also_relevant": [],
+      "source_context": "Semi-supervised framework with word-level labels for sentence generation",
+      "difficulty": "hard"
+    },
+    {
+      "id": "uncited_Rideout2016_1",
+      "text": "What proportion of economically disadvantaged families rely solely on smartphones for Internet access, and what limitations does this create?",
+      "category": "factual",
+      "relevant_docs": [
+        "Rideout2016"
+      ],
+      "also_relevant": [
+        "CBPP2015",
+        "Massachusetts2024"
+      ],
+      "source_context": "23% of below-median-income families have mobile-only access",
+      "difficulty": "easy"
+    },
+    {
+      "id": "uncited_Rideout2016_2",
+      "text": "How do children and parents in under-resourced households collaborate to develop digital skills?",
+      "category": "paraphrase",
+      "relevant_docs": [
+        "Rideout2016"
+      ],
+      "also_relevant": [
+        "Zambrana2009"
+      ],
+      "source_context": "Digital learning teams in lower-income families",
+      "difficulty": "medium"
+    },
+    {
+      "id": "uncited_Rideout2016_3",
+      "text": "Why do subsidized Internet programs reach so few eligible families despite cost being the primary barrier to connectivity?",
+      "category": "conceptual",
+      "relevant_docs": [
+        "Rideout2016"
+      ],
+      "also_relevant": [
+        "CBPP2015",
+        "Massachusetts2024"
+      ],
+      "source_context": "Only 6% of eligible families signed up for discounted programs",
+      "difficulty": "medium"
+    },
+    {
+      "id": "uncited_Rideout2016_4",
+      "text": "How do racial and ethnic disparities in Internet connectivity affect immigrant families' access to educational resources?",
+      "category": "comparative",
+      "relevant_docs": [
+        "Rideout2016"
+      ],
+      "also_relevant": [
+        "Zambrana2009",
+        "Schutz1944"
+      ],
+      "source_context": "Hispanic immigrant families markedly less connected",
+      "difficulty": "medium"
+    }
+  ]
+}
