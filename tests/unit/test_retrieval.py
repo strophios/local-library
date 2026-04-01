@@ -147,6 +147,14 @@ class TestSanitizeFtsQuery:
         assert "network" in result
         assert "theory" in result
 
+    def test_apostrophes_removed(self) -> None:
+        """Apostrophes/single quotes are removed (FTS5 string delimiter)."""
+        query = "the worker's condition"
+        result = _sanitize_fts_query(query)
+        assert "'" not in result
+        assert "worker" in result
+        assert "condition" in result
+
     def test_standalone_plus_sign_removed(self) -> None:
         """Standalone + operators are removed."""
         query = "machine + learning"

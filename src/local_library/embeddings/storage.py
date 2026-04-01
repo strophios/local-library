@@ -31,9 +31,9 @@ def _sanitize_fts_query(query: str) -> str:
     Raises:
         FTSQueryError: If the sanitized query is empty
     """
-    # Remove characters that FTS5 treats as syntax errors
-    # Includes: ?!.,;:[]{}()^~\
-    cleaned = re.sub(r"[?!.,;:\[\]{}()^~\\]", " ", query)
+    # Remove characters that FTS5 treats as syntax errors or special operators
+    # Includes: ?!.,;:[]{}()^~\ and single quotes (FTS5 string delimiter)
+    cleaned = re.sub(r"[?!.,;:\[\]{}()^~\\']", " ", query)
 
     # Replace all hyphens and plus signs with spaces.
     # FTS5's query parser interprets - as NOT and + as required-term operators.
