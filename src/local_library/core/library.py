@@ -52,6 +52,7 @@ from local_library.core.storage import (
 from local_library.core.vec_extension import is_vec_available, load_vec_extension
 from local_library.ingestion.base import ContentAcquirer, ContentExtractor, compute_storage_path
 from local_library.ingestion.file import FileAcquirer
+from local_library.ingestion.artifact_cleanup import clean_artifacts
 from local_library.ingestion.markdown_cleanup import cleanup_markdown
 from local_library.ingestion.metadata import MetadataHandler
 from local_library.ingestion.pdf import PdfExtractor
@@ -598,8 +599,9 @@ class Library:
             extractor = self._find_extractor(storage_path)
             result = extractor.extract_and_validate(storage_path)
 
-            # Clean up Marker extraction artifacts
-            cleaned_text = cleanup_markdown(result.text)
+            # Clean up extraction artifacts then format markdown
+            cleaned_text = clean_artifacts(result.text)
+            cleaned_text = cleanup_markdown(cleaned_text)
 
             # Write extracted markdown
             extracted_path = compute_storage_path(
