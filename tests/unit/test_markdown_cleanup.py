@@ -87,11 +87,20 @@ class TestHtmlCoercion:
         assert "Important content" in result
         assert "More content" in result
 
-    def test_stray_angle_bracket_stripped_within_line(self) -> None:
-        """Stray angle bracket content within a single line is still stripped."""
+    def test_unknown_angle_bracket_preserved(self) -> None:
+        """Non-HTML angle bracket content is preserved (not a known Marker tag)."""
         text = "Text with <stray> more text"
         result = _coerce_html(text)
-        assert result == "Text with  more text"
+        assert result == "Text with <stray> more text"
+
+    def test_known_marker_tags_stripped(self) -> None:
+        """Known Marker HTML tags are stripped, keeping text content."""
+        assert _coerce_html("<sub>2</sub>") == "2"
+        assert _coerce_html("<span id='ref1'>text</span>") == "text"
+        assert _coerce_html("<div class='page'>content</div>") == "content"
+        assert _coerce_html("<math display='inline'>x^2</math>") == "x^2"
+        assert _coerce_html("<u>underlined</u>") == "underlined"
+        assert _coerce_html("<small>fine print</small>") == "fine print"
 
 
 class TestCleanupMarkdownComposition:

@@ -56,7 +56,12 @@ def _coerce_html(text: str) -> str:
     3. <sup>N.</sup> (digit sequences, optional dot) → [N] footnote markers
     4. Remaining <sup> → strip tags, keep text
     5. <br>/<br/> → space
-    6. Any remaining HTML tags → strip tags, keep text
+    6. Known Marker HTML tags → strip tags, keep text (allowlist-based)
+
+    Step 6 targets only tags that Marker/markdownify are known to emit,
+    rather than using a catch-all regex. This prevents stripping non-HTML
+    angle bracket content (editorial notation, math inequalities, OCR
+    artifacts).
     """
     try:
         # 1. Italic: <i>...</i> and <em>...</em>
@@ -76,11 +81,22 @@ def _coerce_html(text: str) -> str:
         # 5. Line breaks: <br>, <br/>, <br /> → space
         text = re.sub(r"<br\s*/?>", " ", text, flags=re.IGNORECASE)
 
-        # 6. Any remaining HTML tags → strip tags, keep text content
-        # Use [^>\n]+ to prevent matching across line boundaries — a stray <
-        # (e.g., from OCR artifacts or editorial notation like Winkelklammern)
-        # would otherwise gobble content until the next > many lines away.
-        text = re.sub(r"<[^>\n]+>", "", text)
+        # 6. Strip remaining known Marker HTML tags, keeping text content.
+        # Marker passes HTML through markdownify, which converts most tags to
+        # markdown. The tags that leak through are those markdownify doesn't
+        # handle natively: <sub>, <math>, <u>, <small>, <mark>, <span>, <div>,
+        # and occasional table fragments. We target only these known tags rather
+        # than using a catch-all regex, which would destroy non-HTML angle
+        # bracket content (e.g., German Winkelklammern editorial notation,
+        # mathematical inequalities, OCR artifacts).
+        _KNOWN_MARKER_TAGS = (
+            r"sub|math|u|small|mark|span|div"
+            r"|table|tbody|thead|tfoot|tr|td|th|caption|colgroup|col"
+            r"|p|ul|ol|li|dl|dt|dd|a|img|pre|code"
+            r"|blockquote|section|article|header|footer|nav|aside|main|figure|figcaption"
+            r"|h[1-6]|hr"
+        )
+        text = re.sub(rf"</?(?:{_KNOWN_MARKER_TAGS})(?:\s[^>]*)?>", "", text)
 
     except Exception:
         logger.warning("HTML coercion failed", exc_info=True)
