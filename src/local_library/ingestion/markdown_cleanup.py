@@ -77,7 +77,10 @@ def _coerce_html(text: str) -> str:
         text = re.sub(r"<br\s*/?>", " ", text, flags=re.IGNORECASE)
 
         # 6. Any remaining HTML tags → strip tags, keep text content
-        text = re.sub(r"<[^>]+>", "", text)
+        # Use [^>\n]+ to prevent matching across line boundaries — a stray <
+        # (e.g., from OCR artifacts or editorial notation like Winkelklammern)
+        # would otherwise gobble content until the next > many lines away.
+        text = re.sub(r"<[^>\n]+>", "", text)
 
     except Exception:
         logger.warning("HTML coercion failed", exc_info=True)

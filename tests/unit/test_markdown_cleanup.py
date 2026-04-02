@@ -74,6 +74,25 @@ class TestHtmlCoercion:
         result = _coerce_html(text)
         assert result == "This has *html italic* and *md italic*."
 
+    def test_stray_angle_bracket_does_not_gobble_content(self) -> None:
+        """A stray < from OCR or editorial notation must not strip cross-line content.
+
+        Without the newline guard in step 6's regex, a stray < matches
+        everything until the next > (potentially pages away), destroying
+        content. This occurred with German Winkelklammern notation in
+        Marx1968, stripping 49% of the document.
+        """
+        text = "Before <) stray bracket\n\nImportant content\n\nMore content"
+        result = _coerce_html(text)
+        assert "Important content" in result
+        assert "More content" in result
+
+    def test_stray_angle_bracket_stripped_within_line(self) -> None:
+        """Stray angle bracket content within a single line is still stripped."""
+        text = "Text with <stray> more text"
+        result = _coerce_html(text)
+        assert result == "Text with  more text"
+
 
 class TestCleanupMarkdownComposition:
     """Tests for the top-level cleanup_markdown function."""
