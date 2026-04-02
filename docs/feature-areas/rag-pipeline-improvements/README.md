@@ -50,15 +50,22 @@ The iterative improvement loop continues. Items completed are struck through; re
 2. ~~**FTS query preprocessing**~~ — Implemented. Stop-word removal + explicit OR mode made FTS viable (was returning 0 results). Asymmetric RRF weights tuned.
 
 3. **Conceptual query improvement** (next target)
-   - Queries about mechanisms/arguments score NDCG@10=0.784 vs 0.967 factual
+   - Queries about mechanisms/arguments are the weakest category
    - Likely causes: distributed arguments across chunks, abstract vocabulary, chunk boundary issues
    - Potential approaches: query expansion, increased chunk overlap, chunk merging at retrieval time, document-level scoring
 
-4. **Query expansion**
+4. **Cross-language retrieval** (known limitation)
+   - German documents (Marx1968, Benjamin2014) poorly retrieved by English queries
+   - nomic-embed-text is English-primary; cross-language alignment is fragile
+   - Extraction changes that improve English text quality can degrade cross-language retrieval by shifting embedding space
+   - Options: multilingual embedding model, query expansion with translated terms, dual embeddings, or accept as limitation
+   - See `tests/eval/README.md` § "Cross-Language Retrieval Limitation" for full analysis
+
+5. **Query expansion**
    - Synonym injection, acronym resolution
    - Potentially: LLM-based query rewriting (pre-search)
 
-5. **Chunk preprocessing**
+6. **Chunk preprocessing**
    - Filter non-semantic content from chunks (headers, footers, reference lists)
    - Consider: separate "display text" vs. "embedding text" per chunk
 

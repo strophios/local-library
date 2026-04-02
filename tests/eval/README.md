@@ -94,38 +94,30 @@ uv run python tests/eval/retrieval_eval.py --db-path <path> --mode all
 uv run python tests/eval/retrieval_eval.py --db-path <path> --json
 ```
 
-## Baseline Results (2026-04-01)
+## Baseline Results (2026-04-02)
 
 74 answerable queries evaluated on the ~20-document dev corpus. Best configuration: **hybrid+rerank** (vector + FTS with 2:1 weight ratio, cross-encoder reranking).
 
 | Configuration | MRR | Recall@10 | NDCG@10 |
 |---|---|---|---|
-| **hybrid+rerank** | **0.913** | 0.926 | **0.896** |
-| vector+rerank | 0.902 | **0.936** | 0.892 |
-| fts+rerank | 0.896 | 0.905 | 0.884 |
-| hybrid | 0.901 | 0.872 | 0.868 |
-| vector | 0.912 | 0.864 | 0.875 |
-| fts | 0.892 | 0.865 | 0.854 |
-
-**By category (hybrid+rerank):**
-
-| Category | Count | MRR | Recall@10 | NDCG@10 |
-|---|---|---|---|---|
-| methodology | 8 | 1.000 | 1.000 | 1.000 |
-| factual | 15 | 0.956 | 1.000 | 0.967 |
-| paraphrase | 20 | 0.938 | 0.950 | 0.922 |
-| comparative | 7 | 0.929 | 0.929 | 0.892 |
-| **conceptual** | **24** | **0.800** | **0.865** | **0.784** |
+| **hybrid+rerank** | **0.895** | **0.912** | **0.880** |
+| vector+rerank | 0.896 | 0.909 | 0.877 |
+| fts+rerank | 0.899 | 0.905 | 0.885 |
+| hybrid | 0.896 | 0.857 | 0.858 |
+| vector | 0.912 | 0.857 | 0.872 |
+| fts | 0.899 | 0.865 | 0.860 |
 
 ### Key Findings
 
-1. **Hybrid+rerank is the best configuration** — beats pure vector on MRR and NDCG@10. The 2:1 vector-to-FTS weight ratio was determined empirically; equal weights dilute the vector signal with lower-quality FTS candidates.
+1. **Hybrid+rerank is the best configuration for recall** — highest Recall@10 (0.912). The 2:1 vector-to-FTS weight ratio was determined empirically; equal weights dilute the vector signal with lower-quality FTS candidates.
 
-2. **Reranking consistently improves recall** — the broadened candidate pool (100 candidates) recovers relevant documents that would otherwise fall outside top-10. Recall@10 improves ~7% with reranking across modes.
+2. **Reranking consistently improves recall** — the broadened candidate pool (100 candidates) recovers relevant documents that would otherwise fall outside top-10. Recall@10 improves ~5-6% with reranking across modes.
 
-3. **FTS requires stop-word removal + OR-mode** — FTS5's implicit AND was too restrictive for natural language queries (returned 0 results before fix). Stop-word removal + explicit OR between remaining terms converted FTS from useless to competitive (MRR=0.892 standalone).
+3. **FTS requires stop-word removal + OR-mode** — FTS5's implicit AND was too restrictive for natural language queries (returned 0 results before fix). Stop-word removal + explicit OR between remaining terms converted FTS from useless to competitive (MRR=0.899 standalone).
 
-4. **Conceptual queries are the weak spot** — NDCG@10=0.784 vs 0.967 for factual. These queries ask about mechanisms, relationships, and arguments that are distributed across document sections rather than stated in a single passage. This is the primary quality improvement target.
+4. **Conceptual queries are the weak spot** — these queries ask about mechanisms, relationships, and arguments that are distributed across document sections rather than stated in a single passage. This is a primary quality improvement target.
+
+5. **Cross-language retrieval is fragile** — German-language documents (Marx1968, Benjamin2014) are poorly retrieved by English queries. See "Cross-Language Retrieval Limitation" below.
 
 ### Conceptual Query Gap
 
@@ -140,22 +132,42 @@ Potential improvements to investigate:
 - **Chunk merging at retrieval time**: Return adjacent chunks when a conceptual query matches
 - **Document-level retrieval**: For conceptual queries, score at document level rather than chunk level
 
+### Cross-Language Retrieval Limitation
+
+Two German-language documents — Marx1968 (*Ökonomisch-philosophische Manuskripte*) and Benjamin2014 (*Zur Kritik der Gewalt*, German edition) — are consistently missed when queried in English. Of 8 queries targeting these documents, only 1 retrieves the target (uncited_Marx1968_1). Benjamin2014 is missed on all 4 queries where it appears as a relevant document.
+
+**Root cause**: nomic-embed-text-v1.5 is primarily an English model. Its cross-language embedding alignment is not robust enough to reliably match English queries to German academic text. The alignment is fragile — different extraction text (from Marker re-extraction) produces different embeddings, and even extraction improvements that objectively improve text quality can degrade cross-language retrieval by shifting the embedding space.
+
+**Interaction with extraction quality**: During investigation, we found that extraction pipeline improvements (artifact cleanup, markdown reformatting) caused evaluation metrics to *decrease* even though the extracted text was objectively better. This was initially puzzling. Root cause analysis revealed two issues:
+1. A bug in `_coerce_html` where a catch-all regex stripped 49% of Marx1968's content (fixed: allowlist-based tag stripping)
+2. After fixing the bug, metrics partially recovered but remained below the original baseline — the remaining gap is the cross-language limitation, not an extraction issue
+
+**Lesson**: Extraction changes that improve English text quality may shift the embedding space for non-English documents in ways that degrade retrieval. Evaluation after extraction changes should check cross-language queries specifically, not just aggregate metrics.
+
+**Potential improvements**:
+- **Multilingual embedding model** for non-English documents (e.g., multilingual-e5-large, BGE-M3)
+- **Query expansion with translated terms**: expand English queries with German equivalents for known German documents
+- **Accept as limitation**: the corpus is primarily English; German documents are edge cases. Document the limitation and set evaluation targets on English-only queries separately.
+- **Dual embedding**: maintain both English-optimized and multilingual embeddings per document, query both
+
 ## Quality Targets
 
 *To be established based on baseline analysis and corpus scaling goals.*
 
 | Metric | Target | Baseline (hybrid+rerank) | Status |
 |--------|--------|--------------------------|--------|
-| MRR | TBD | 0.913 | Baseline established |
-| Recall@10 | TBD | 0.926 | Baseline established |
-| NDCG@10 | TBD | 0.896 | Baseline established |
-| NDCG@10 (conceptual) | TBD | 0.784 | Primary improvement target |
+| MRR | TBD | 0.895 | Baseline established |
+| Recall@10 | TBD | 0.912 | Baseline established |
+| NDCG@10 | TBD | 0.880 | Baseline established |
+| NDCG@10 (conceptual) | TBD | — | Primary improvement target |
+| Recall@10 (cross-language) | TBD | ~0.25 (1/4 Marx, 0/4 Benjamin) | Known limitation |
 
 ### Evaluation History
 
 | Date | Corpus | Queries | Best Config | MRR | NDCG@10 | Notes |
 |------|--------|---------|-------------|-----|---------|-------|
-| 2026-04-01 | ~20 docs | 74 | hybrid+rerank | 0.913 | 0.896 | Initial baseline; FTS fix, RRF tuning |
+| 2026-04-01 | ~20 docs | 74 | hybrid+rerank | 0.913 | 0.896 | Initial baseline; pre-extraction-fix |
+| 2026-04-02 | ~20 docs | 74 | hybrid+rerank | 0.895 | 0.880 | Post-extraction-fix; HTML coercion allowlist; cross-language gap identified |
 
 ## Expanding the Query Set
 
