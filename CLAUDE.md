@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-03-06
+Last verified: 2026-04-03
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -92,11 +92,13 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - **RAG query interface**: RAGInterface orchestrates context assembly, prompt construction, and LLM generation; RAGStream supports streaming with token accumulation; pre-LLM gate skips API call when no context retrieved
 - **CLI `ask` command**: streaming answers with Rich Live display, --no-stream, --json, --model, --mode, --doc, --limit, --no-rerank options; source citations with citekey attribution
 - SQLite storage with content-addressable file layout (schema v3)
-- CLI interface (add, list, show, delete, open, update, review, embed, search, ask commands)
+- CLI interface (add, list, show, delete, open, update, review, reextract, embed, search, ask commands)
 - @citekey identifier support with fuzzy matching suggestions
 - Pagination support (--limit, --all flags on list command)
 - Zotero read-only access: ZoteroReader facade with database and JSON export backends, BetterBibTeX citekey mapping, attachment resolution, collection and library filtering
 - **Batch import from Zotero**: `zotero import` command with library/collection filtering, dry-run mode, progress tracking, and continue-on-error (defaults to personal library)
+- **Reextract command**: `reextract` CLI command re-runs text extraction on existing documents (useful after extraction pipeline improvements)
+- **Extraction quality framework**: Synthetic document benchmark in `tests/extraction/synthetic/` measures extraction fidelity across noise tiers (clean/mild/moderate/severe) with CER/WER metrics and structural validators. 6 annotated source documents. Opt-in via `--run-extraction-quality` pytest flag.
 
 **Immediate next step:** Post-M7 evaluation quality gate — establish quality targets, investigate the conceptual query gap, and determine the next pipeline improvement before scaling to the full Zotero corpus (~1400 docs). See `roadmap.md` for current progress and sequencing.
 
@@ -176,6 +178,17 @@ A retrieval evaluation framework is implemented in `tests/eval/`. See `tests/eva
 - **Reranker benchmark**: `reranker_benchmark.py` evaluates cross-encoder models; results in `reranker_results.json`
 - **Next steps**: Establish quality targets, investigate conceptual query gap, scale to full Zotero corpus (~1400 docs)
 
+### Extraction Quality Framework
+A synthetic extraction quality framework is implemented in `tests/extraction/synthetic/`. It measures how well the Marker + cleanup pipeline preserves content fidelity across document types and degradation levels.
+- **Pipeline**: Annotated markdown sources → PDF generation (4 noise tiers: clean, mild, moderate, severe) → Marker extraction + cleanup → region alignment → CER/WER scoring + structural validation → aggregated results JSON
+- **Annotation format**: Source documents use `<!-- @region: name type=<type> -->` / `<!-- @end -->` markers to define expected content regions (paragraph, heading, list, table, math, citation, footnote)
+- **Metrics**: Character Error Rate (CER) and Word Error Rate (WER) via rapidfuzz edit distance; structural fidelity validators per region type
+- **Alignment**: Fuzzy region matching (`alignment.py`) locates annotated regions in extracted text using variable-length sliding window with rapidfuzz scoring
+- **Runner**: `ExtractionQualityRunner` orchestrates the full pipeline with PDF caching, progress tracking, and baseline regression detection
+- **Sources**: 6 synthetic academic papers spanning diverse disciplines and document features (see `sources/COVERAGE.md` for feature coverage matrix)
+- **Pytest integration**: Tests use `extraction_quality` marker; skipped by default, enabled with `--run-extraction-quality` flag. Requires `pdflatex` installed.
+- **Dev dependencies**: rapidfuzz (fuzzy string matching), pymupdf (PDF generation), pypandoc-binary (markdown-to-PDF), numpy, pillow (image-based noise tiers)
+
 ### What Would Change These Decisions
 - Scale beyond 250K vectors → migrate to LanceDB
 - Need native hybrid search → migrate to LanceDB
@@ -223,7 +236,9 @@ All commands accepting document IDs support both UUID (full or partial) and @cit
 - `uv run local-library zotero import` - Batch import from Zotero (embeds by default; use `--skip-embed` to defer; `--library NAME`, `--collection NAME`, `--dry-run`)
 - `uv run local-library zotero collections` - List Zotero collections (personal library by default; use `--library NAME` or `--all-libraries`)
 - `uv run local-library zotero libraries` - List available Zotero libraries (personal and group)
+- `uv run local-library reextract <id>` - Re-run text extraction on an existing document (useful after extraction pipeline improvements)
 - `uv run pytest` - Run tests
+- `uv run pytest --run-extraction-quality` - Run synthetic extraction quality benchmarks (requires pdflatex)
 - `uv run ruff check` - Lint code
 - `uv run ruff format` - Format code
 
@@ -257,6 +272,7 @@ src/local_library/
 │   ├── pdf.py           # PdfExtractor (Marker wrapper)
 │   ├── metadata.py      # MetadataHandler (CSL-JSON validation, citekey generation)
 │   ├── text_extraction.py  # TextMetadataExtractor (heuristic + LLM metadata extraction)
+│   ├── artifact_cleanup.py # Pre-processing: non-Latin filtering, image reformatting, watermark/boilerplate removal (Functional Core)
 │   ├── markdown_cleanup.py # Post-processing: HTML coercion, dehyphenation, paragraph reflow (Functional Core)
 │   └── zotero.py        # ZoteroReader facade (database + JSON backends, citekey mapping)
 └── cli/                 # CLI interface (Typer/Rich)
@@ -271,6 +287,7 @@ src/local_library/
     ├── open.py          # Open command (markdown/PDF viewing)
     ├── update.py        # Update command (editor-based metadata editing)
     ├── review.py        # Review command (combined open + update)
+    ├── reextract.py     # Reextract command (re-run extraction on existing documents)
     ├── utils.py         # Shared utilities (identifier resolution, fuzzy matching)
     └── zotero.py        # Zotero commands (import with --skip-embed, collections, libraries)
 ```
