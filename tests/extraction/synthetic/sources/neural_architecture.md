@@ -196,6 +196,18 @@ PBOT vs EfficientNet-B4). On semantic segmentation (ADE20K with 25K training
 images), PBOT achieved 53.4 mIoU compared to 52.1 for EfficientNet-B4. These
 improvements are modest in absolute terms but consistent across multiple transfer
 tasks, suggesting that PBOT discovers architectures with generalizable properties.
+
+We also evaluated search efficiency by comparing PBOT against random search and
+regularized evolution under equivalent computational budgets (500 GPU-hours each).
+PBOT achieved a final Pareto hypervolume 12% larger than regularized evolution
+and 34% larger than random search. More critically, PBOT reached 90% of its final
+hypervolume after 180 GPU-hours, while regularized evolution required 350 GPU-hours
+to reach the same threshold. This advantage stems from the Bayesian optimization
+component: by modeling the objective landscape, PBOT concentrates evaluations in
+promising regions of the search space rather than relying solely on evolutionary
+pressure. The computational overhead of maintaining and querying the surrogate model
+is minimal (less than 2% of total search time), making PBOT strictly more efficient
+than ablated variants that omit the Bayesian component.
 <!-- /feature -->
 
 <!-- feature: heading-h2 id:conclusion -->

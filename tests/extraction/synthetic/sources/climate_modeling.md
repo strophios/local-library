@@ -146,6 +146,20 @@ crop impacts, but diagnostic skill alone explains only ~23% of variance in
 impact accuracy. This deficit suggests omitted variables—likely relating to
 soil water capacity and irrigation capacity distributions, which few models
 currently resolve spatially.
+
+Examining the posterior distribution of skill parameters more closely, we find
+evidence of clustering: models separate into a high-skill group ($S_i > 0.70$,
+14 models) and a low-skill group ($S_i < 0.60$, 8 models) with 7 models in the
+intermediate range. This bimodality is not an artifact of the prior specification;
+sensitivity analyses with uniform and beta priors on $\mu_S$ yield the same
+qualitative pattern. The high-skill cluster shares common features: all employ
+semi-Lagrangian advection schemes, and 12 of 14 use spectral dynamical cores.
+The low-skill cluster is more heterogeneous in its numerical methods, suggesting
+that poor performance arises from multiple independent causes rather than a single
+shared deficiency. Regional decomposition reveals that skill differences are
+largest in the tropics and smallest at high latitudes, consistent with the
+hypothesis that tropical convective parameterization is the primary discriminator
+of global model quality.
 <!-- /feature -->
 
 <!-- feature: dense-prose id:discussion -->
@@ -184,7 +198,7 @@ or datasets as needed.
 ## References
 <!-- /feature -->
 
-<!-- feature: dense-prose id:refs -->
+<!-- feature: bibliography id:refs -->
 Flato, G., Marotzke, J., Abiodun, B., et al. (2013). Evaluation of climate models.
 In V. Betts, R. Stouffer, & D. Qin (Eds.), *Climate change 2013: The physical
 science basis. Contribution of Working Group I to the Fifth Assessment Report*

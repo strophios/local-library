@@ -11,9 +11,9 @@ This matrix documents the planned feature coverage across all synthetic source d
 | table-simple | ✓ | | | | | |
 | table-complex | | | | | ✓ | |
 | footnote | ✓ | | | ✓ | | |
-| bibliography | ✓ | | | ✓ | | |
-| display-math | | ✓ | | | ✓ | |
-| inline-math | | ✓ | | | ✓ | |
+| bibliography | ✓ | ✓ | | ✓ | | |
+| display-math | | ✓ | | ✓ | ✓ | |
+| inline-math | | ✓ | ✓ | | ✓ | |
 | blockquote | | | | ✓ | | |
 | code-block | | | ✓ | | | ✓ |
 | nested-list | | | ✓ | | | |
@@ -25,13 +25,13 @@ This matrix documents the planned feature coverage across all synthetic source d
 Comparative analysis of urban mass transit systems. Features: h1, h2, dense-prose, simple-table, footnote, bibliography.
 
 ### Doc 2: Climate Stats (5-8 features)
-Statistical analysis of climate modeling data. Features: h1, h2, dense-prose, display-math, inline-math.
+Statistical analysis of climate modeling data. Features: h1, h2, dense-prose, display-math, inline-math, bibliography.
 
 ### Doc 3: NAS Survey (5-8 features)
-Neural architecture search methodology overview. Features: h1, h2, h3, h4, dense-prose, code-block, nested-list.
+Neural architecture search methodology overview. Features: h1, h2, h3, h4, dense-prose, code-block, nested-list, inline-math.
 
 ### Doc 4: Labor History (5-8 features)
-Historical survey of labor movements. Features: h1, h2, dense-prose, footnote, bibliography, blockquote.
+Historical survey of labor movements. Features: h1, h2, dense-prose, footnote, bibliography, blockquote, display-math.
 
 ### Doc 5: Empirical Study (5-8 features)
 Empirical research study with complex results. Features: h1, h2, h3, dense-prose, display-math, inline-math, complex-table.
