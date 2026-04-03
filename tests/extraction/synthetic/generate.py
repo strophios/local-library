@@ -11,6 +11,7 @@ Noise application is deterministic via numpy.random.RandomState (frozen
 algorithm, guaranteed same output across numpy versions given same seed).
 PDFs are cached via content hash to skip regeneration when source unchanged.
 """
+
 from __future__ import annotations
 
 import enum
@@ -79,9 +80,7 @@ def generate_clean_pdf(source_md: Path, output_pdf: Path) -> None:
     text = source_md.read_text(encoding="utf-8")
     stripped = strip_annotations(text)
 
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".md", delete=False, encoding="utf-8"
-    ) as tmp:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False, encoding="utf-8") as tmp:
         tmp.write(stripped)
         tmp_path = tmp.name
 
@@ -101,9 +100,7 @@ def generate_clean_pdf(source_md: Path, output_pdf: Path) -> None:
         Path(tmp_path).unlink(missing_ok=True)
 
 
-def render_pages_to_images(
-    pdf_path: Path, dpi: int = _RENDER_DPI
-) -> list[Image.Image]:
+def render_pages_to_images(pdf_path: Path, dpi: int = _RENDER_DPI) -> list[Image.Image]:
     """Render each page of a PDF to a PIL Image at the specified DPI.
 
     Args:

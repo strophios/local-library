@@ -1,5 +1,6 @@
 # pattern: Imperative Shell
 """Tests for synthetic PDF generation pipeline."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -99,9 +100,7 @@ class TestGenerateCleanPdf:
         # PDF magic bytes
         assert output.read_bytes()[:4] == b"%PDF"
 
-    def test_strips_annotations_before_conversion(
-        self, sample_source: Path, tmp_path: Path
-    ):
+    def test_strips_annotations_before_conversion(self, sample_source: Path, tmp_path: Path):
         """Annotations should not appear in the generated PDF."""
         output = tmp_path / "output.pdf"
         generate_clean_pdf(sample_source, output)
@@ -119,16 +118,12 @@ class TestGenerateCleanPdf:
             doc.close()
 
         # Annotation markers should not appear in extracted text
-        assert "<!-- feature:" not in full_text, (
-            "Generated PDF contains annotation opening markers"
-        )
+        assert "<!-- feature:" not in full_text, "Generated PDF contains annotation opening markers"
         assert "<!-- /feature -->" not in full_text, (
             "Generated PDF contains annotation closing markers"
         )
 
-    def test_multi_page_produces_multiple_pages(
-        self, multi_page_source: Path, tmp_path: Path
-    ):
+    def test_multi_page_produces_multiple_pages(self, multi_page_source: Path, tmp_path: Path):
         output = tmp_path / "multi.pdf"
         generate_clean_pdf(multi_page_source, output)
 
@@ -137,8 +132,7 @@ class TestGenerateCleanPdf:
         doc = pymupdf.open(str(output))
         try:
             assert len(doc) >= 2, (
-                f"Expected 2+ pages but got {len(doc)}. "
-                "Multi-page fixture may need more content."
+                f"Expected 2+ pages but got {len(doc)}. Multi-page fixture may need more content."
             )
         finally:
             doc.close()
@@ -168,9 +162,7 @@ class TestRenderPagesToImages:
         # Higher DPI = larger images
         assert images_high[0].size[0] > images_low[0].size[0]
 
-    def test_multi_page_renders_all_pages(
-        self, multi_page_source: Path, tmp_path: Path
-    ):
+    def test_multi_page_renders_all_pages(self, multi_page_source: Path, tmp_path: Path):
         pdf_path = tmp_path / "multi.pdf"
         generate_clean_pdf(multi_page_source, pdf_path)
 
@@ -282,8 +274,6 @@ class TestGenerateAllTiers:
         for tier, path in results.items():
             doc = pymupdf.open(str(path))
             try:
-                assert len(doc) >= 2, (
-                    f"Tier {tier}: expected 2+ pages, got {len(doc)}"
-                )
+                assert len(doc) >= 2, f"Tier {tier}: expected 2+ pages, got {len(doc)}"
             finally:
                 doc.close()
