@@ -2,8 +2,6 @@
 """Tests for extraction quality metrics (CER, WER)."""
 from __future__ import annotations
 
-import pytest
-
 from tests.extraction.synthetic.metrics import (
     character_error_rate,
     normalize_text,

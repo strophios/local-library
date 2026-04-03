@@ -2,10 +2,7 @@
 """Tests for synthetic document annotation parsing."""
 from __future__ import annotations
 
-import pytest
-
 from tests.extraction.synthetic.annotations import (
-    AnnotatedRegion,
     parse_annotations,
     strip_annotations,
 )
