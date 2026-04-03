@@ -61,7 +61,9 @@ class TestFuzzyFindRegion:
         extracted = "Something totally different about another topic entirely.\n"
         result = fuzzy_find_region(source_content, extracted)
         # These texts share little in common; expect low similarity or no match
-        assert result is None or result.similarity < 0.45
+        # (rapidfuzz's Indel ratio scores slightly higher than SequenceMatcher
+        # on strings with shared function words)
+        assert result is None or result.similarity < 0.50
 
     def test_respects_search_window(self):
         source_content = "Target text."

@@ -17,7 +17,8 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from difflib import SequenceMatcher
+
+from rapidfuzz.fuzz import ratio as rapidfuzz_ratio
 
 from tests.extraction.synthetic.annotations import AnnotatedRegion
 from tests.extraction.synthetic.metrics import normalize_text
@@ -187,7 +188,7 @@ def fuzzy_find_region(
             if not norm_candidate:
                 continue
 
-            similarity = SequenceMatcher(None, norm_source, norm_candidate).ratio()
+            similarity = rapidfuzz_ratio(norm_source, norm_candidate) / 100.0
             if similarity < min_similarity:
                 continue
 
@@ -332,7 +333,7 @@ def _compute_search_window(
             if not anchor_heading:
                 continue
             anchor_text = normalize_text(anchor_heading.group(2))
-            sim = SequenceMatcher(None, heading_text, anchor_text).ratio()
+            sim = rapidfuzz_ratio(heading_text, anchor_text) / 100.0
             if sim > best_sim:
                 best_sim = sim
                 best_anchor = anchor
