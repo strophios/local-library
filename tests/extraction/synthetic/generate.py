@@ -46,7 +46,7 @@ _TIER_SEEDS: dict[NoiseTier, int] = {
     NoiseTier.DEGRADED: 137,
 }
 
-_RENDER_DPI = 300
+_RENDER_DPI = 150
 
 
 def content_hash(file_path: Path) -> str:
@@ -228,7 +228,7 @@ def create_image_pdf(
         for img in images:
             page = doc.new_page(width=page_width, height=page_height)
             bio = io.BytesIO()
-            img.save(bio, format="PNG")
+            img.save(bio, format="JPEG", quality=85)
             bio.seek(0)
             page.insert_image(pymupdf.Rect(0, 0, page_width, page_height), stream=bio)
         doc.save(str(output_pdf))

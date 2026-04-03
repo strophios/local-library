@@ -139,8 +139,14 @@ class ExtractionQualityRunner:
             self._extractor = PdfExtractor(lazy_load=True)
         return self._extractor
 
-    def run(self) -> QualityReport:
+    def run(
+        self,
+        tiers: list[NoiseTier] | None = None,
+    ) -> QualityReport:
         """Run the full extraction quality benchmark.
+
+        Args:
+            tiers: Noise tiers to evaluate. None means all tiers.
 
         Returns:
             QualityReport with scores for all documents x tiers.
@@ -171,9 +177,10 @@ class ExtractionQualityRunner:
             logger.warning("No source documents found in %s", self.sources_dir)
             return report
 
+        active_tiers = tiers or list(NoiseTier)
         total_docs = len(source_files)
-        total_tiers = total_docs * 4  # 4 tiers per document
-        completed_tiers = 0
+        total_evals = total_docs * len(active_tiers)
+        completed_evals = 0
         run_start = time.monotonic()
 
         for doc_idx, source_md in enumerate(source_files, 1):
@@ -196,14 +203,16 @@ class ExtractionQualityRunner:
             doc_result = DocumentResult(document_name=doc_name)
 
             for tier, pdf_path in tier_pdfs.items():
+                if tier not in active_tiers:
+                    continue
                 tier_start = time.monotonic()
                 tier_result = self._evaluate_tier(regions, pdf_path, tier)
                 tier_elapsed = time.monotonic() - tier_start
-                completed_tiers += 1
+                completed_evals += 1
                 logger.info(
                     "  [%d/%d] %s %s — %.1fs",
-                    completed_tiers,
-                    total_tiers,
+                    completed_evals,
+                    total_evals,
                     doc_name,
                     tier.value,
                     tier_elapsed,
@@ -218,7 +227,7 @@ class ExtractionQualityRunner:
         logger.info(
             "Benchmark complete: %d docs, %d tiers in %.1fs",
             total_docs,
-            completed_tiers,
+            completed_evals,
             total_elapsed,
         )
         return report
