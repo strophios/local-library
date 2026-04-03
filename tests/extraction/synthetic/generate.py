@@ -91,7 +91,7 @@ def generate_clean_pdf(source_md: Path, output_pdf: Path) -> None:
             "pdf",
             outputfile=str(output_pdf),
             extra_args=[
-                "--pdf-engine=pdflatex",
+                "--pdf-engine=xelatex",
                 "--standalone",
                 "--variable=geometry:margin=1in",
             ],
