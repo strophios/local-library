@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -165,14 +166,20 @@ class ExtractionQualityRunner:
             timestamp=now.isoformat(),
         )
 
-        source_files = sorted(self.sources_dir.glob("*.md"))
+        source_files = sorted(f for f in self.sources_dir.glob("*.md") if f.name != "COVERAGE.md")
         if not source_files:
             logger.warning("No source documents found in %s", self.sources_dir)
             return report
 
-        for source_md in source_files:
+        total_docs = len(source_files)
+        total_tiers = total_docs * 4  # 4 tiers per document
+        completed_tiers = 0
+        run_start = time.monotonic()
+
+        for doc_idx, source_md in enumerate(source_files, 1):
             doc_name = source_md.stem
-            logger.info("Processing %s", doc_name)
+            doc_start = time.monotonic()
+            logger.info("[%d/%d] Processing %s", doc_idx, total_docs, doc_name)
 
             # Parse annotations
             text = source_md.read_text(encoding="utf-8")
@@ -189,11 +196,31 @@ class ExtractionQualityRunner:
             doc_result = DocumentResult(document_name=doc_name)
 
             for tier, pdf_path in tier_pdfs.items():
+                tier_start = time.monotonic()
                 tier_result = self._evaluate_tier(regions, pdf_path, tier)
+                tier_elapsed = time.monotonic() - tier_start
+                completed_tiers += 1
+                logger.info(
+                    "  [%d/%d] %s %s — %.1fs",
+                    completed_tiers,
+                    total_tiers,
+                    doc_name,
+                    tier.value,
+                    tier_elapsed,
+                )
                 doc_result.tiers[tier.value] = tier_result
 
+            doc_elapsed = time.monotonic() - doc_start
+            logger.info("  %s complete — %.1fs", doc_name, doc_elapsed)
             report.documents[doc_name] = doc_result
 
+        total_elapsed = time.monotonic() - run_start
+        logger.info(
+            "Benchmark complete: %d docs, %d tiers in %.1fs",
+            total_docs,
+            completed_tiers,
+            total_elapsed,
+        )
         return report
 
     def _evaluate_tier(
@@ -214,8 +241,11 @@ class ExtractionQualityRunner:
         """
         # Extract
         try:
+            extract_start = time.monotonic()
             extraction = self.extractor.extract(pdf_path)
+            extract_elapsed = time.monotonic() - extract_start
             extracted_text = extraction.text
+            logger.debug("    Extraction: %.1fs (%d chars)", extract_elapsed, len(extracted_text))
         except Exception:
             logger.error(
                 "Extraction failed for %s tier %s",
