@@ -22,7 +22,6 @@ ValidatorFn = Callable[[str, str], "StructuralScore"]
 
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
 _TABLE_ROW_RE = re.compile(r"^\|.+\|$", re.MULTILINE)
-_TABLE_SEP_RE = re.compile(r"^\|[-:| ]+\|$", re.MULTILINE)
 _LIST_ITEM_RE = re.compile(r"^(\s*)([-*+]|\d+\.)\s", re.MULTILINE)
 _DISPLAY_MATH_RE = re.compile(r"\$\$.+?\$\$", re.DOTALL)
 _INLINE_MATH_RE = re.compile(r"(?<!\$)\$(?!\$).+?(?<!\$)\$(?!\$)")
