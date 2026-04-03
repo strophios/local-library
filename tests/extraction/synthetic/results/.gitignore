@@ -1,5 +1,4 @@
 # Generated benchmark outputs
 output/
 *.json
-\!.gitkeep
-\!.gitignore
+!baseline.json
