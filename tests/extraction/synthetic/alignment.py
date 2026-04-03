@@ -2,9 +2,12 @@
 """Region alignment between source annotations and Marker-extracted output.
 
 Aligns annotated source regions to their corresponding locations in extracted
-text using a two-phase strategy:
-  1. Heading anchors: Find heading lines in extracted text to establish position
-  2. Fuzzy content matching: Within anchor neighborhoods, find best substring match
+text using a three-phase strategy:
+  1. Heading scaffold: Match heading regions first to establish section boundaries
+  2. Seed-and-expand: For each non-heading region, find a seed match via
+     partial_ratio_alignment, then expand outward to capture the full region
+  3. Ordered cursor: Process regions in document order, advancing a cursor
+     to avoid redundant backward searches
 
 Design principles:
 - Variable-length matching: Matches can be shorter than source (partial extraction)
@@ -18,6 +21,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 
+from rapidfuzz.fuzz import partial_ratio_alignment
 from rapidfuzz.fuzz import ratio as rapidfuzz_ratio
 
 from tests.extraction.synthetic.annotations import AnnotatedRegion
@@ -28,8 +32,9 @@ logger = logging.getLogger(__name__)
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$")
 _CODE_FENCE_RE = re.compile(r"^(`{3,}|~{3,})")
 _MIN_SIMILARITY = 0.3  # Below this, consider alignment failed
-_MIN_WINDOW_FRAC = 0.5  # Smallest window as fraction of source word count
-_MAX_WINDOW_FRAC = 1.1  # Largest window as fraction of source word count
+_SEED_WORD_COUNT = 20  # Words to use for seed matching
+_EXPAND_STEP_WORDS = 5  # Words to add per expansion step
+_EXPAND_PATIENCE = 3  # Stop after this many consecutive score decreases
 
 
 @dataclass(frozen=True)
@@ -120,6 +125,184 @@ def _is_excluded(offset: int, length: int, excluded: list[tuple[int, int]]) -> b
     return any(offset < ex_end and ex_start < end for ex_start, ex_end in excluded)
 
 
+def _word_boundaries(text: str) -> list[tuple[int, int]]:
+    """Compute (start, end) character positions for each whitespace-split word.
+
+    This allows mapping between word indices and character offsets in the
+    original text without repeated string joins.
+    """
+    boundaries: list[tuple[int, int]] = []
+    pos = 0
+    for word in text.split():
+        idx = text.index(word, pos)
+        boundaries.append((idx, idx + len(word)))
+        pos = idx + len(word)
+    return boundaries
+
+
+def _seed_find(
+    norm_source: str,
+    raw_search_text: str,
+    seed_word_count: int = _SEED_WORD_COUNT,
+) -> tuple[int, int] | None:
+    """Find approximate position of source content in raw search text using a seed.
+
+    Takes the first N words of the normalized source as a seed and uses
+    partial_ratio_alignment to locate it directly in the raw search text.
+    Searching raw text avoids the need to map between normalized and raw
+    character positions — partial_ratio_alignment is fuzzy enough to handle
+    formatting differences (markdown markers, whitespace, case).
+
+    Args:
+        norm_source: Normalized source content.
+        raw_search_text: Raw (unnormalized) text to search within.
+        seed_word_count: Number of words for the seed substring.
+
+    Returns:
+        (start, end) character span of seed in raw_search_text, or None.
+    """
+    source_words = norm_source.split()
+    if not source_words:
+        return None
+
+    # Use first N words as seed (or all words if source is short)
+    n_seed = min(seed_word_count, len(source_words))
+    seed = " ".join(source_words[:n_seed])
+
+    if not seed or not raw_search_text:
+        return None
+
+    result = partial_ratio_alignment(seed, raw_search_text, score_cutoff=40.0)
+    if result is None:
+        return None
+
+    return result.dest_start, result.dest_end
+
+
+def _char_offset_to_word_index(
+    char_offset: int,
+    word_bounds: list[tuple[int, int]],
+) -> int:
+    """Find the word index containing or nearest to a character offset."""
+    for i, (start, end) in enumerate(word_bounds):
+        if start >= char_offset:
+            return i
+        if start <= char_offset < end:
+            return i
+    return len(word_bounds) - 1
+
+
+def _expand_match(
+    norm_source: str,
+    raw_words: list[str],
+    word_bounds: list[tuple[int, int]],
+    seed_start: int,
+    seed_end: int,
+    step_words: int = _EXPAND_STEP_WORDS,
+    patience: int = _EXPAND_PATIENCE,
+) -> tuple[int, int] | None:
+    """Expand outward from a seed position to find the best-matching window.
+
+    Starting from the word span covering the seed match, tries progressively
+    larger windows. Stops when the score degrades for `patience` consecutive
+    expansions.
+
+    Args:
+        norm_source: Normalized source content to match against.
+        raw_words: Whitespace-split words of the raw search region.
+        word_bounds: Character boundaries for each word in the search region.
+        seed_start: Character offset of seed match start in raw search region.
+        seed_end: Character offset of seed match end in raw search region.
+        step_words: Words to add per expansion step.
+        patience: Stop after this many consecutive score decreases.
+
+    Returns:
+        (best_word_start, best_word_end) indices into raw_words, or None.
+    """
+    if not raw_words or not word_bounds:
+        return None
+
+    # Map seed character span to word indices
+    start_word = _char_offset_to_word_index(seed_start, word_bounds)
+
+    # Initial window: start at seed position, extend to approximate source length.
+    # The seed tells us WHERE the region starts; the source word count tells us
+    # HOW BIG it should be. This avoids the expansion phase needing to grow from
+    # a tiny seed span to a full paragraph.
+    source_word_count = len(norm_source.split())
+    best_start = start_word
+    best_end = min(start_word + source_word_count, len(raw_words))
+
+    # Score initial window (seed span)
+    candidate = " ".join(raw_words[best_start:best_end])
+    norm_candidate = normalize_text(candidate)
+    best_score = rapidfuzz_ratio(norm_source, norm_candidate) / 100.0 if norm_candidate else 0.0
+
+    # Expand outward in both directions
+    consecutive_declines = 0
+    expand_start = best_start
+    expand_end = best_end
+
+    for _ in range(50):  # Safety limit
+        new_start = max(0, expand_start - step_words)
+        new_end = min(len(raw_words), expand_end + step_words)
+
+        if new_start == expand_start and new_end == expand_end:
+            break  # Can't expand further
+
+        expand_start = new_start
+        expand_end = new_end
+
+        candidate = " ".join(raw_words[expand_start:expand_end])
+        norm_candidate = normalize_text(candidate)
+        if not norm_candidate:
+            continue
+
+        score = rapidfuzz_ratio(norm_source, norm_candidate) / 100.0
+
+        if score > best_score:
+            best_score = score
+            best_start = expand_start
+            best_end = expand_end
+            consecutive_declines = 0
+        else:
+            consecutive_declines += 1
+            if consecutive_declines >= patience:
+                break
+
+    # Contract inward: trim edges that don't improve the score.
+    # After expansion, the window may include trailing/leading noise.
+    # Try trimming from each end independently.
+    improved = True
+    while improved:
+        improved = False
+        # Try trimming from the end
+        if best_end - best_start > 1:
+            candidate = " ".join(raw_words[best_start : best_end - 1])
+            norm_candidate = normalize_text(candidate)
+            if norm_candidate:
+                score = rapidfuzz_ratio(norm_source, norm_candidate) / 100.0
+                if score > best_score:
+                    best_score = score
+                    best_end -= 1
+                    improved = True
+        # Try trimming from the start
+        if best_end - best_start > 1:
+            candidate = " ".join(raw_words[best_start + 1 : best_end])
+            norm_candidate = normalize_text(candidate)
+            if norm_candidate:
+                score = rapidfuzz_ratio(norm_source, norm_candidate) / 100.0
+                if score > best_score:
+                    best_score = score
+                    best_start += 1
+                    improved = True
+
+    if best_score < _MIN_SIMILARITY:
+        return None
+
+    return best_start, best_end
+
+
 def fuzzy_find_region(
     source_content: str,
     extracted: str,
@@ -130,10 +313,10 @@ def fuzzy_find_region(
 ) -> FuzzyMatch | None:
     """Find the best fuzzy match for source content within extracted text.
 
-    Uses variable-length sliding window: tries windows from 50% to 110% of
-    source word count to handle partial extraction. Scores by
-    (similarity * coverage) to prefer high-fidelity partial matches over
-    low-fidelity full-length matches.
+    Uses seed-and-expand strategy:
+      1. Find approximate location via partial_ratio_alignment on a seed
+      2. Expand outward from seed to capture the full matching region
+      3. Score the final match for similarity and coverage
 
     Args:
         source_content: The annotated region's content from source markdown.
@@ -162,58 +345,61 @@ def fuzzy_find_region(
 
     source_words = norm_source.split()
     n_source = len(source_words)
-
     if not source_words:
         return None
 
-    # Work with raw words to avoid index mismatch issues
     raw_words = search_region.split()
     if not raw_words:
         return None
 
-    # Try variable window sizes: 50% to 110% of source word count
-    min_window = max(1, int(n_source * _MIN_WINDOW_FRAC))
-    max_window = min(len(raw_words), int(n_source * _MAX_WINDOW_FRAC) + 1)
+    word_bounds = _word_boundaries(search_region)
 
-    best_score = 0.0  # Combined similarity * coverage
-    best_match: FuzzyMatch | None = None
+    # Phase 1: Seed — find approximate location in raw text
+    seed_span = _seed_find(norm_source, search_region)
+    if seed_span is None:
+        return None
 
-    for window_size in range(min_window, max_window + 1):
-        for i in range(len(raw_words) - window_size + 1):
-            candidate_words = raw_words[i : i + window_size]
-            raw_text = " ".join(candidate_words)
+    # Phase 2: Expand — grow window from seed position
+    seed_start, seed_end = seed_span
+    expansion = _expand_match(
+        norm_source,
+        raw_words,
+        word_bounds,
+        seed_start,
+        seed_end,
+    )
+    if expansion is None:
+        return None
 
-            # Normalize for comparison, but keep raw text for extraction
-            norm_candidate = normalize_text(raw_text)
-            if not norm_candidate:
-                continue
+    word_start, word_end = expansion
+    matched_text = " ".join(raw_words[word_start:word_end])
 
-            similarity = rapidfuzz_ratio(norm_source, norm_candidate) / 100.0
-            if similarity < min_similarity:
-                continue
+    # Compute character offset in the full extracted text
+    if word_bounds and word_start < len(word_bounds):
+        char_offset_in_region = word_bounds[word_start][0]
+    else:
+        char_offset_in_region = 0
+    abs_offset = search_start + char_offset_in_region
 
-            coverage = min(1.0, len(candidate_words) / n_source)
-            combined = similarity * coverage
+    # Check exclusion
+    if _is_excluded(abs_offset, len(matched_text), excluded):
+        return None
 
-            # Compute character offset from raw word position
-            prefix_raw = " ".join(raw_words[:i])
-            char_offset_in_region = len(prefix_raw) + (1 if prefix_raw else 0)
-            abs_offset = search_start + char_offset_in_region
+    # Final scoring
+    norm_matched = normalize_text(matched_text)
+    similarity = rapidfuzz_ratio(norm_source, norm_matched) / 100.0 if norm_matched else 0.0
+    if similarity < min_similarity:
+        return None
 
-            # Check exclusion
-            if _is_excluded(abs_offset, len(raw_text), excluded):
-                continue
+    matched_word_count = word_end - word_start
+    coverage = min(1.0, matched_word_count / n_source) if n_source > 0 else 0.0
 
-            if combined > best_score:
-                best_score = combined
-                best_match = FuzzyMatch(
-                    matched_text=raw_text,
-                    char_offset=abs_offset,
-                    similarity=similarity,
-                    coverage=coverage,
-                )
-
-    return best_match
+    return FuzzyMatch(
+        matched_text=matched_text,
+        char_offset=abs_offset,
+        similarity=similarity,
+        coverage=coverage,
+    )
 
 
 def align_regions(
@@ -222,13 +408,13 @@ def align_regions(
 ) -> AlignmentResult:
     """Align annotated source regions to positions in extracted text.
 
-    Two-phase strategy:
-      1. Find heading anchors in extracted text
-      2. For each source region, search near the appropriate anchor
+    Three-phase strategy:
+      1. Heading scaffold: match heading regions first via heading anchors
+      2. Section assignment: non-heading regions search within their section
+      3. Ordered cursor: regions processed in order, cursor advances forward
 
     Enforces exclusive claiming: once text is matched to a region, it's
-    excluded from consideration for subsequent regions. This prevents
-    double-counting and error aggregation from overlapping matches.
+    excluded from consideration for subsequent regions.
 
     Args:
         regions: Annotated regions from source markdown (from parse_annotations).
@@ -251,13 +437,87 @@ def align_regions(
         )
 
     anchors = find_heading_anchors(extracted)
-    aligned: list[AlignedRegion] = []
-    failures: list[AlignmentFailure] = []
+
+    # Phase 1: Build heading scaffold — match heading regions to anchors
+    heading_regions: list[tuple[int, AnnotatedRegion]] = []
+    non_heading_regions: list[tuple[int, AnnotatedRegion]] = []
+
+    for idx, region in enumerate(regions):
+        first_line = region.content.split("\n")[0].strip()
+        if _HEADING_RE.match(first_line):
+            heading_regions.append((idx, region))
+        else:
+            non_heading_regions.append((idx, region))
+
+    # Match headings to anchors (fast — short strings)
+    matched_headings: dict[int, HeadingAnchor] = {}  # anchor index → source region index
+    heading_results: dict[int, AlignedRegion | AlignmentFailure] = {}
     claimed_ranges: list[tuple[int, int]] = []
 
-    for region in regions:
-        # Determine search window based on heading anchors
-        search_start, search_end = _compute_search_window(region, anchors, len(extracted))
+    for region_idx, region in heading_regions:
+        heading_text = region.content.split("\n")[0].strip()
+        heading_match = _HEADING_RE.match(heading_text)
+        if not heading_match:
+            continue
+
+        norm_heading = normalize_text(heading_match.group(2))
+        best_anchor = None
+        best_anchor_idx = -1
+        best_sim = 0.0
+
+        for anchor_idx, anchor in enumerate(anchors):
+            anchor_match = _HEADING_RE.match(anchor.text)
+            if not anchor_match:
+                continue
+            norm_anchor = normalize_text(anchor_match.group(2))
+            sim = rapidfuzz_ratio(norm_heading, norm_anchor) / 100.0
+            if sim > best_sim:
+                best_sim = sim
+                best_anchor = anchor
+                best_anchor_idx = anchor_idx
+
+        if best_anchor and best_sim > 0.5:
+            # Find the actual heading line in extracted text
+            line_end = (
+                extracted.index("\n", best_anchor.char_offset)
+                if "\n" in extracted[best_anchor.char_offset :]
+                else len(extracted)
+            )
+            matched_text = extracted[best_anchor.char_offset : line_end].strip()
+
+            heading_results[region_idx] = AlignedRegion(
+                region=region,
+                matched_text=matched_text,
+                char_offset=best_anchor.char_offset,
+                similarity=best_sim,
+                coverage=1.0,
+            )
+            claimed_ranges.append((best_anchor.char_offset, line_end))
+            matched_headings[best_anchor_idx] = best_anchor
+        else:
+            heading_results[region_idx] = AlignmentFailure(
+                region_id=region.region_id,
+                feature_type=region.feature_type,
+                reason="no matching heading anchor found in extracted text",
+            )
+
+    # Phase 2: Build section boundaries from matched headings
+    # Sections are spans between consecutive heading anchors
+    section_bounds = _build_section_bounds(anchors, len(extracted))
+
+    # Phase 3: Match non-heading regions within sections, using cursor
+    cursor = 0  # Advances forward as regions are matched
+
+    for region_idx, region in non_heading_regions:
+        # Determine which section this region belongs to based on its position
+        # relative to heading regions in the source document
+        section_start, section_end = _find_section_for_region(
+            region_idx, heading_regions, heading_results, section_bounds, len(extracted)
+        )
+
+        # Start search from cursor or section start, whichever is further forward
+        search_start = max(cursor, section_start)
+        search_end = section_end
 
         match = fuzzy_find_region(
             region.content,
@@ -267,8 +527,18 @@ def align_regions(
             excluded_ranges=claimed_ranges,
         )
 
-        # Fallback: search full document if windowed search failed
-        if match is None and (search_start > 0 or search_end < len(extracted)):
+        # Fallback 1: try full section (cursor may have overshot)
+        if match is None and search_start > section_start:
+            match = fuzzy_find_region(
+                region.content,
+                extracted,
+                search_start=section_start,
+                search_end=section_end,
+                excluded_ranges=claimed_ranges,
+            )
+
+        # Fallback 2: try full document
+        if match is None:
             match = fuzzy_find_region(
                 region.content,
                 extracted,
@@ -276,76 +546,96 @@ def align_regions(
             )
 
         if match is not None:
-            aligned.append(
-                AlignedRegion(
-                    region=region,
-                    matched_text=match.matched_text,
-                    char_offset=match.char_offset,
-                    similarity=match.similarity,
-                    coverage=match.coverage,
-                )
+            heading_results[region_idx] = AlignedRegion(
+                region=region,
+                matched_text=match.matched_text,
+                char_offset=match.char_offset,
+                similarity=match.similarity,
+                coverage=match.coverage,
             )
-            # Claim this range so subsequent regions can't match it
             claimed_ranges.append((match.char_offset, match.char_offset + len(match.matched_text)))
+            cursor = match.char_offset + len(match.matched_text)
         else:
-            failures.append(
-                AlignmentFailure(
-                    region_id=region.region_id,
-                    feature_type=region.feature_type,
-                    reason="no sufficiently similar region found in extracted text",
-                )
+            heading_results[region_idx] = AlignmentFailure(
+                region_id=region.region_id,
+                feature_type=region.feature_type,
+                reason="no sufficiently similar region found in extracted text",
             )
+
+    # Reassemble results in original region order
+    aligned: list[AlignedRegion] = []
+    failures: list[AlignmentFailure] = []
+    for idx in range(len(regions)):
+        result = heading_results.get(idx)
+        if isinstance(result, AlignedRegion):
+            aligned.append(result)
+        elif isinstance(result, AlignmentFailure):
+            failures.append(result)
 
     return AlignmentResult(aligned=aligned, failures=failures)
 
 
-def _compute_search_window(
-    region: AnnotatedRegion,
+def _build_section_bounds(
     anchors: list[HeadingAnchor],
     text_length: int,
-) -> tuple[int, int]:
-    """Determine the search window for a region based on heading anchors.
+) -> list[tuple[int, int]]:
+    """Build section boundaries from heading anchors.
 
-    If the region content starts with a heading, tries to find the matching
-    anchor and constrains search to the section between that anchor and the
-    next one. Otherwise, searches the full text.
+    Each section spans from one heading to the next. The first section
+    starts at 0 (before any heading), and the last extends to end of text.
+
+    Returns:
+        List of (start, end) character offset tuples.
+    """
+    if not anchors:
+        return [(0, text_length)]
+
+    bounds: list[tuple[int, int]] = []
+    # Section before first heading
+    if anchors[0].char_offset > 0:
+        bounds.append((0, anchors[0].char_offset))
+
+    # Sections between headings
+    for i, anchor in enumerate(anchors):
+        start = anchor.char_offset
+        end = anchors[i + 1].char_offset if i + 1 < len(anchors) else text_length
+        bounds.append((start, end))
+
+    return bounds
+
+
+def _find_section_for_region(
+    region_idx: int,
+    heading_regions: list[tuple[int, AnnotatedRegion]],
+    heading_results: dict[int, AlignedRegion | AlignmentFailure],
+    section_bounds: list[tuple[int, int]],
+    text_length: int,
+) -> tuple[int, int]:
+    """Determine search bounds for a non-heading region based on surrounding headings.
+
+    Finds the nearest preceding and following heading regions (by source order)
+    that were successfully matched, and returns the span between them.
 
     Args:
-        region: The annotated region to find a window for.
-        anchors: Heading anchors found in extracted text.
+        region_idx: Index of the non-heading region in the original region list.
+        heading_regions: List of (index, region) for heading regions.
+        heading_results: Results of heading matching phase.
+        section_bounds: Section boundaries from heading anchors.
         text_length: Total length of extracted text.
 
     Returns:
         (search_start, search_end) character offsets.
     """
-    if not anchors:
-        return 0, text_length
+    # Find nearest preceding matched heading
+    preceding_end = 0
+    following_start = text_length
 
-    first_line = region.content.split("\n")[0].strip()
-    heading_match = _HEADING_RE.match(first_line)
+    for h_idx, _h_region in heading_regions:
+        result = heading_results.get(h_idx)
+        if isinstance(result, AlignedRegion):
+            if h_idx < region_idx:
+                preceding_end = max(preceding_end, result.char_offset)
+            elif h_idx > region_idx:
+                following_start = min(following_start, result.char_offset)
 
-    if heading_match:
-        heading_text = normalize_text(heading_match.group(2))
-        best_anchor = None
-        best_sim = 0.0
-        for anchor in anchors:
-            anchor_heading = _HEADING_RE.match(anchor.text)
-            if not anchor_heading:
-                continue
-            anchor_text = normalize_text(anchor_heading.group(2))
-            sim = rapidfuzz_ratio(heading_text, anchor_text) / 100.0
-            if sim > best_sim:
-                best_sim = sim
-                best_anchor = anchor
-
-        if best_anchor and best_sim > 0.5:
-            anchor_idx = anchors.index(best_anchor)
-            start = best_anchor.char_offset
-            end = (
-                anchors[anchor_idx + 1].char_offset
-                if anchor_idx + 1 < len(anchors)
-                else text_length
-            )
-            return start, end
-
-    return 0, text_length
+    return preceding_end, following_start
