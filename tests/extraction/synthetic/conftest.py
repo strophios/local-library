@@ -17,16 +17,6 @@ from pathlib import Path
 import pytest
 
 
-def pytest_addoption(parser: pytest.Parser) -> None:
-    """Add --run-extraction-quality flag."""
-    parser.addoption(
-        "--run-extraction-quality",
-        action="store_true",
-        default=False,
-        help="Run synthetic extraction quality benchmark tests",
-    )
-
-
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Skip extraction_quality tests unless --run-extraction-quality is set."""
     if config.getoption("--run-extraction-quality"):
