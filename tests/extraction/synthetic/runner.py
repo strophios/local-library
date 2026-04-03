@@ -36,6 +36,7 @@ from tests.extraction.synthetic.alignment import (
 from tests.extraction.synthetic.annotations import (
     AnnotatedRegion,
     parse_annotations,
+    strip_annotations,
 )
 from tests.extraction.synthetic.generate import NoiseTier, generate_all_tiers
 from tests.extraction.synthetic.metrics import (
@@ -76,6 +77,7 @@ class TierResult:
     tier: str
     semantic_summary: dict[str, float]  # Averaged CER/WER
     structural_summary: dict[str, dict[str, Any]]  # Per feature type
+    document_semantic: dict[str, float]  # Whole-doc CER/WER (alignment-independent)
     regions: list[dict[str, Any]]
     alignment_failures: list[dict[str, str]]
 
@@ -83,6 +85,7 @@ class TierResult:
         return {
             "tier": self.tier,
             "semantic": self.semantic_summary,
+            "document_semantic": self.document_semantic,
             "structural": self.structural_summary,
             "regions": self.regions,
             "alignment_failures": self.alignment_failures,
@@ -202,11 +205,13 @@ class ExtractionQualityRunner:
 
             doc_result = DocumentResult(document_name=doc_name)
 
+            source_text = strip_annotations(text)
+
             for tier, pdf_path in tier_pdfs.items():
                 if tier not in active_tiers:
                     continue
                 tier_start = time.monotonic()
-                tier_result = self._evaluate_tier(regions, pdf_path, tier)
+                tier_result = self._evaluate_tier(regions, source_text, pdf_path, tier)
                 tier_elapsed = time.monotonic() - tier_start
                 completed_evals += 1
                 logger.info(
@@ -235,6 +240,7 @@ class ExtractionQualityRunner:
     def _evaluate_tier(
         self,
         regions: list[AnnotatedRegion],
+        source_text: str,
         pdf_path: Path,
         tier: NoiseTier,
     ) -> TierResult:
@@ -242,6 +248,7 @@ class ExtractionQualityRunner:
 
         Args:
             regions: Annotated regions from source document.
+            source_text: Full source markdown with annotations stripped.
             pdf_path: Path to the tier's PDF.
             tier: Which noise tier this is.
 
@@ -276,6 +283,7 @@ class ExtractionQualityRunner:
             return TierResult(
                 tier=tier.value,
                 semantic_summary={"CER": 1.0, "WER": 1.0},
+                document_semantic={"CER": 1.0, "WER": 1.0},
                 structural_summary={},
                 regions=[],
                 alignment_failures=[
@@ -294,6 +302,13 @@ class ExtractionQualityRunner:
         # its cleanup pipeline, this must be updated to match.
         cleaned = clean_artifacts(extracted_text)
         cleaned = cleanup_markdown(cleaned)
+
+        # Document-level semantic metrics (alignment-independent).
+        # Compares full normalized source against full normalized extraction
+        # so we have a quality signal even when region alignment fails.
+        doc_cer = character_error_rate(source_text, cleaned)
+        doc_wer = word_error_rate(source_text, cleaned)
+        document_semantic = {"CER": round(doc_cer, 4), "WER": round(doc_wer, 4)}
 
         # Align
         alignment = align_regions(regions, cleaned)
@@ -329,6 +344,7 @@ class ExtractionQualityRunner:
         return TierResult(
             tier=tier.value,
             semantic_summary=semantic_summary,
+            document_semantic=document_semantic,
             structural_summary=structural_summary,
             regions=[s.to_dict() for s in region_scores],
             alignment_failures=[

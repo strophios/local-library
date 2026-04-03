@@ -116,6 +116,7 @@ class TestCompareToBaseline:
         doc.tiers["T0_clean"] = TierResult(
             tier="T0_clean",
             semantic_summary={"CER": 0.10, "WER": 0.10},
+            document_semantic={"CER": 0.10, "WER": 0.10},
             structural_summary={},
             regions=[],
             alignment_failures=[],
@@ -155,6 +156,7 @@ class TestCompareToBaseline:
         doc.tiers["T0_clean"] = TierResult(
             tier="T0_clean",
             semantic_summary={"CER": 0.05, "WER": 0.10},
+            document_semantic={"CER": 0.05, "WER": 0.10},
             structural_summary={
                 "heading": {"detection_rate": 1.0, "count": 3},
                 "table": {"detection_rate": 0.5, "count": 2},
@@ -186,6 +188,7 @@ class TestCompareToBaseline:
         doc.tiers["T0_clean"] = TierResult(
             tier="T0_clean",
             semantic_summary={"CER": 0.05, "WER": 0.10},
+            document_semantic={"CER": 0.05, "WER": 0.10},
             structural_summary={},
             regions=[],
             alignment_failures=[],
