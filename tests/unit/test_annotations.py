@@ -1,5 +1,6 @@
 # pattern: Imperative Shell
 """Tests for synthetic document annotation parsing."""
+
 from __future__ import annotations
 
 from tests.extraction.synthetic.annotations import (
@@ -57,9 +58,7 @@ class TestParseAnnotations:
         regions = parse_annotations(text)
         assert len(regions) == 1
         expected = (
-            "This is a paragraph that spans\n"
-            "multiple lines and contains\n"
-            "realistic prose content."
+            "This is a paragraph that spans\nmultiple lines and contains\nrealistic prose content."
         )
         assert regions[0].content == expected
 

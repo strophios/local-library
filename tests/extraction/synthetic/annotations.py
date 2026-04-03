@@ -10,14 +10,13 @@ This module provides:
 - parse_annotations(): Extract annotated regions with metadata
 - strip_annotations(): Remove annotation markers, preserving content
 """
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 
-_OPEN_TAG = re.compile(
-    r"^<!-- feature: (?P<feature_type>\S+) id:(?P<region_id>\S+) -->$"
-)
+_OPEN_TAG = re.compile(r"^<!-- feature: (?P<feature_type>\S+) id:(?P<region_id>\S+) -->$")
 _CLOSE_TAG = re.compile(r"^<!-- /feature -->$")
 
 

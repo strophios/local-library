@@ -1,5 +1,6 @@
 # pattern: Imperative Shell
 """Tests for extraction quality metrics (CER, WER)."""
+
 from __future__ import annotations
 
 from tests.extraction.synthetic.metrics import (

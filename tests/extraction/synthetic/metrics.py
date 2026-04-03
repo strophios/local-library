@@ -4,6 +4,7 @@
 Follows the metric function pattern from tests/eval/retrieval_eval.py:
 pure functions with NumPy-style docstrings, no I/O.
 """
+
 from __future__ import annotations
 
 import re
@@ -12,11 +13,11 @@ from rapidfuzz.distance import Levenshtein
 
 _MARKDOWN_FORMATTING = re.compile(
     r"(?:"
-    r"\*{1,3}|"       # bold/italic markers
-    r"_{1,3}|"        # underscore bold/italic
-    r"#{1,6}\s|"      # heading markers
-    r"`{1,3}|"        # code markers
-    r"~~"             # strikethrough
+    r"\*{1,3}|"  # bold/italic markers
+    r"_{1,3}|"  # underscore bold/italic
+    r"#{1,6}\s|"  # heading markers
+    r"`{1,3}|"  # code markers
+    r"~~"  # strikethrough
     r")"
 )
 _WHITESPACE = re.compile(r"\s+")
