@@ -119,8 +119,6 @@ def _is_excluded(offset: int, length: int, excluded: list[tuple[int, int]]) -> b
     return any(offset < ex_end and ex_start < end for ex_start, ex_end in excluded)
 
 
-
-
 def fuzzy_find_region(
     source_content: str,
     extracted: str,
