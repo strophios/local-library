@@ -1,5 +1,6 @@
 # pattern: Imperative Shell
 """Tests for runner aggregation, comparison, and serialization logic."""
+
 from __future__ import annotations
 
 import json
@@ -44,15 +45,9 @@ class TestAggregateStructuralScores:
 
     def test_groups_by_feature_prefix(self):
         scores = [
-            RegionScore(
-                "r1", "heading-h1", {"CER": 0, "WER": 0}, {"detected": True}, 0.9, 1.0
-            ),
-            RegionScore(
-                "r2", "heading-h2", {"CER": 0, "WER": 0}, {"detected": True}, 0.9, 1.0
-            ),
-            RegionScore(
-                "r3", "table-simple", {"CER": 0, "WER": 0}, {"detected": False}, 0.9, 1.0
-            ),
+            RegionScore("r1", "heading-h1", {"CER": 0, "WER": 0}, {"detected": True}, 0.9, 1.0),
+            RegionScore("r2", "heading-h2", {"CER": 0, "WER": 0}, {"detected": True}, 0.9, 1.0),
+            RegionScore("r3", "table-simple", {"CER": 0, "WER": 0}, {"detected": False}, 0.9, 1.0),
         ]
         result = _aggregate_structural(scores)
         assert "heading" in result
@@ -106,13 +101,7 @@ class TestCompareToBaseline:
         from tests.extraction.synthetic.runner import ExtractionQualityRunner
 
         # Write a fake baseline
-        baseline = {
-            "results": {
-                "doc1": {
-                    "T0_clean": {"semantic": {"CER": 0.05, "WER": 0.10}}
-                }
-            }
-        }
+        baseline = {"results": {"doc1": {"T0_clean": {"semantic": {"CER": 0.05, "WER": 0.10}}}}}
         results_dir = tmp_path / "results"
         results_dir.mkdir()
         (results_dir / "baseline.json").write_text(json.dumps(baseline))
@@ -183,13 +172,7 @@ class TestCompareToBaseline:
     def test_no_regression_when_improved(self, tmp_path: Path):
         from tests.extraction.synthetic.runner import ExtractionQualityRunner
 
-        baseline = {
-            "results": {
-                "doc1": {
-                    "T0_clean": {"semantic": {"CER": 0.10, "WER": 0.20}}
-                }
-            }
-        }
+        baseline = {"results": {"doc1": {"T0_clean": {"semantic": {"CER": 0.10, "WER": 0.20}}}}}
         results_dir = tmp_path / "results"
         results_dir.mkdir()
         (results_dir / "baseline.json").write_text(json.dumps(baseline))

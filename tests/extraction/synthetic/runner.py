@@ -16,6 +16,7 @@ Usage:
   runner.write_results(report)
   regressions = runner.compare_to_baseline(report)
 """
+
 from __future__ import annotations
 
 import json
@@ -95,9 +96,7 @@ class DocumentResult:
     tiers: dict[str, TierResult] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            t: r.to_dict() for t, r in self.tiers.items()
-        }
+        return {t: r.to_dict() for t, r in self.tiers.items()}
 
 
 @dataclass
@@ -114,9 +113,7 @@ class QualityReport:
             "run_id": self.run_id,
             "pipeline_version": self.pipeline_version,
             "timestamp": self.timestamp,
-            "results": {
-                name: doc.to_dict() for name, doc in self.documents.items()
-            },
+            "results": {name: doc.to_dict() for name, doc in self.documents.items()},
         }
 
 
@@ -192,9 +189,7 @@ class ExtractionQualityRunner:
             doc_result = DocumentResult(document_name=doc_name)
 
             for tier, pdf_path in tier_pdfs.items():
-                tier_result = self._evaluate_tier(
-                    regions, pdf_path, tier
-                )
+                tier_result = self._evaluate_tier(regions, pdf_path, tier)
                 doc_result.tiers[tier.value] = tier_result
 
             report.documents[doc_name] = doc_result
@@ -223,7 +218,9 @@ class ExtractionQualityRunner:
             extracted_text = extraction.text
         except Exception:
             logger.error(
-                "Extraction failed for %s tier %s", pdf_path, tier.value,
+                "Extraction failed for %s tier %s",
+                pdf_path,
+                tier.value,
                 exc_info=True,
             )
             return TierResult(
@@ -232,8 +229,11 @@ class ExtractionQualityRunner:
                 structural_summary={},
                 regions=[],
                 alignment_failures=[
-                    {"region_id": r.region_id, "feature_type": r.feature_type,
-                     "reason": "extraction failed"}
+                    {
+                        "region_id": r.region_id,
+                        "feature_type": r.feature_type,
+                        "reason": "extraction failed",
+                    }
                     for r in regions
                 ],
             )
@@ -282,8 +282,7 @@ class ExtractionQualityRunner:
             structural_summary=structural_summary,
             regions=[s.to_dict() for s in region_scores],
             alignment_failures=[
-                {"region_id": f.region_id, "feature_type": f.feature_type,
-                 "reason": f.reason}
+                {"region_id": f.region_id, "feature_type": f.feature_type, "reason": f.reason}
                 for f in alignment.failures
             ],
         )
@@ -302,7 +301,7 @@ class ExtractionQualityRunner:
         output_path = self.results_dir / filename
 
         with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(report.to_dict(), indent=2, fp=f)
+            json.dump(report.to_dict(), f, indent=2)
 
         return output_path
 
@@ -352,19 +351,20 @@ class ExtractionQualityRunner:
                     base_val = baseline_sem.get(metric, 0.0)
                     curr_val = current_sem.get(metric, 0.0)
 
+                    # Skip zero baselines: relative change is undefined
                     if base_val > 0 and curr_val > base_val:
                         relative_increase = (curr_val - base_val) / base_val
                         if relative_increase > threshold:
-                            regressions.append({
-                                "document": doc_name,
-                                "tier": tier_name,
-                                "metric": metric,
-                                "baseline": round(base_val, 4),
-                                "current": round(curr_val, 4),
-                                "relative_increase": round(
-                                    relative_increase, 4
-                                ),
-                            })
+                            regressions.append(
+                                {
+                                    "document": doc_name,
+                                    "tier": tier_name,
+                                    "metric": metric,
+                                    "baseline": round(base_val, 4),
+                                    "current": round(curr_val, 4),
+                                    "relative_increase": round(relative_increase, 4),
+                                }
+                            )
 
                 # Structural regression: detection rate decreasing is bad
                 baseline_struct = baseline_tier.get("structural", {})
@@ -375,20 +375,21 @@ class ExtractionQualityRunner:
                     base_rate = base_data.get("detection_rate", 0.0)
                     curr_rate = curr_data.get("detection_rate", 0.0)
 
+                    # Skip zero baselines: relative change is undefined
                     if base_rate > 0 and curr_rate < base_rate:
                         relative_decrease = (base_rate - curr_rate) / base_rate
                         if relative_decrease > threshold:
-                            regressions.append({
-                                "document": doc_name,
-                                "tier": tier_name,
-                                "metric": "detection_rate",
-                                "feature_type": feature_type,
-                                "baseline": round(base_rate, 4),
-                                "current": round(curr_rate, 4),
-                                "relative_increase": round(
-                                    relative_decrease, 4
-                                ),
-                            })
+                            regressions.append(
+                                {
+                                    "document": doc_name,
+                                    "tier": tier_name,
+                                    "metric": "detection_rate",
+                                    "feature_type": feature_type,
+                                    "baseline": round(base_rate, 4),
+                                    "current": round(curr_rate, 4),
+                                    "relative_increase": round(relative_decrease, 4),
+                                }
+                            )
 
         return regressions
 
@@ -413,14 +414,10 @@ def _aggregate_structural(
 
     result: dict[str, dict[str, Any]] = {}
     for feature, type_scores in by_type.items():
-        detected_count = sum(
-            1 for s in type_scores if s.structural.get("detected") is True
-        )
+        detected_count = sum(1 for s in type_scores if s.structural.get("detected") is True)
         total = len(type_scores)
         result[feature] = {
-            "detection_rate": round(
-                detected_count / total, 4
-            ) if total > 0 else 0.0,
+            "detection_rate": round(detected_count / total, 4) if total > 0 else 0.0,
             "count": total,
         }
     return result
