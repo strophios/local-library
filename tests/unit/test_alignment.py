@@ -1,5 +1,6 @@
 # pattern: Imperative Shell
 """Tests for region alignment between source annotations and extracted text."""
+
 from __future__ import annotations
 
 from tests.extraction.synthetic.alignment import (
@@ -65,9 +66,7 @@ class TestFuzzyFindRegion:
     def test_respects_search_window(self):
         source_content = "Target text."
         extracted = "A" * 5000 + "\n\nTarget text.\n\n" + "B" * 5000
-        result = fuzzy_find_region(
-            source_content, extracted, search_start=4900, search_end=5100
-        )
+        result = fuzzy_find_region(source_content, extracted, search_start=4900, search_end=5100)
         assert result is not None
         assert result.similarity >= 0.95
 
@@ -82,8 +81,7 @@ class TestFuzzyFindRegion:
     def test_partial_match_shorter_than_source(self):
         """When extraction drops part of a region, match should be shorter."""
         source_content = (
-            "This is a long paragraph. "
-            "The second sentence adds detail. The third wraps it up."
+            "This is a long paragraph. The second sentence adds detail. The third wraps it up."
         )
         # Extraction only got the first sentence
         extracted = "This is a long paragraph.\n\nSome other text here.\n"
@@ -98,11 +96,30 @@ class TestFuzzyFindRegion:
         source_content = "Shared text appears here."
         extracted = "Shared text appears here.\n\nOther content.\n"
         # Exclude the range where the text lives
-        result = fuzzy_find_region(
-            source_content, extracted, excluded_ranges=[(0, 30)]
-        )
+        result = fuzzy_find_region(source_content, extracted, excluded_ranges=[(0, 30)])
         # Should not match the excluded range
         assert result is None or result.char_offset >= 30
+
+    def test_handles_markdown_formatting_in_extracted(self):
+        """Fuzzy match should work when extracted text has markdown formatting."""
+        source_content = "Section Title"
+        extracted = "# Section Title\n\nBody text here."
+        result = fuzzy_find_region(source_content, extracted)
+        assert result is not None, "Should find match despite markdown in extracted"
+        # matched_text should contain the actual words, not the markdown marker
+        assert "Section" in result.matched_text
+        assert "Title" in result.matched_text
+        # Should not start with markdown characters
+        assert not result.matched_text.startswith("#")
+
+    def test_handles_bold_formatting_in_extracted(self):
+        """Fuzzy match should work with bold/italic formatting."""
+        source_content = "Important concept"
+        extracted = "This is **important concept** to understand.\n"
+        result = fuzzy_find_region(source_content, extracted)
+        assert result is not None, "Should find match despite markdown formatting"
+        assert "important" in result.matched_text.lower()
+        assert "concept" in result.matched_text.lower()
 
 
 class TestAlignRegions:
@@ -111,10 +128,7 @@ class TestAlignRegions:
     def test_aligns_simple_document(self):
         regions = [
             AnnotatedRegion("heading-h1", "title", "# Introduction"),
-            AnnotatedRegion(
-                "dense-prose", "body",
-                "This is the body paragraph with real content."
-            ),
+            AnnotatedRegion("dense-prose", "body", "This is the body paragraph with real content."),
         ]
         extracted = (
             "# Introduction\n\n"
@@ -130,10 +144,7 @@ class TestAlignRegions:
     def test_records_alignment_failures(self):
         regions = [
             AnnotatedRegion("heading-h1", "title", "# Introduction"),
-            AnnotatedRegion(
-                "table-simple", "missing-table",
-                "| A | B |\n|---|---|\n| 1 | 2 |"
-            ),
+            AnnotatedRegion("table-simple", "missing-table", "| A | B |\n|---|---|\n| 1 | 2 |"),
         ]
         extracted = "# Introduction\n\nThe table was lost during extraction.\n"
         result = align_regions(regions, extracted)
@@ -144,14 +155,8 @@ class TestAlignRegions:
     def test_exclusive_claiming_prevents_double_match(self):
         """Two regions should not match the same extracted text."""
         regions = [
-            AnnotatedRegion(
-                "dense-prose", "region-a",
-                "The shared text appears in the document."
-            ),
-            AnnotatedRegion(
-                "dense-prose", "region-b",
-                "The shared text appears in the document."
-            ),
+            AnnotatedRegion("dense-prose", "region-a", "The shared text appears in the document."),
+            AnnotatedRegion("dense-prose", "region-b", "The shared text appears in the document."),
         ]
         extracted = "The shared text appears in the document.\n\nOther stuff.\n"
         result = align_regions(regions, extracted)
@@ -159,18 +164,16 @@ class TestAlignRegions:
         assert len(result.aligned) >= 1
         # The key invariant: no two aligned regions overlap
         if len(result.aligned) == 2:
-            ranges = [
-                (a.char_offset, a.char_offset + len(a.matched_text))
-                for a in result.aligned
-            ]
+            ranges = [(a.char_offset, a.char_offset + len(a.matched_text)) for a in result.aligned]
             assert not _ranges_overlap(ranges[0], ranges[1])
 
     def test_partial_match_records_coverage(self):
         """Partial extraction should be reflected in coverage score."""
         regions = [
             AnnotatedRegion(
-                "dense-prose", "truncated",
-                "First sentence here. Second sentence here. Third sentence here."
+                "dense-prose",
+                "truncated",
+                "First sentence here. Second sentence here. Third sentence here.",
             ),
         ]
         # Only first sentence extracted
@@ -185,10 +188,7 @@ class TestAlignRegions:
             AnnotatedRegion("dense-prose", "methods-text", "Methods content here."),
         ]
         extracted = (
-            "# Introduction\n\n"
-            "Introduction content here.\n\n"
-            "# Methods\n\n"
-            "Methods content here.\n\n"
+            "# Introduction\n\nIntroduction content here.\n\n# Methods\n\nMethods content here.\n\n"
         )
         result = align_regions(regions, extracted)
         assert len(result.aligned) == 2

@@ -11,6 +11,7 @@ Design principles:
 - Exclusive claiming: Matched text is excluded from subsequent region searches
 - Alignment failure as data: Missing regions recorded explicitly, not force-matched
 """
+
 from __future__ import annotations
 
 import logging
@@ -118,6 +119,8 @@ def _is_excluded(offset: int, length: int, excluded: list[tuple[int, int]]) -> b
     return any(offset < ex_end and ex_start < end for ex_start, ex_end in excluded)
 
 
+
+
 def fuzzy_find_region(
     source_content: str,
     extracted: str,
@@ -155,55 +158,55 @@ def fuzzy_find_region(
         return None
 
     norm_source = normalize_text(source_content)
-    norm_extracted = normalize_text(search_region)
-
-    if not norm_source or not norm_extracted:
+    if not norm_source:
         return None
 
     source_words = norm_source.split()
-    extracted_words = norm_extracted.split()
     n_source = len(source_words)
 
-    if not extracted_words or not source_words:
+    if not source_words:
+        return None
+
+    # Work with raw words to avoid index mismatch issues
+    raw_words = search_region.split()
+    if not raw_words:
         return None
 
     # Try variable window sizes: 50% to 110% of source word count
     min_window = max(1, int(n_source * _MIN_WINDOW_FRAC))
-    max_window = min(len(extracted_words), int(n_source * _MAX_WINDOW_FRAC) + 1)
+    max_window = min(len(raw_words), int(n_source * _MAX_WINDOW_FRAC) + 1)
 
     best_score = 0.0  # Combined similarity * coverage
     best_match: FuzzyMatch | None = None
-    raw_words = search_region.split()
 
     for window_size in range(min_window, max_window + 1):
-        for i in range(len(extracted_words) - window_size + 1):
-            candidate_words = extracted_words[i : i + window_size]
-            candidate = " ".join(candidate_words)
+        for i in range(len(raw_words) - window_size + 1):
+            candidate_words = raw_words[i : i + window_size]
+            raw_text = " ".join(candidate_words)
 
-            similarity = SequenceMatcher(None, norm_source, candidate).ratio()
+            # Normalize for comparison, but keep raw text for extraction
+            norm_candidate = normalize_text(raw_text)
+            if not norm_candidate:
+                continue
+
+            similarity = SequenceMatcher(None, norm_source, norm_candidate).ratio()
             if similarity < min_similarity:
                 continue
 
             coverage = min(1.0, len(candidate_words) / n_source)
             combined = similarity * coverage
 
-            # Map word position back to approximate char offset in search_region
-            prefix = " ".join(extracted_words[:i])
-            char_offset_in_region = len(prefix) + (1 if prefix else 0)
+            # Compute character offset from raw word position
+            prefix_raw = " ".join(raw_words[:i])
+            char_offset_in_region = len(prefix_raw) + (1 if prefix_raw else 0)
             abs_offset = search_start + char_offset_in_region
 
             # Check exclusion
-            candidate_char_len = len(candidate)
-            if _is_excluded(abs_offset, candidate_char_len, excluded):
+            if _is_excluded(abs_offset, len(raw_text), excluded):
                 continue
 
             if combined > best_score:
                 best_score = combined
-                # Get actual text from the un-normalized search region using raw words
-                raw_start = i
-                raw_end = min(i + window_size, len(raw_words))
-                raw_text = " ".join(raw_words[raw_start:raw_end]).strip()
-
                 best_match = FuzzyMatch(
                     matched_text=raw_text,
                     char_offset=abs_offset,
@@ -255,9 +258,7 @@ def align_regions(
 
     for region in regions:
         # Determine search window based on heading anchors
-        search_start, search_end = _compute_search_window(
-            region, anchors, len(extracted)
-        )
+        search_start, search_end = _compute_search_window(region, anchors, len(extracted))
 
         match = fuzzy_find_region(
             region.content,
@@ -286,9 +287,7 @@ def align_regions(
                 )
             )
             # Claim this range so subsequent regions can't match it
-            claimed_ranges.append(
-                (match.char_offset, match.char_offset + len(match.matched_text))
-            )
+            claimed_ranges.append((match.char_offset, match.char_offset + len(match.matched_text)))
         else:
             failures.append(
                 AlignmentFailure(
