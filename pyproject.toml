@@ -24,6 +24,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "numpy>=1.24.0",
+    "pillow>=10.0.0",
+    "pymupdf>=1.25.0",
+    "pypandoc-binary>=1.14",
     "pytest>=8.0.0",
     "pytest-cov>=4.0.0",
     "rapidfuzz>=3.0.0",
