@@ -254,7 +254,18 @@ class ExtractionQualityRunner:
             extraction = self.extractor.extract(pdf_path)
             extract_elapsed = time.monotonic() - extract_start
             extracted_text = extraction.text
-            logger.debug("    Extraction: %.1fs (%d chars)", extract_elapsed, len(extracted_text))
+            logger.info(
+                "    Extraction: %.1fs (%d chars)",
+                extract_elapsed,
+                len(extracted_text),
+            )
+
+            # Save extracted markdown for diagnostic visibility
+            output_dir = self.results_dir / "output"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            doc_name = pdf_path.parent.name
+            output_path = output_dir / f"{doc_name}_{tier.value}.md"
+            output_path.write_text(extracted_text, encoding="utf-8")
         except Exception:
             logger.error(
                 "Extraction failed for %s tier %s",
