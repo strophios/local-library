@@ -102,10 +102,29 @@ class TestGenerateCleanPdf:
     def test_strips_annotations_before_conversion(
         self, sample_source: Path, tmp_path: Path
     ):
-        """Annotations should not appear in the intermediate markdown."""
+        """Annotations should not appear in the generated PDF."""
         output = tmp_path / "output.pdf"
         generate_clean_pdf(sample_source, output)
         assert output.exists()
+
+        # Extract text from PDF to verify annotations are absent
+        import pymupdf
+
+        doc = pymupdf.open(str(output))
+        try:
+            full_text = ""
+            for page in doc:
+                full_text += page.get_text()
+        finally:
+            doc.close()
+
+        # Annotation markers should not appear in extracted text
+        assert "<!-- feature:" not in full_text, (
+            "Generated PDF contains annotation opening markers"
+        )
+        assert "<!-- /feature -->" not in full_text, (
+            "Generated PDF contains annotation closing markers"
+        )
 
     def test_multi_page_produces_multiple_pages(
         self, multi_page_source: Path, tmp_path: Path
@@ -166,11 +185,16 @@ class TestApplyNoise:
     def _make_white_image() -> Image.Image:
         return Image.new("RGB", (200, 200), (255, 255, 255))
 
+    def test_tier_clean_embedded_raises_value_error(self):
+        img = self._make_white_image()
+        with pytest.raises(ValueError, match="CLEAN_EMBEDDED is embedded text"):
+            apply_noise(img, NoiseTier.CLEAN_EMBEDDED)
+
     def test_tier_clean_ocr_no_visible_noise(self):
         img = self._make_white_image()
         result = apply_noise(img, NoiseTier.CLEAN_OCR)
         # Should be unchanged (just image, no noise)
-        assert result.size == img.size
+        np.testing.assert_array_equal(np.array(result), np.array(img))
 
     def test_tier_moderate_applies_blur_and_rotation(self):
         img = self._make_white_image()
@@ -178,11 +202,15 @@ class TestApplyNoise:
         # Rotation with expand=True may change dimensions
         assert result.size[0] > 0
         assert result.size[1] > 0
+        # Pixel data should differ due to blur, rotation, and noise
+        assert not np.array_equal(np.array(result), np.array(img))
 
     def test_tier_degraded_applies_heavy_transforms(self):
         img = self._make_white_image()
         result = apply_noise(img, NoiseTier.DEGRADED)
         assert result.size[0] > 0
+        # Pixel data should differ due to heavy transforms
+        assert not np.array_equal(np.array(result), np.array(img))
 
     def test_deterministic_with_same_seed(self):
         img = self._make_white_image()

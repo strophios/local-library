@@ -144,7 +144,16 @@ def apply_noise(
 
     Returns:
         Transformed PIL Image.
+
+    Raises:
+        ValueError: If tier is CLEAN_EMBEDDED (embedded text, not image-based).
     """
+    if tier == NoiseTier.CLEAN_EMBEDDED:
+        raise ValueError(
+            "CLEAN_EMBEDDED is embedded text, not image-based. "
+            "Noise cannot be applied to this tier."
+        )
+
     if tier == NoiseTier.CLEAN_OCR:
         return img.copy()
 
