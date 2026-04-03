@@ -203,26 +203,34 @@ def apply_noise(
     return result
 
 
-def create_image_pdf(images: list[Image.Image], output_pdf: Path) -> None:
+def create_image_pdf(
+    images: list[Image.Image],
+    output_pdf: Path,
+    page_width: float = 612,
+    page_height: float = 792,
+) -> None:
     """Create a PDF from a list of PIL Images (one per page).
 
     Used to create image-only PDFs (no embedded text layer) for T1-T3.
+    Pages are set to standard dimensions (default US Letter) with images
+    scaled to fit, rather than using pixel dimensions as page size.
 
     Args:
         images: List of PIL Images, one per page.
         output_pdf: Path to write the output PDF.
+        page_width: Page width in PDF points (72 pts/inch). Default 612 (8.5").
+        page_height: Page height in PDF points. Default 792 (11").
     """
     output_pdf.parent.mkdir(parents=True, exist_ok=True)
     doc = pymupdf.open()
 
     try:
         for img in images:
-            width, height = img.size
-            page = doc.new_page(width=width, height=height)
+            page = doc.new_page(width=page_width, height=page_height)
             bio = io.BytesIO()
             img.save(bio, format="PNG")
             bio.seek(0)
-            page.insert_image(pymupdf.Rect(0, 0, width, height), stream=bio)
+            page.insert_image(pymupdf.Rect(0, 0, page_width, page_height), stream=bio)
         doc.save(str(output_pdf))
     finally:
         doc.close()
