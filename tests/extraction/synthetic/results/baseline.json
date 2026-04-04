@@ -1,7 +1,7 @@
 {
-  "run_id": "2026-04-03T21:28:57",
-  "pipeline_version": "55bafa7",
-  "timestamp": "2026-04-03T21:28:57.021217+00:00",
+  "run_id": "2026-04-04T16:15:53",
+  "pipeline_version": "d1b115c",
+  "timestamp": "2026-04-04T16:15:53.232639+00:00",
   "results": {
     "climate_modeling": {
       "T0_clean": {
@@ -17,23 +17,28 @@
         "structural": {
           "heading": {
             "detection_rate": 1.0,
-            "count": 6
+            "count": 6,
+            "skipped": 0
           },
           "dense": {
             "detection_rate": 0.0,
-            "count": 8
+            "count": 0,
+            "skipped": 8
           },
           "inline": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "display": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "bibliography": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 0,
+            "skipped": 1
           }
         },
         "regions": [
@@ -280,23 +285,28 @@
         "structural": {
           "heading": {
             "detection_rate": 1.0,
-            "count": 6
+            "count": 6,
+            "skipped": 0
           },
           "dense": {
             "detection_rate": 0.0,
-            "count": 7
+            "count": 0,
+            "skipped": 7
           },
           "inline": {
             "detection_rate": 1.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "display": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "bibliography": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 0,
+            "skipped": 1
           }
         },
         "regions": [
@@ -536,23 +546,28 @@
         "structural": {
           "heading": {
             "detection_rate": 1.0,
-            "count": 6
+            "count": 6,
+            "skipped": 0
           },
           "dense": {
             "detection_rate": 0.0,
-            "count": 7
+            "count": 0,
+            "skipped": 7
           },
           "inline": {
             "detection_rate": 1.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "display": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "bibliography": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 0,
+            "skipped": 1
           }
         },
         "regions": [
@@ -794,23 +809,28 @@
         "structural": {
           "heading": {
             "detection_rate": 1.0,
-            "count": 9
+            "count": 9,
+            "skipped": 0
           },
           "dense": {
             "detection_rate": 0.0,
-            "count": 10
+            "count": 0,
+            "skipped": 10
           },
           "display": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "table": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "inline": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           }
         },
         "regions": [
@@ -1125,23 +1145,28 @@
         "structural": {
           "heading": {
             "detection_rate": 1.0,
-            "count": 9
+            "count": 9,
+            "skipped": 0
           },
           "dense": {
             "detection_rate": 0.0,
-            "count": 10
+            "count": 0,
+            "skipped": 10
           },
           "display": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "table": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "inline": {
             "detection_rate": 1.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           }
         },
         "regions": [
@@ -1456,23 +1481,28 @@
         "structural": {
           "heading": {
             "detection_rate": 1.0,
-            "count": 9
+            "count": 9,
+            "skipped": 0
           },
           "dense": {
             "detection_rate": 0.0,
-            "count": 10
+            "count": 0,
+            "skipped": 10
           },
           "display": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "table": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "inline": {
             "detection_rate": 1.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           }
         },
         "regions": [
@@ -1789,11 +1819,13 @@
         "structural": {
           "heading": {
             "detection_rate": 1.0,
-            "count": 7
+            "count": 7,
+            "skipped": 0
           },
           "dense": {
             "detection_rate": 0.0,
-            "count": 7
+            "count": 0,
+            "skipped": 7
           }
         },
         "regions": [
@@ -2008,11 +2040,13 @@
         "structural": {
           "heading": {
             "detection_rate": 1.0,
-            "count": 7
+            "count": 7,
+            "skipped": 0
           },
           "dense": {
             "detection_rate": 0.0,
-            "count": 7
+            "count": 0,
+            "skipped": 7
           }
         },
         "regions": [
@@ -2227,11 +2261,13 @@
         "structural": {
           "heading": {
             "detection_rate": 1.0,
-            "count": 7
+            "count": 7,
+            "skipped": 0
           },
           "dense": {
             "detection_rate": 0.0,
-            "count": 7
+            "count": 0,
+            "skipped": 7
           }
         },
         "regions": [
@@ -2448,27 +2484,33 @@
         "structural": {
           "heading": {
             "detection_rate": 1.0,
-            "count": 7
+            "count": 7,
+            "skipped": 0
           },
           "dense": {
             "detection_rate": 0.0,
-            "count": 7
+            "count": 0,
+            "skipped": 7
           },
           "blockquote": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "display": {
             "detection_rate": 1.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "bibliography": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 0,
+            "skipped": 1
           },
           "footnote": {
-            "detection_rate": 0.0,
-            "count": 2
+            "detection_rate": 1.0,
+            "count": 2,
+            "skipped": 0
           }
         },
         "regions": [
@@ -2708,7 +2750,7 @@
               "WER": 0.0312
             },
             "structural": {
-              "detected": false
+              "detected": true
             },
             "similarity": 0.9901,
             "coverage": 1.0
@@ -2721,7 +2763,7 @@
               "WER": 0.3438
             },
             "structural": {
-              "detected": false
+              "detected": true
             },
             "similarity": 0.7956,
             "coverage": 0.9375
@@ -2748,27 +2790,33 @@
         "structural": {
           "heading": {
             "detection_rate": 1.0,
-            "count": 7
+            "count": 7,
+            "skipped": 0
           },
           "dense": {
             "detection_rate": 0.0,
-            "count": 8
+            "count": 0,
+            "skipped": 8
           },
           "blockquote": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "display": {
             "detection_rate": 1.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "bibliography": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 0,
+            "skipped": 1
           },
           "footnote": {
-            "detection_rate": 0.0,
-            "count": 2
+            "detection_rate": 1.0,
+            "count": 2,
+            "skipped": 0
           }
         },
         "regions": [
@@ -3021,7 +3069,7 @@
               "WER": 0.0312
             },
             "structural": {
-              "detected": false
+              "detected": true
             },
             "similarity": 0.9901,
             "coverage": 1.0
@@ -3034,7 +3082,7 @@
               "WER": 0.2188
             },
             "structural": {
-              "detected": false
+              "detected": true
             },
             "similarity": 0.9716,
             "coverage": 0.9375
@@ -3055,27 +3103,33 @@
         "structural": {
           "heading": {
             "detection_rate": 1.0,
-            "count": 7
+            "count": 7,
+            "skipped": 0
           },
           "dense": {
             "detection_rate": 0.0,
-            "count": 8
+            "count": 0,
+            "skipped": 8
           },
           "blockquote": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "display": {
             "detection_rate": 1.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "bibliography": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 0,
+            "skipped": 1
           },
           "footnote": {
-            "detection_rate": 0.0,
-            "count": 2
+            "detection_rate": 1.0,
+            "count": 2,
+            "skipped": 0
           }
         },
         "regions": [
@@ -3328,7 +3382,7 @@
               "WER": 0.0312
             },
             "structural": {
-              "detected": false
+              "detected": true
             },
             "similarity": 0.9901,
             "coverage": 1.0
@@ -3341,7 +3395,7 @@
               "WER": 0.25
             },
             "structural": {
-              "detected": false
+              "detected": true
             },
             "similarity": 0.9617,
             "coverage": 0.8438
@@ -3364,23 +3418,28 @@
         "structural": {
           "heading": {
             "detection_rate": 1.0,
-            "count": 10
+            "count": 10,
+            "skipped": 0
           },
           "dense": {
             "detection_rate": 0.0,
-            "count": 8
+            "count": 0,
+            "skipped": 8
           },
           "nested": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "inline": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "code": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           }
         },
         "regions": [
@@ -3683,19 +3742,23 @@
         "structural": {
           "heading": {
             "detection_rate": 1.0,
-            "count": 10
+            "count": 10,
+            "skipped": 0
           },
           "dense": {
             "detection_rate": 0.0,
-            "count": 7
+            "count": 0,
+            "skipped": 7
           },
           "nested": {
             "detection_rate": 1.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "inline": {
             "detection_rate": 1.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           }
         },
         "regions": [
@@ -3985,23 +4048,28 @@
         "structural": {
           "heading": {
             "detection_rate": 1.0,
-            "count": 10
+            "count": 10,
+            "skipped": 0
           },
           "dense": {
             "detection_rate": 0.0,
-            "count": 7
+            "count": 0,
+            "skipped": 7
           },
           "nested": {
             "detection_rate": 1.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "inline": {
             "detection_rate": 1.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "code": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           }
         },
         "regions": [
@@ -4301,23 +4369,28 @@
         "structural": {
           "heading": {
             "detection_rate": 1.0,
-            "count": 7
+            "count": 7,
+            "skipped": 0
           },
           "dense": {
             "detection_rate": 0.0,
-            "count": 7
+            "count": 0,
+            "skipped": 7
           },
           "table": {
             "detection_rate": 1.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "bibliography": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 0,
+            "skipped": 1
           },
           "footnote": {
-            "detection_rate": 0.0,
-            "count": 2
+            "detection_rate": 1.0,
+            "count": 2,
+            "skipped": 0
           }
         },
         "regions": [
@@ -4545,7 +4618,7 @@
               "WER": 0.0286
             },
             "structural": {
-              "detected": false
+              "detected": true
             },
             "similarity": 0.9918,
             "coverage": 1.0
@@ -4558,7 +4631,7 @@
               "WER": 0.0256
             },
             "structural": {
-              "detected": false
+              "detected": true
             },
             "similarity": 0.9926,
             "coverage": 1.0
@@ -4579,23 +4652,28 @@
         "structural": {
           "heading": {
             "detection_rate": 1.0,
-            "count": 7
+            "count": 7,
+            "skipped": 0
           },
           "dense": {
             "detection_rate": 0.0,
-            "count": 7
+            "count": 0,
+            "skipped": 7
           },
           "table": {
             "detection_rate": 1.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "bibliography": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 0,
+            "skipped": 1
           },
           "footnote": {
-            "detection_rate": 0.0,
-            "count": 2
+            "detection_rate": 1.0,
+            "count": 2,
+            "skipped": 0
           }
         },
         "regions": [
@@ -4823,7 +4901,7 @@
               "WER": 0.0286
             },
             "structural": {
-              "detected": false
+              "detected": true
             },
             "similarity": 0.9918,
             "coverage": 1.0
@@ -4836,7 +4914,7 @@
               "WER": 0.0256
             },
             "structural": {
-              "detected": false
+              "detected": true
             },
             "similarity": 0.9926,
             "coverage": 1.0
@@ -4857,23 +4935,28 @@
         "structural": {
           "heading": {
             "detection_rate": 1.0,
-            "count": 7
+            "count": 7,
+            "skipped": 0
           },
           "dense": {
             "detection_rate": 0.0,
-            "count": 7
+            "count": 0,
+            "skipped": 7
           },
           "table": {
             "detection_rate": 1.0,
-            "count": 1
+            "count": 1,
+            "skipped": 0
           },
           "bibliography": {
             "detection_rate": 0.0,
-            "count": 1
+            "count": 0,
+            "skipped": 1
           },
           "footnote": {
-            "detection_rate": 0.0,
-            "count": 2
+            "detection_rate": 1.0,
+            "count": 2,
+            "skipped": 0
           }
         },
         "regions": [
@@ -5101,7 +5184,7 @@
               "WER": 0.0286
             },
             "structural": {
-              "detected": false
+              "detected": true
             },
             "similarity": 0.9918,
             "coverage": 1.0
@@ -5114,7 +5197,7 @@
               "WER": 0.0256
             },
             "structural": {
-              "detected": false
+              "detected": true
             },
             "similarity": 0.9926,
             "coverage": 1.0
