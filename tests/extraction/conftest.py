@@ -29,21 +29,28 @@ GOLDEN_SET_DIR = Path(__file__).parent / "golden_set"
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
-    """Add --run-extraction flag to pytest CLI.
+    """Add --run-extraction and --run-extraction-quality flags to pytest CLI.
 
     Extraction tests are slow (PDF processing with Marker) and resource-intensive.
-    They are skipped by default unless this flag is passed.
+    They are skipped by default unless a flag is passed.
 
     Usage:
-        pytest tests/                      # Skips extraction tests
-        pytest tests/ --run-extraction     # Includes extraction tests
-        pytest tests/extraction/ --run-extraction  # Run only extraction tests
+        pytest tests/                                 # Skips extraction tests
+        pytest tests/ --run-extraction               # Includes extraction tests
+        pytest tests/ --run-extraction-quality       # Includes synthetic extraction quality tests
+        pytest tests/extraction/ --run-extraction    # Run only extraction tests
     """
     parser.addoption(
         "--run-extraction",
         action="store_true",
         default=False,
         help="Run extraction tests (slow, resource-intensive PDF processing)",
+    )
+    parser.addoption(
+        "--run-extraction-quality",
+        action="store_true",
+        default=False,
+        help="Run synthetic extraction quality benchmark tests",
     )
 
 
@@ -62,16 +69,22 @@ def pytest_collection_modifyitems(
     """Skip extraction tests unless --run-extraction flag is passed.
 
     Also applies manifest-based markers (categories, xfail for expected failures).
+
+    NOTE: The synthetic extraction quality tests can be run with --run-extraction-quality
+    (without --run-extraction). This hook respects both flags.
     """
     run_extraction = config.getoption("--run-extraction")
+    run_extraction_quality = config.getoption("--run-extraction-quality")
 
-    # Skip extraction tests if flag not set
-    if not run_extraction:
+    # Skip extraction tests if neither flag is set
+    if not run_extraction and not run_extraction_quality:
         skip_extraction = pytest.mark.skip(
-            reason="Extraction tests skipped by default. Use --run-extraction to run."
+            reason="Extraction tests skipped by default. Use --run-extraction or --run-extraction-quality to run."
         )
         for item in items:
-            if "extraction" in item.keywords:
+            # Only skip if it doesn't have extraction_quality marker
+            # (extraction_quality tests will be handled by synthetic conftest)
+            if "extraction" in item.keywords and "extraction_quality" not in item.keywords:
                 item.add_marker(skip_extraction)
 
     # Apply manifest-based markers (categories, xfail)

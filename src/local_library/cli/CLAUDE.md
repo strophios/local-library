@@ -1,6 +1,6 @@
 # CLI Domain
 
-Last verified: 2026-03-06
+Last verified: 2026-04-03
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 
 ## Contracts
 
-- **Exposes**: CLI commands (add, ask, list, show, delete, open, update, review, embed, search), zotero command group (import, collections), identifier resolution utilities
+- **Exposes**: CLI commands (add, ask, list, show, delete, open, update, review, reextract, embed, search), zotero command group (import, collections), identifier resolution utilities
 - **Guarantees**:
   - All commands accepting document IDs support UUID (full or partial) and @citekey syntax
   - Failed citekey lookups provide fuzzy match suggestions (Levenshtein distance + prefix matching)
@@ -28,6 +28,9 @@ Command-line interface for the local-library system. Provides user-facing comman
   - ask command supports --doc for document-scoped queries (UUID and @citekey)
   - ask command streams by default; --json implies --no-stream
   - ask command catches LLMError, RAGError, EmbeddingError, LookupError with mode-appropriate messages
+  - reextract command re-runs extraction pipeline on stored PDFs; overwrites extracted markdown and marks embeddings STALE
+  - reextract supports single document (UUID/@citekey) or --all for bulk re-extraction
+  - reextract --all targets READY and NEEDS_REVIEW documents; continues on per-document errors
 - **Expects**: Library context manager for database access; editor available for update/review/open commands
 
 ## Dependencies
@@ -60,6 +63,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 - **Ask command model override**: --model flag passed to Library via `rag_model` parameter; overrides default "gemini/gemini-2.0-flash"
 - **Ask command error handling**: Four error types caught (LookupError, EmbeddingError, RAGError, LLMError); JSON mode outputs error with code, non-JSON prints styled error
 - **Reranking opt-out pattern**: Both search and ask use `--no-rerank` (negated boolean) because reranking is on by default. Forwarded as `rerank=not no_rerank` to Library methods
+- **Reextract command**: Re-runs extraction pipeline (Marker + cleanup) on existing documents without modifying metadata. Marks embeddings STALE so `embed --pending` picks them up. Uses `embed_on_add=False` to avoid auto-embedding during re-extraction.
 
 ## Invariants
 
@@ -81,6 +85,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 - `update.py` - Update command with editor-based validation loop
 - `review.py` - Review command (open --both + update composition)
 - `embed.py` - Embed command with --pending, --all, --force, --dry-run options
+- `reextract.py` - Reextract command with single-doc and --all modes, progress tracking, continue-on-error
 - `search.py` - Search command with --limit, --mode, --doc, --json, --no-rerank options
 - `zotero.py` - Zotero command group with `import` (batch import with progress) and `collections` (list collections)
 

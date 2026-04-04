@@ -1,0 +1,4 @@
+# Generated benchmark outputs
+output/
+*.json
+!baseline.json
