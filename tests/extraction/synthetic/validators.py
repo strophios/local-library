@@ -25,7 +25,7 @@ _TABLE_ROW_RE = re.compile(r"^\|.+\|$", re.MULTILINE)
 _LIST_ITEM_RE = re.compile(r"^(\s*)([-*+]|\d+\.)\s", re.MULTILINE)
 _DISPLAY_MATH_RE = re.compile(r"\$\$.+?\$\$", re.DOTALL)
 _INLINE_MATH_RE = re.compile(r"(?<!\$)\$(?!\$).+?(?<!\$)\$(?!\$)")
-_FOOTNOTE_RE = re.compile(r"\[\d+\]")
+_FOOTNOTE_RE = re.compile(r"\[\d+\]|\^\d+\^")
 _BLOCKQUOTE_RE = re.compile(r"^>\s", re.MULTILINE)
 _CODE_FENCE_RE = re.compile(r"^(`{3,}|~{3,})", re.MULTILINE)
 

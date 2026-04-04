@@ -480,10 +480,13 @@ def _aggregate_structural(
 
     result: dict[str, dict[str, Any]] = {}
     for feature, type_scores in by_type.items():
-        detected_count = sum(1 for s in type_scores if s.structural.get("detected") is True)
-        total = len(type_scores)
+        # Exclude regions with detected=None (no structural validator for that type)
+        validated = [s for s in type_scores if s.structural.get("detected") is not None]
+        detected_count = sum(1 for s in validated if s.structural.get("detected") is True)
+        total = len(validated)
         result[feature] = {
             "detection_rate": round(detected_count / total, 4) if total > 0 else 0.0,
             "count": total,
+            "skipped": len(type_scores) - total,  # Regions with no validator
         }
     return result
