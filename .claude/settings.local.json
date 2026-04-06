@@ -97,7 +97,24 @@
       "Bash(git -C /Users/strophios/development/local-library add CLAUDE.md src/local_library/cli/CLAUDE.md src/local_library/core/CLAUDE.md src/local_library/embeddings/CLAUDE.md)",
       "Bash(git -C:*)",
       "Bash(python:*)",
-      "Bash(xxd:*)"
+      "Bash(xxd:*)",
+      "Bash(REPO_DIR=/var/folders/fg/8pyk2ydx2x39bx0hsdv24bc00000gn/T/tmp.5h3st3722o/repo)",
+      "Read(//Users/strophios/development/local-library/$REPO_DIR/**)",
+      "Bash(fg)",
+      "Bash(if ps:*)",
+      "Bash(then echo:*)",
+      "Bash(else echo:*)",
+      "Bash(fi)",
+      "Read(//Users/strophios/development/local-library/.worktrees/extraction-quality/**)",
+      "Bash(else tail:*)",
+      "Bash(dmesg)",
+      "Bash(log show:*)",
+      "Bash(sysctl hw.memsize)",
+      "Bash(vm_stat)",
+      "Bash(PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0 uv run python -c \":*)",
+      "Bash(rm -rf tests/extraction/synthetic/fixtures/*/)",
+      "Bash(rm -f tests/extraction/synthetic/results/*.json)",
+      "Bash(printf:*)"
     ]
   },
   "outputStyle": "Explanatory"

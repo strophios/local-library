@@ -270,6 +270,19 @@ Immediate to-do's:
 
 cross-encoder reranking: could we make this even more useful by running it not on the top n ranked candidate chunks, but on the top chunk from the top-n documents (or the top 2-3 chunks from all documents with at least one chunk in the top 100 or something)?
 
+First one or overarching point: Implicit in a lot of this is the question of how much effort we want to spend, right? Like Are we gonna do chunk level annotations? Are we gonna add multi-document queries? Are we going to include multiple difficulty levels. Do we want to review or alter or expand the number of categories? all of that really all of those are kind of questions about how much effort we want to spend. And so I just wanted to flag that and raise it so that we can think about you know what is the optimum effort, what is the biggest bang for a buck? Because you know, to want a good strong evaluation query set that effectively evaluates and covers all the cases that we care about and gets at all the things that we need to get at. But But I would really prefer not to, you know, spend hours of my time creating the weird set when I could be, you know, actual working.
+
+Anyways, onto each of the points in turn: 
+
+1. Definitely a hybrid approach. In particular, I'd already had two rough thoughts on this: First is that we can use existing places where I cite the golden set documents as a way to generate queries. Right, we could gather up the documents where I cite them, or have Claude go gather up the documents where I cite them and pull out all the places where I cite them and then look at those and basically turn them into queries by seeing what I use them to prove or demonstrate. Second thing is we could also use Claude to auto-generate queries for human review, right? Basically like look at a document, generate a set of test queries, aimed at you know, different areas of assessment or different difficulties or complexities and then I'll review and include, exclude, or make edits, etc. Either way both of these will allow me to avoid the huge pain in the ass of coming up with you know 100 test evaluation queries on my own.
+
+2. Both difficulty levels and multi-document queries seem obviously helpful. Difficulty levels in particular seem helpful if we're intentional with them. Right? Not just easy, medium, hard, although that's potentially also useful. But creating more difficult queries that catch edge cases and making sure to sort of cover the space of potential more complex or more subtle queries. Multi-document queries actually seemed like a kind of overlap with this, right? Of ideally finding queries that Call on a very specific arrangement of documents or chunks of documents as sort of, potentially anyways, the hardest, most complex queries to test.
+
+Thinking about category balance and whether we want to add to the category set or modify it, etc., really makes me wonder whether there are known best practices here or even if not best like known good practices that strikes me particularly for the categories piece because I'm not sure the ideal way to go about it, or to conceptualize it. But that also to some degree holds for difficulty levels in multi-document queries, like are there best practices or good known practices that we should be referencing on this.
+
+3. I think this could potentially intersect usefully with the difficulty levels question. And I mean I think if trunk level annotations are really better and really kind of the way to go to do the thing that we are actually trying to do, then we probably should just do them for all queries all the time. But if say for particularly easy queries, there There just isn't enough subtlety for it to matter that much. Such that document level annotation is sufficient, you know. Maybe then we just keep document level annotations for those. Although that said, I could actually imagine document level versus chunk level being sort of orthogonal to a strict, easy medium, hard difficulty ranking, but the general idea holds. Curious what you think.
+
+4. Yeah, you should go ahead and pull the current library contents. I mean it's as far as I remember just the existing golden test set, which I think is referenced elsewhere in the docs.
 
 You seem to have been errored out during implementation. This has happened a couple of times; I don't think it's something with the code per se, but just in case, I want you to investigate the codebase and git history to establish where we are, make a note in @CLAUDE.md so that, in case there's an error, we can look at where this run started and see what progress was made, or if we keep erroring in the same place. Then continue with implementation using the executing-an-implementation-plan skill.
 
@@ -314,7 +327,10 @@ other options for embedding:
     - full automatic tag generation (via clustering + LLM review? or clustering + human review? etc.)
 
 
-My bad for missing this in the design phase, but this whole benchmarking step relies on having fully populated the `test_queries.json` for to allow for in-depth RAG evaluation and *we have not done that yet*. That's likely our next step after this, but for now, we really don't have the validated data to benchmark *with*. Given that, we've got a few options: 1) we could complete this phase more or less as written, but simply not run any benchmarks that rely on `test_queries.json`. Basically, we'd be building the infrastructure to use for testing, once the test set is ready, and we could leave a note in the documentation that we currently default to model x, but once the full test set is ready, we should run `benchmarking_stuff.py` to assess whether it would be worth changing to models y or z. 2) Dramatically change or cut down this step to only test things we can test without the full test set (e.g., we could use this step to get an empirical understanding of the latency piece of the tradeoff, even though we can't really see the quality piece yet). 3) Drop the step more or less entirely. In all cases we'd leave a note in the documentation explaining the potential model choices, their expected tradeoffs, and the planned benchmarking (and the current state of the infrastructure for doing it). 
+
+
+
+
 
 We don't care about auto-complete, and in fact it doesn't really make any sense as a feature. We do care about web ingest. We do, I think, care about note management and linking, at least somewhat? We do care about making everything citable with a site key that includes web content. We do care about a an interface with Zotero not with Zotero, with NVim such that we can highlight a sentence or a thought in visual mode and then call a query with an an automated system prompt of hey what can we cite for this
 
@@ -344,6 +360,27 @@ What we actually care about is having it smoothly integrated into Neovim and my 
         - side note: currently all the SQL is handled external to Neovim, but I do recall issues with another Neovim plugin where accessing a SQL database for search was *far* slower than opening the same bibliographic data as a CSL-JSON file. is the SQL database piece of this going to be a source of slow-down or friction at all? If so, how do we fix it?
 
 
+
+proposed queries: 
+
+- more comparative queries to test inferential connections. possibilities: 
+    - collective identity vs. social identity theory (not so named, but a question that would get at this): What role does group identity play in driving collective action? @Tajfel1979, @Melucci1995 (maybe @Goodwin2011)
+    - What conditions 
+    - connection between social identity, threat, and collective action/protest (@Tajfel1979 + @Goodwin2011)
+    - collective identity (reflexive self-awareness) vs. political opportunities vs. perceptions/awareness of the field
+    - something about ML and dealing with time that would hit (somehow) both @Hanna2017 andf @Dhingra2022
+    - something about emotional/conceptual processing + social group identity, @Wilson-Mendenhall2018, @Tajfel1979, @Melucci1995(?)
+
+
+
+What is the cognitive content of shared group membership? @Tajfel1979, @Schutz1944, @Wilson-Mendenhall2018, @Melucci1995
+
+
+random note: @Tajfel1979 has a bunch of OCR processing artifacts (e.g., relatively long strings in, I think, Chinese) as well as a full section describing the "API for the Image Analysis service", which is maybe a result of Gemini accidentally pulling in documentation from said service that it was using for image analysis?
+
+kind of related: can we make any gains by assuming all text is English (or at least a Latin alphabet) unless there's strong evidence otherwise or something?
+
+
 ## Implementation Layers (Build Order)
 
 1. **Storage layer**: SQLite schema + filesystem layout for documents and notes
@@ -354,3 +391,6 @@ What we actually care about is having it smoothly integrated into Neovim and my 
 6. **Auto-tagging**: Nearest-neighbor tag suggestion or LLM classification
 7. **RAG interface**: Query interface feeding relevant chunks to LLM
 8. **Zotero export**: Push tags back, optional note sync
+
+
+
