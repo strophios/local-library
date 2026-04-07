@@ -9,7 +9,11 @@ import numpy as np
 import pytest
 from PIL import Image
 from tests.extraction.synthetic.generate import (
+    TIER_CONFIGS,
+    BlurConfig,
     NoiseTier,
+    RotationConfig,
+    TierConfig,
     apply_noise,
     content_hash,
     create_image_pdf,
@@ -277,3 +281,83 @@ class TestGenerateAllTiers:
                 assert len(doc) >= 2, f"Tier {tier}: expected 2+ pages, got {len(doc)}"
             finally:
                 doc.close()
+
+
+class TestConfigDataclasses:
+    """Test config dataclass properties required for the noise pipeline."""
+
+    def test_blur_config_is_frozen(self):
+        config = BlurConfig(radius_range=(0.5, 1.5))
+        with pytest.raises(AttributeError):
+            config.radius_range = (1.0, 2.0)  # type: ignore[misc]
+
+    def test_tier_config_is_hashable(self):
+        config = TierConfig(
+            blur=BlurConfig(radius_range=(0.5, 1.5)),
+            rotation=RotationConfig(angle_range=(-1.0, 1.0)),
+        )
+        assert hash(config) is not None
+        s = {config}  # set insertion requires hashable
+        assert len(s) == 1
+
+    def test_tier_config_defaults_to_all_none(self):
+        config = TierConfig()
+        assert config.blur is None
+        assert config.rotation is None
+        assert config.gaussian_noise is None
+        assert config.contrast is None
+        assert config.scanner_dust is None
+        assert config.spatial_variation is None
+        assert config.occlusion is None
+
+    def test_equal_configs_have_equal_hashes(self):
+        config1 = TierConfig(blur=BlurConfig(radius_range=(0.5, 1.5)))
+        config2 = TierConfig(blur=BlurConfig(radius_range=(0.5, 1.5)))
+        assert config1 == config2
+        assert hash(config1) == hash(config2)
+
+    def test_different_configs_have_different_hashes(self):
+        config1 = TierConfig(blur=BlurConfig(radius_range=(0.5, 1.5)))
+        config2 = TierConfig(blur=BlurConfig(radius_range=(1.0, 2.0)))
+        assert config1 != config2
+
+
+class TestTierConfigs:
+    """Test TIER_CONFIGS dict structure and current-value preservation."""
+
+    def test_all_tiers_present(self):
+        for tier in NoiseTier:
+            assert tier in TIER_CONFIGS
+
+    def test_clean_embedded_has_no_config(self):
+        assert TIER_CONFIGS[NoiseTier.CLEAN_EMBEDDED] is None
+
+    def test_clean_ocr_has_empty_config(self):
+        config = TIER_CONFIGS[NoiseTier.CLEAN_OCR]
+        assert isinstance(config, TierConfig)
+        assert config.blur is None
+        assert config.rotation is None
+        assert config.gaussian_noise is None
+
+    def test_moderate_scan_preserves_current_params(self):
+        config = TIER_CONFIGS[NoiseTier.MODERATE_SCAN]
+        assert config is not None
+        assert config.blur.radius_range == (0.5, 0.5)
+        assert config.rotation.angle_range == (-1.0, 1.0)
+        assert config.gaussian_noise.sigma_range == (5.0, 5.0)
+        assert config.contrast is None
+
+    def test_degraded_preserves_current_params(self):
+        config = TIER_CONFIGS[NoiseTier.DEGRADED]
+        assert config is not None
+        assert config.blur.radius_range == (1.5, 1.5)
+        assert config.rotation.angle_range == (-3.0, 3.0)
+        assert config.contrast.factor_range == (0.7, 0.7)
+        assert config.gaussian_noise.sigma_range == (25.0, 25.0)
+
+    def test_entire_config_tree_is_hashable(self):
+        """Full config tree must be hashable for cache invalidation via repr()."""
+        for tier in NoiseTier:
+            config = TIER_CONFIGS[tier]
+            if config is not None:
+                hash(config)  # Should not raise

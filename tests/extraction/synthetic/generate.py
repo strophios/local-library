@@ -19,6 +19,7 @@ import hashlib
 import io
 import logging
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -47,6 +48,131 @@ _TIER_SEEDS: dict[NoiseTier, int] = {
 }
 
 _RENDER_DPI = 150
+
+
+# --- Artifact configuration dataclasses ---
+# Frozen for immutability and hashability (needed for cache invalidation).
+# Parameter ranges (not fixed values) enable per-page variation via RNG sampling.
+
+
+@dataclass(frozen=True)
+class BlurConfig:
+    """Gaussian blur parameters."""
+
+    radius_range: tuple[float, float]
+
+
+@dataclass(frozen=True)
+class RotationConfig:
+    """Page rotation/skew parameters in degrees."""
+
+    angle_range: tuple[float, float]
+
+
+@dataclass(frozen=True)
+class GaussianNoiseConfig:
+    """Additive Gaussian noise parameters."""
+
+    sigma_range: tuple[float, float]
+
+
+@dataclass(frozen=True)
+class ContrastConfig:
+    """Contrast adjustment parameters (PIL ImageEnhance factor)."""
+
+    factor_range: tuple[float, float]
+
+
+@dataclass(frozen=True)
+class ScannerDustConfig:
+    """Scanner dust speck and roller mark parameters."""
+
+    speck_count_range: tuple[int, int]
+    speck_size_range: tuple[int, int]
+    roller_mark_count_range: tuple[int, int]
+
+
+@dataclass(frozen=True)
+class SpatialVariationConfig:
+    """Spatially varying focus/brightness degradation parameters."""
+
+    blur_intensity_range: tuple[float, float]
+    brightness_reduction_range: tuple[float, float]
+    blob_scale: int
+
+
+@dataclass(frozen=True)
+class OcclusionConfig:
+    """Edge-biased occlusion mark parameters."""
+
+    mark_count_range: tuple[int, int]
+    mark_opacity_range: tuple[float, float]
+    edge_bias: float
+
+
+@dataclass(frozen=True)
+class TierConfig:
+    """Complete noise configuration for a single tier.
+
+    None means the artifact is disabled for this tier.
+    All fields frozen so the entire config tree is hashable for cache invalidation.
+    """
+
+    blur: BlurConfig | None = None
+    rotation: RotationConfig | None = None
+    gaussian_noise: GaussianNoiseConfig | None = None
+    contrast: ContrastConfig | None = None
+    scanner_dust: ScannerDustConfig | None = None
+    spatial_variation: SpatialVariationConfig | None = None
+    occlusion: OcclusionConfig | None = None
+
+
+# Tier configurations: current T2/T3 values expressed as single-point ranges.
+# Phase 5 will widen these to actual ranges for per-page variation.
+# Bleed-through deliberately omitted from T3 (design decision).
+TIER_CONFIGS: dict[NoiseTier, TierConfig | None] = {
+    NoiseTier.CLEAN_EMBEDDED: None,  # Embedded text PDF, no noise pipeline
+    NoiseTier.CLEAN_OCR: TierConfig(),  # Image-only PDF, no artifacts
+    NoiseTier.MODERATE_SCAN: TierConfig(
+        blur=BlurConfig(radius_range=(0.5, 0.5)),
+        rotation=RotationConfig(angle_range=(-1.0, 1.0)),
+        gaussian_noise=GaussianNoiseConfig(sigma_range=(5.0, 5.0)),
+    ),
+    NoiseTier.DEGRADED: TierConfig(
+        blur=BlurConfig(radius_range=(1.5, 1.5)),
+        rotation=RotationConfig(angle_range=(-3.0, 3.0)),
+        contrast=ContrastConfig(factor_range=(0.7, 0.7)),
+        gaussian_noise=GaussianNoiseConfig(sigma_range=(25.0, 25.0)),
+    ),
+}
+
+
+def derive_page_seed(tier: NoiseTier, doc_name: str, page_index: int) -> int:
+    """Derive a deterministic per-page seed for noise generation.
+
+    Produces unique seeds across pages, documents, and tiers while
+    maintaining full determinism. Uses SHA-256 for cross-run stability
+    (Python's built-in hash() is randomized by default since 3.3).
+
+    Seed space: tier_seed (0-137) + doc_hash (0-9999) = doc_seed (0-10136),
+    page_seed = doc_seed * 1000 + page_index. Max value ~10.1M, well within
+    numpy RandomState's uint32 range.
+
+    Args:
+        tier: Noise tier (determines base seed via _TIER_SEEDS).
+        doc_name: Document identifier (e.g., source filename stem).
+        page_index: Zero-based page index within the document.
+
+    Returns:
+        Integer seed for numpy.random.RandomState.
+
+    Raises:
+        KeyError: If tier has no seed (e.g., CLEAN_EMBEDDED).
+    """
+    tier_seed = _TIER_SEEDS[tier]
+    doc_hash = int(hashlib.sha256(doc_name.encode()).hexdigest(), 16) % 10_000
+    doc_seed = tier_seed + doc_hash
+    return doc_seed * 1000 + page_index
 
 
 def content_hash(file_path: Path) -> str:
