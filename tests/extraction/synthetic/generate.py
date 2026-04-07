@@ -24,7 +24,7 @@ from pathlib import Path
 
 import numpy as np
 import pymupdf
-from PIL import Image, ImageEnhance, ImageFilter
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter
 
 from tests.extraction.synthetic.annotations import strip_annotations
 
@@ -298,6 +298,144 @@ def apply_gaussian_noise(
     return Image.fromarray(arr.astype(np.uint8))
 
 
+def apply_scanner_dust(
+    img: Image.Image, config: ScannerDustConfig, rng: np.random.RandomState
+) -> Image.Image:
+    """Apply scanner dust specks and roller marks.
+
+    Dust specks are small dark filled circles at random positions.
+    Roller marks are thin horizontal lines spanning partial page width.
+    """
+    result = img.copy()
+    draw = ImageDraw.Draw(result)
+    w, h = result.size
+
+    # Dust specks
+    lo, hi = config.speck_count_range
+    speck_count = int(rng.randint(lo, hi + 1))
+    s_lo, s_hi = config.speck_size_range
+    for _ in range(speck_count):
+        x = int(rng.randint(0, w))
+        y = int(rng.randint(0, h))
+        size = int(rng.randint(s_lo, s_hi + 1))
+        gray = int(rng.randint(20, 80))
+        draw.ellipse([x - size, y - size, x + size, y + size], fill=(gray, gray, gray))
+
+    # Roller marks
+    lo, hi = config.roller_mark_count_range
+    mark_count = int(rng.randint(lo, hi + 1))
+    for _ in range(mark_count):
+        y = int(rng.randint(0, h))
+        x_start = int(rng.uniform(0, w * 0.3))
+        x_end = int(rng.uniform(w * 0.7, w))
+        thickness = int(rng.randint(1, 3))
+        gray = int(rng.randint(150, 200))
+        draw.rectangle([x_start, y, x_end, y + thickness], fill=(gray, gray, gray))
+
+    return result
+
+
+def apply_spatial_variation(
+    img: Image.Image, config: SpatialVariationConfig, rng: np.random.RandomState
+) -> Image.Image:
+    """Apply spatially varying focus/brightness degradation.
+
+    Generates a smooth blob mask (low-res noise upscaled via bilinear
+    interpolation), creates a more-degraded copy of the image, and blends
+    original and degraded via the mask. Areas where mask is low get the
+    degraded version (softer focus, dimmer).
+    """
+    w, h = img.size
+
+    # Generate smooth mask via low-res noise upscaled
+    grid_w = max(2, w // config.blob_scale)
+    grid_h = max(2, h // config.blob_scale)
+    low_res = rng.uniform(0.0, 1.0, (grid_h, grid_w)).astype(np.float32)
+
+    # Upscale to full resolution via bilinear interpolation
+    mask_img = Image.fromarray((low_res * 255).astype(np.uint8), mode="L")
+    mask_img = mask_img.resize((w, h), Image.Resampling.BILINEAR)
+    mask = np.array(mask_img, dtype=np.float32) / 255.0
+
+    # Create degraded copy (additional blur + brightness reduction)
+    lo_b, hi_b = config.blur_intensity_range
+    blur_intensity = float(rng.uniform(lo_b, hi_b)) if lo_b != hi_b else lo_b
+    degraded = img.filter(ImageFilter.GaussianBlur(radius=blur_intensity))
+
+    lo_br, hi_br = config.brightness_reduction_range
+    reduction = float(rng.uniform(lo_br, hi_br)) if lo_br != hi_br else lo_br
+    enhancer = ImageEnhance.Brightness(degraded)
+    degraded = enhancer.enhance(1.0 - reduction)
+
+    # Blend: result = original * mask + degraded * (1 - mask)
+    arr = np.array(img, dtype=np.float32)
+    deg_arr = np.array(degraded, dtype=np.float32)
+    mask_3d = mask[:, :, np.newaxis]
+    blended = arr * mask_3d + deg_arr * (1.0 - mask_3d)
+
+    return Image.fromarray(np.clip(blended, 0, 255).astype(np.uint8))
+
+
+def apply_occlusion(
+    img: Image.Image, config: OcclusionConfig, rng: np.random.RandomState
+) -> Image.Image:
+    """Apply edge-biased occlusion marks (photocopy shadows, stains).
+
+    Draws semi-transparent dark shapes via alpha compositing. Marks are
+    biased toward page edges/corners (controlled by edge_bias parameter)
+    to simulate photocopy artifacts.
+    """
+    result = img.copy().convert("RGBA")
+    w, h = result.size
+
+    lo, hi = config.mark_count_range
+    mark_count = int(rng.randint(lo, hi + 1))
+
+    lo_o, hi_o = config.mark_opacity_range
+
+    for _ in range(mark_count):
+        opacity = int(rng.uniform(lo_o, hi_o) * 255)
+        overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+
+        # Edge-biased positioning
+        if float(rng.random()) < config.edge_bias:
+            edge = int(rng.randint(0, 4))
+            if edge == 0:  # top
+                cx = int(rng.uniform(0, w))
+                cy = int(rng.uniform(0, h * 0.1))
+            elif edge == 1:  # right
+                cx = int(rng.uniform(w * 0.9, w))
+                cy = int(rng.uniform(0, h))
+            elif edge == 2:  # bottom
+                cx = int(rng.uniform(0, w))
+                cy = int(rng.uniform(h * 0.9, h))
+            else:  # left
+                cx = int(rng.uniform(0, w * 0.1))
+                cy = int(rng.uniform(0, h))
+        else:
+            cx = int(rng.uniform(0, w))
+            cy = int(rng.uniform(0, h))
+
+        mark_w = int(rng.uniform(20, 80))
+        mark_h = int(rng.uniform(15, 60))
+
+        if float(rng.random()) < 0.5:
+            draw.rectangle(
+                [cx - mark_w, cy - mark_h, cx + mark_w, cy + mark_h],
+                fill=(30, 30, 30, opacity),
+            )
+        else:
+            draw.ellipse(
+                [cx - mark_w, cy - mark_h, cx + mark_w, cy + mark_h],
+                fill=(30, 30, 30, opacity),
+            )
+
+        result = Image.alpha_composite(result, overlay)
+
+    return result.convert("RGB")
+
+
 # Fixed application order: blur -> rotation -> contrast -> gaussian_noise
 # (-> scanner_dust -> spatial_variation -> occlusion added in Phase 3).
 # Order matters: blur before noise ensures noise isn't blurred away.
@@ -306,6 +444,9 @@ _ARTIFACT_PIPELINE: list[tuple[str, type]] = [
     ("rotation", RotationConfig),
     ("contrast", ContrastConfig),
     ("gaussian_noise", GaussianNoiseConfig),
+    ("scanner_dust", ScannerDustConfig),
+    ("spatial_variation", SpatialVariationConfig),
+    ("occlusion", OcclusionConfig),
 ]
 
 
@@ -357,6 +498,9 @@ def apply_noise_pipeline(
         "rotation": apply_rotation,
         "contrast": apply_contrast,
         "gaussian_noise": apply_gaussian_noise,
+        "scanner_dust": apply_scanner_dust,
+        "spatial_variation": apply_spatial_variation,
+        "occlusion": apply_occlusion,
     }
 
     for attr, _ in _ARTIFACT_PIPELINE:

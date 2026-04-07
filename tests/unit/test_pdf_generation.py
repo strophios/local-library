@@ -14,13 +14,19 @@ from tests.extraction.synthetic.generate import (
     ContrastConfig,
     GaussianNoiseConfig,
     NoiseTier,
+    OcclusionConfig,
     RotationConfig,
+    ScannerDustConfig,
+    SpatialVariationConfig,
     TierConfig,
     apply_blur,
     apply_contrast,
     apply_gaussian_noise,
     apply_noise_pipeline,
+    apply_occlusion,
     apply_rotation,
+    apply_scanner_dust,
+    apply_spatial_variation,
     content_hash,
     create_image_pdf,
     derive_page_seed,
@@ -511,3 +517,148 @@ class TestApplyNoisePipeline:
         result_a = apply_noise_pipeline(img, NoiseTier.MODERATE_SCAN, "doc_a", 0)
         result_b = apply_noise_pipeline(img, NoiseTier.MODERATE_SCAN, "doc_b", 0)
         assert not np.array_equal(np.array(result_a), np.array(result_b))
+
+
+class TestApplyScannerDust:
+    """Test scanner dust speck and roller mark artifact."""
+
+    @staticmethod
+    def _make_white_image() -> Image.Image:
+        return Image.new("RGB", (400, 400), (255, 255, 255))
+
+    def test_adds_dark_specks(self):
+        img = self._make_white_image()
+        config = ScannerDustConfig(
+            speck_count_range=(20, 20),
+            speck_size_range=(2, 5),
+            roller_mark_count_range=(0, 0),
+        )
+        result = apply_scanner_dust(img, config, np.random.RandomState(42))
+        result_arr = np.array(result)
+        assert result_arr.min() < 200
+
+    def test_adds_roller_marks(self):
+        img = self._make_white_image()
+        config = ScannerDustConfig(
+            speck_count_range=(0, 0),
+            speck_size_range=(2, 2),
+            roller_mark_count_range=(3, 3),
+        )
+        result = apply_scanner_dust(img, config, np.random.RandomState(42))
+        assert not np.array_equal(np.array(result), np.array(img))
+
+    def test_deterministic(self):
+        img = self._make_white_image()
+        config = ScannerDustConfig(
+            speck_count_range=(10, 10),
+            speck_size_range=(2, 5),
+            roller_mark_count_range=(1, 1),
+        )
+        r1 = apply_scanner_dust(img, config, np.random.RandomState(42))
+        r2 = apply_scanner_dust(img, config, np.random.RandomState(42))
+        np.testing.assert_array_equal(np.array(r1), np.array(r2))
+
+    def test_zero_counts_returns_unmodified(self):
+        img = self._make_white_image()
+        config = ScannerDustConfig(
+            speck_count_range=(0, 0),
+            speck_size_range=(2, 2),
+            roller_mark_count_range=(0, 0),
+        )
+        result = apply_scanner_dust(img, config, np.random.RandomState(42))
+        np.testing.assert_array_equal(np.array(result), np.array(img))
+
+
+class TestApplySpatialVariation:
+    """Test spatially varying focus/brightness degradation."""
+
+    @staticmethod
+    def _make_white_image() -> Image.Image:
+        return Image.new("RGB", (400, 400), (255, 255, 255))
+
+    def test_modifies_image(self):
+        img = self._make_white_image()
+        config = SpatialVariationConfig(
+            blur_intensity_range=(3.0, 3.0),
+            brightness_reduction_range=(0.3, 0.3),
+            blob_scale=50,
+        )
+        result = apply_spatial_variation(img, config, np.random.RandomState(42))
+        result_arr = np.array(result)
+        assert result_arr.min() < 250
+
+    def test_spatial_non_uniformity(self):
+        """Different regions should have different degradation levels."""
+        img = self._make_white_image()
+        config = SpatialVariationConfig(
+            blur_intensity_range=(3.0, 3.0),
+            brightness_reduction_range=(0.4, 0.4),
+            blob_scale=50,
+        )
+        result = apply_spatial_variation(img, config, np.random.RandomState(42))
+        result_arr = np.array(result)
+        top_half_mean = result_arr[:200].mean()
+        bottom_half_mean = result_arr[200:].mean()
+        assert top_half_mean != bottom_half_mean
+
+    def test_deterministic(self):
+        img = self._make_white_image()
+        config = SpatialVariationConfig(
+            blur_intensity_range=(2.0, 2.0),
+            brightness_reduction_range=(0.2, 0.2),
+            blob_scale=50,
+        )
+        r1 = apply_spatial_variation(img, config, np.random.RandomState(42))
+        r2 = apply_spatial_variation(img, config, np.random.RandomState(42))
+        np.testing.assert_array_equal(np.array(r1), np.array(r2))
+
+
+class TestApplyOcclusion:
+    """Test edge-biased occlusion marks."""
+
+    @staticmethod
+    def _make_white_image() -> Image.Image:
+        return Image.new("RGB", (400, 400), (255, 255, 255))
+
+    def test_adds_dark_marks(self):
+        img = self._make_white_image()
+        config = OcclusionConfig(
+            mark_count_range=(3, 3),
+            mark_opacity_range=(0.5, 0.8),
+            edge_bias=0.7,
+        )
+        result = apply_occlusion(img, config, np.random.RandomState(42))
+        result_arr = np.array(result)
+        assert result_arr.min() < 200
+
+    def test_returns_rgb_not_rgba(self):
+        """Output should be converted back to RGB from internal RGBA."""
+        img = self._make_white_image()
+        config = OcclusionConfig(
+            mark_count_range=(1, 1),
+            mark_opacity_range=(0.5, 0.5),
+            edge_bias=0.5,
+        )
+        result = apply_occlusion(img, config, np.random.RandomState(42))
+        assert result.mode == "RGB"
+
+    def test_deterministic(self):
+        img = self._make_white_image()
+        config = OcclusionConfig(
+            mark_count_range=(2, 2),
+            mark_opacity_range=(0.4, 0.6),
+            edge_bias=0.8,
+        )
+        r1 = apply_occlusion(img, config, np.random.RandomState(42))
+        r2 = apply_occlusion(img, config, np.random.RandomState(42))
+        np.testing.assert_array_equal(np.array(r1), np.array(r2))
+
+    def test_zero_marks_returns_unmodified(self):
+        img = self._make_white_image()
+        config = OcclusionConfig(
+            mark_count_range=(0, 0),
+            mark_opacity_range=(0.5, 0.5),
+            edge_bias=0.5,
+        )
+        result = apply_occlusion(img, config, np.random.RandomState(42))
+        np.testing.assert_array_equal(np.array(result), np.array(img))
