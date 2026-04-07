@@ -17,6 +17,7 @@ from tests.extraction.synthetic.generate import (
     apply_noise,
     content_hash,
     create_image_pdf,
+    derive_page_seed,
     generate_all_tiers,
     generate_clean_pdf,
     render_pages_to_images,
@@ -316,7 +317,7 @@ class TestConfigDataclasses:
         assert config1 == config2
         assert hash(config1) == hash(config2)
 
-    def test_different_configs_have_different_hashes(self):
+    def test_different_configs_are_unequal(self):
         config1 = TierConfig(blur=BlurConfig(radius_range=(0.5, 1.5)))
         config2 = TierConfig(blur=BlurConfig(radius_range=(1.0, 2.0)))
         assert config1 != config2
@@ -361,3 +362,40 @@ class TestTierConfigs:
             config = TIER_CONFIGS[tier]
             if config is not None:
                 hash(config)  # Should not raise
+
+
+class TestDerivePageSeed:
+    """Test per-page seed derivation for deterministic per-page variation."""
+
+    def test_deterministic_same_inputs(self):
+        seed1 = derive_page_seed(NoiseTier.MODERATE_SCAN, "climate_modeling", 0)
+        seed2 = derive_page_seed(NoiseTier.MODERATE_SCAN, "climate_modeling", 0)
+        assert seed1 == seed2
+
+    def test_different_pages_different_seeds(self):
+        seed0 = derive_page_seed(NoiseTier.MODERATE_SCAN, "climate_modeling", 0)
+        seed1 = derive_page_seed(NoiseTier.MODERATE_SCAN, "climate_modeling", 1)
+        assert seed0 != seed1
+
+    def test_different_documents_different_seeds(self):
+        seed_a = derive_page_seed(NoiseTier.MODERATE_SCAN, "climate_modeling", 0)
+        seed_b = derive_page_seed(NoiseTier.MODERATE_SCAN, "neural_architecture", 0)
+        assert seed_a != seed_b
+
+    def test_different_tiers_different_seeds(self):
+        seed_t2 = derive_page_seed(NoiseTier.MODERATE_SCAN, "climate_modeling", 0)
+        seed_t3 = derive_page_seed(NoiseTier.DEGRADED, "climate_modeling", 0)
+        assert seed_t2 != seed_t3
+
+    def test_clean_embedded_raises_key_error(self):
+        """CLEAN_EMBEDDED has no tier seed -- cannot derive page seeds."""
+        with pytest.raises(KeyError):
+            derive_page_seed(NoiseTier.CLEAN_EMBEDDED, "doc", 0)
+
+    def test_seeds_produce_different_random_sequences(self):
+        """Derived seeds should produce visibly different RandomState output."""
+        seed0 = derive_page_seed(NoiseTier.MODERATE_SCAN, "doc", 0)
+        seed1 = derive_page_seed(NoiseTier.MODERATE_SCAN, "doc", 1)
+        rng0 = np.random.RandomState(seed0)
+        rng1 = np.random.RandomState(seed1)
+        assert not np.array_equal(rng0.random(10), rng1.random(10))
