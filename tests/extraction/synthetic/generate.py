@@ -255,9 +255,7 @@ def render_pages_to_images(pdf_path: Path, dpi: int = _RENDER_DPI) -> list[Image
 # Applied in fixed order by the pipeline orchestrator.
 
 
-def apply_blur(
-    img: Image.Image, config: BlurConfig, rng: np.random.RandomState
-) -> Image.Image:
+def apply_blur(img: Image.Image, config: BlurConfig, rng: np.random.RandomState) -> Image.Image:
     """Apply Gaussian blur with radius sampled from config range."""
     lo, hi = config.radius_range
     radius = float(rng.uniform(lo, hi)) if lo != hi else lo
@@ -345,9 +343,7 @@ def apply_noise_pipeline(
     result = img.copy()
 
     # Check if any artifacts are enabled
-    has_artifacts = any(
-        getattr(config, attr) is not None for attr, _ in _ARTIFACT_PIPELINE
-    )
+    has_artifacts = any(getattr(config, attr) is not None for attr, _ in _ARTIFACT_PIPELINE)
     if not has_artifacts:
         return result
 
@@ -447,9 +443,9 @@ def generate_all_tiers(
     page_images = render_pages_to_images(t0_path)
 
     results: dict[NoiseTier, Path] = {NoiseTier.CLEAN_EMBEDDED: t0_path}
+    doc_name = source_md.stem
 
     for tier in [NoiseTier.CLEAN_OCR, NoiseTier.MODERATE_SCAN, NoiseTier.DEGRADED]:
-        doc_name = source_md.stem
         tier_images = [
             apply_noise_pipeline(img, tier, doc_name, page_idx)
             for page_idx, img in enumerate(page_images)

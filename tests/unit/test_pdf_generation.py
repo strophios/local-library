@@ -440,9 +440,7 @@ class TestIndividualArtifacts:
     def test_apply_gaussian_noise_adds_variation(self):
         img = self._make_white_image()
         rng = np.random.RandomState(42)
-        result = apply_gaussian_noise(
-            img, GaussianNoiseConfig(sigma_range=(20.0, 20.0)), rng
-        )
+        result = apply_gaussian_noise(img, GaussianNoiseConfig(sigma_range=(20.0, 20.0)), rng)
         result_arr = np.array(result)
         assert result_arr.std() > 0
 
