@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-04-03
+Last verified: 2026-04-07
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -98,7 +98,7 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - Zotero read-only access: ZoteroReader facade with database and JSON export backends, BetterBibTeX citekey mapping, attachment resolution, collection and library filtering
 - **Batch import from Zotero**: `zotero import` command with library/collection filtering, dry-run mode, progress tracking, and continue-on-error (defaults to personal library)
 - **Reextract command**: `reextract` CLI command re-runs text extraction on existing documents (useful after extraction pipeline improvements)
-- **Extraction quality framework**: Synthetic document benchmark in `tests/extraction/synthetic/` measures extraction fidelity across noise tiers (clean/mild/moderate/severe) with CER/WER metrics and structural validators. 6 annotated source documents. Opt-in via `--run-extraction-quality` pytest flag.
+- **Extraction quality framework**: Synthetic document benchmark in `tests/extraction/synthetic/` measures extraction fidelity across 4 noise tiers (T0 clean embedded, T1 clean OCR, T2 moderate scan, T3 degraded) with CER/WER metrics and structural validators. Config-driven noise pipeline with 7 artifact types and per-page deterministic seeds. 6 annotated source documents. Opt-in via `--run-extraction-quality` pytest flag.
 
 **Immediate next step:** Post-M7 evaluation quality gate — establish quality targets, investigate the conceptual query gap, and determine the next pipeline improvement before scaling to the full Zotero corpus (~1400 docs). See `roadmap.md` for current progress and sequencing.
 
@@ -180,7 +180,10 @@ A retrieval evaluation framework is implemented in `tests/eval/`. See `tests/eva
 
 ### Extraction Quality Framework
 A synthetic extraction quality framework is implemented in `tests/extraction/synthetic/`. It measures how well the Marker + cleanup pipeline preserves content fidelity across document types and degradation levels.
-- **Pipeline**: Annotated markdown sources → PDF generation (4 noise tiers: clean, mild, moderate, severe) → Marker extraction + cleanup → region alignment → CER/WER scoring + structural validation → aggregated results JSON
+- **Pipeline**: Annotated markdown sources → PDF generation (4 noise tiers) → Marker extraction + cleanup → region alignment → CER/WER scoring + structural validation → aggregated results JSON
+- **Noise tiers**: T0 (CLEAN_EMBEDDED, pandoc/pdflatex), T1 (CLEAN_OCR, image-only), T2 (MODERATE_SCAN, 6 artifact types), T3 (DEGRADED, all 7 artifact types including occlusion)
+- **Noise pipeline**: Config-driven via frozen dataclasses (`TierConfig` composed of per-artifact configs). 7 artifact types: blur, rotation, contrast, Gaussian noise, scanner dust, spatial variation, occlusion. Fixed application order. Per-page deterministic seeds via `derive_page_seed()` (SHA-256-based, numpy RandomState). `TIER_CONFIGS` dict maps `NoiseTier` to `TierConfig`.
+- **Cache invalidation**: `generation_hash()` combines source content hash + generation parameter hash; parameter changes (range adjustments, new artifacts) automatically invalidate cached PDFs
 - **Annotation format**: Source documents use `<!-- @region: name type=<type> -->` / `<!-- @end -->` markers to define expected content regions (paragraph, heading, list, table, math, citation, footnote)
 - **Metrics**: Character Error Rate (CER) and Word Error Rate (WER) via rapidfuzz edit distance; structural fidelity validators per region type
 - **Alignment**: Fuzzy region matching (`alignment.py`) locates annotated regions in extracted text using variable-length sliding window with rapidfuzz scoring
