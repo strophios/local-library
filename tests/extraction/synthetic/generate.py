@@ -147,7 +147,7 @@ TIER_CONFIGS: dict[NoiseTier, TierConfig | None] = {
             roller_mark_count_range=(0, 1),
         ),
         spatial_variation=SpatialVariationConfig(
-            blur_intensity_range=(1.0, 2.0),
+            blur_intensity_range=(0.3, 0.8),
             brightness_reduction_range=(0.05, 0.15),
             blob_scale=100,
         ),
@@ -163,8 +163,8 @@ TIER_CONFIGS: dict[NoiseTier, TierConfig | None] = {
             roller_mark_count_range=(1, 3),
         ),
         spatial_variation=SpatialVariationConfig(
-            blur_intensity_range=(2.0, 4.0),
-            brightness_reduction_range=(0.1, 0.25),
+            blur_intensity_range=(0.5, 1.5),
+            brightness_reduction_range=(0.05, 0.15),
             blob_scale=80,
         ),
         occlusion=OcclusionConfig(
