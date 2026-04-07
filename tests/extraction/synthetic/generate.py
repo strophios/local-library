@@ -250,6 +250,56 @@ def render_pages_to_images(pdf_path: Path, dpi: int = _RENDER_DPI) -> list[Image
     return images
 
 
+# --- Individual artifact functions ---
+# Each follows the signature: (image, config, rng) -> image
+# Applied in fixed order by the pipeline orchestrator.
+
+
+def apply_blur(
+    img: Image.Image, config: BlurConfig, rng: np.random.RandomState
+) -> Image.Image:
+    """Apply Gaussian blur with radius sampled from config range."""
+    lo, hi = config.radius_range
+    radius = float(rng.uniform(lo, hi)) if lo != hi else lo
+    return img.filter(ImageFilter.GaussianBlur(radius=radius))
+
+
+def apply_rotation(
+    img: Image.Image, config: RotationConfig, rng: np.random.RandomState
+) -> Image.Image:
+    """Apply page rotation/skew with angle sampled from config range."""
+    lo, hi = config.angle_range
+    angle = float(rng.uniform(lo, hi))
+    return img.rotate(
+        angle,
+        fillcolor=(255, 255, 255),
+        expand=True,
+        resample=Image.Resampling.BILINEAR,
+    )
+
+
+def apply_contrast(
+    img: Image.Image, config: ContrastConfig, rng: np.random.RandomState
+) -> Image.Image:
+    """Apply contrast adjustment with factor sampled from config range."""
+    lo, hi = config.factor_range
+    factor = float(rng.uniform(lo, hi)) if lo != hi else lo
+    enhancer = ImageEnhance.Contrast(img)
+    return enhancer.enhance(factor)
+
+
+def apply_gaussian_noise(
+    img: Image.Image, config: GaussianNoiseConfig, rng: np.random.RandomState
+) -> Image.Image:
+    """Apply additive Gaussian noise with sigma sampled from config range."""
+    lo, hi = config.sigma_range
+    sigma = float(rng.uniform(lo, hi)) if lo != hi else lo
+    arr = np.array(img, dtype=np.float32)
+    noise = rng.normal(0, sigma, arr.shape)
+    arr = np.clip(arr + noise, 0, 255)
+    return Image.fromarray(arr.astype(np.uint8))
+
+
 def apply_noise(
     img: Image.Image,
     tier: NoiseTier,

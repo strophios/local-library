@@ -11,10 +11,16 @@ from PIL import Image
 from tests.extraction.synthetic.generate import (
     TIER_CONFIGS,
     BlurConfig,
+    ContrastConfig,
+    GaussianNoiseConfig,
     NoiseTier,
     RotationConfig,
     TierConfig,
+    apply_blur,
+    apply_contrast,
+    apply_gaussian_noise,
     apply_noise,
+    apply_rotation,
     content_hash,
     create_image_pdf,
     derive_page_seed,
@@ -399,3 +405,67 @@ class TestDerivePageSeed:
         rng0 = np.random.RandomState(seed0)
         rng1 = np.random.RandomState(seed1)
         assert not np.array_equal(rng0.random(10), rng1.random(10))
+
+
+class TestIndividualArtifacts:
+    """Test individual artifact functions with config + rng signature."""
+
+    @staticmethod
+    def _make_white_image() -> Image.Image:
+        return Image.new("RGB", (200, 200), (255, 255, 255))
+
+    def test_apply_blur_modifies_image(self):
+        img = self._make_white_image()
+        arr = np.array(img)
+        arr[100, :, :] = 0  # Black horizontal line
+        img = Image.fromarray(arr)
+        rng = np.random.RandomState(42)
+        result = apply_blur(img, BlurConfig(radius_range=(2.0, 2.0)), rng)
+        result_arr = np.array(result)
+        assert result_arr[99, 100, 0] < 255  # Blur spread to adjacent row
+
+    def test_apply_rotation_changes_dimensions(self):
+        img = self._make_white_image()
+        rng = np.random.RandomState(42)
+        result = apply_rotation(img, RotationConfig(angle_range=(5.0, 5.0)), rng)
+        assert result.size != img.size
+
+    def test_apply_contrast_reduces_range(self):
+        img = self._make_white_image()
+        arr = np.array(img)
+        arr[:100, :, :] = 0  # Half black, half white
+        img = Image.fromarray(arr)
+        rng = np.random.RandomState(42)
+        result = apply_contrast(img, ContrastConfig(factor_range=(0.5, 0.5)), rng)
+        result_arr = np.array(result)
+        assert result_arr[50, 100, 0] > 0  # Was pure black, now lighter
+        assert result_arr[150, 100, 0] < 255  # Was pure white, now darker
+
+    def test_apply_gaussian_noise_adds_variation(self):
+        img = self._make_white_image()
+        rng = np.random.RandomState(42)
+        result = apply_gaussian_noise(
+            img, GaussianNoiseConfig(sigma_range=(20.0, 20.0)), rng
+        )
+        result_arr = np.array(result)
+        assert result_arr.std() > 0
+
+    def test_artifact_determinism(self):
+        """Same config + seed produces identical output."""
+        img = self._make_white_image()
+        config = GaussianNoiseConfig(sigma_range=(10.0, 10.0))
+        result1 = apply_gaussian_noise(img, config, np.random.RandomState(42))
+        result2 = apply_gaussian_noise(img, config, np.random.RandomState(42))
+        np.testing.assert_array_equal(np.array(result1), np.array(result2))
+
+    def test_range_sampling_varies_with_rng(self):
+        """When range has width, different rng states produce different results."""
+        img = self._make_white_image()
+        arr = np.array(img)
+        arr[100:150, 100:150, :] = 0  # Black square (blur target)
+        img = Image.fromarray(arr)
+        config = BlurConfig(radius_range=(0.5, 3.0))
+        result1 = apply_blur(img, config, np.random.RandomState(1))
+        result2 = apply_blur(img, config, np.random.RandomState(2))
+        # Different blur radii should produce visibly different blurs
+        assert not np.array_equal(np.array(result1), np.array(result2))
