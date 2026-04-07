@@ -19,7 +19,7 @@ from tests.extraction.synthetic.generate import (
     apply_blur,
     apply_contrast,
     apply_gaussian_noise,
-    apply_noise,
+    apply_noise_pipeline,
     apply_rotation,
     content_hash,
     create_image_pdf,
@@ -182,7 +182,7 @@ class TestRenderPagesToImages:
 
 
 class TestApplyNoise:
-    """Test noise application to PIL Images."""
+    """Test noise application to PIL Images (via pipeline)."""
 
     @staticmethod
     def _make_white_image() -> Image.Image:
@@ -191,40 +191,36 @@ class TestApplyNoise:
     def test_tier_clean_embedded_raises_value_error(self):
         img = self._make_white_image()
         with pytest.raises(ValueError, match="CLEAN_EMBEDDED is embedded text"):
-            apply_noise(img, NoiseTier.CLEAN_EMBEDDED)
+            apply_noise_pipeline(img, NoiseTier.CLEAN_EMBEDDED, "doc", 0)
 
     def test_tier_clean_ocr_no_visible_noise(self):
         img = self._make_white_image()
-        result = apply_noise(img, NoiseTier.CLEAN_OCR)
-        # Should be unchanged (just image, no noise)
+        result = apply_noise_pipeline(img, NoiseTier.CLEAN_OCR, "doc", 0)
         np.testing.assert_array_equal(np.array(result), np.array(img))
 
-    def test_tier_moderate_applies_blur_and_rotation(self):
+    def test_tier_moderate_applies_transforms(self):
         img = self._make_white_image()
-        result = apply_noise(img, NoiseTier.MODERATE_SCAN)
-        # Rotation with expand=True may change dimensions
+        result = apply_noise_pipeline(img, NoiseTier.MODERATE_SCAN, "doc", 0)
         assert result.size[0] > 0
         assert result.size[1] > 0
-        # Pixel data should differ due to blur, rotation, and noise
         assert not np.array_equal(np.array(result), np.array(img))
 
     def test_tier_degraded_applies_heavy_transforms(self):
         img = self._make_white_image()
-        result = apply_noise(img, NoiseTier.DEGRADED)
+        result = apply_noise_pipeline(img, NoiseTier.DEGRADED, "doc", 0)
         assert result.size[0] > 0
-        # Pixel data should differ due to heavy transforms
         assert not np.array_equal(np.array(result), np.array(img))
 
-    def test_deterministic_with_same_seed(self):
+    def test_deterministic_with_same_inputs(self):
         img = self._make_white_image()
-        result1 = apply_noise(img, NoiseTier.MODERATE_SCAN, seed=42)
-        result2 = apply_noise(img, NoiseTier.MODERATE_SCAN, seed=42)
+        result1 = apply_noise_pipeline(img, NoiseTier.MODERATE_SCAN, "doc", 0)
+        result2 = apply_noise_pipeline(img, NoiseTier.MODERATE_SCAN, "doc", 0)
         np.testing.assert_array_equal(np.array(result1), np.array(result2))
 
-    def test_different_seeds_produce_different_output(self):
+    def test_different_pages_produce_different_output(self):
         img = self._make_white_image()
-        result1 = apply_noise(img, NoiseTier.MODERATE_SCAN, seed=42)
-        result2 = apply_noise(img, NoiseTier.MODERATE_SCAN, seed=99)
+        result1 = apply_noise_pipeline(img, NoiseTier.MODERATE_SCAN, "doc", 0)
+        result2 = apply_noise_pipeline(img, NoiseTier.MODERATE_SCAN, "doc", 1)
         assert not np.array_equal(np.array(result1), np.array(result2))
 
 
@@ -469,3 +465,51 @@ class TestIndividualArtifacts:
         result2 = apply_blur(img, config, np.random.RandomState(2))
         # Different blur radii should produce visibly different blurs
         assert not np.array_equal(np.array(result1), np.array(result2))
+
+
+class TestApplyNoisePipeline:
+    """Test config-driven noise pipeline that replaces apply_noise()."""
+
+    @staticmethod
+    def _make_white_image() -> Image.Image:
+        return Image.new("RGB", (200, 200), (255, 255, 255))
+
+    def test_clean_embedded_raises_value_error(self):
+        img = self._make_white_image()
+        with pytest.raises(ValueError, match="CLEAN_EMBEDDED"):
+            apply_noise_pipeline(img, NoiseTier.CLEAN_EMBEDDED, "doc", 0)
+
+    def test_clean_ocr_returns_unmodified_copy(self):
+        img = self._make_white_image()
+        result = apply_noise_pipeline(img, NoiseTier.CLEAN_OCR, "doc", 0)
+        np.testing.assert_array_equal(np.array(result), np.array(img))
+        assert result is not img  # Must be a copy
+
+    def test_moderate_scan_modifies_image(self):
+        img = self._make_white_image()
+        result = apply_noise_pipeline(img, NoiseTier.MODERATE_SCAN, "doc", 0)
+        assert not np.array_equal(np.array(result), np.array(img))
+
+    def test_degraded_modifies_image(self):
+        img = self._make_white_image()
+        result = apply_noise_pipeline(img, NoiseTier.DEGRADED, "doc", 0)
+        assert not np.array_equal(np.array(result), np.array(img))
+
+    def test_deterministic_same_inputs(self):
+        img = self._make_white_image()
+        result1 = apply_noise_pipeline(img, NoiseTier.MODERATE_SCAN, "doc", 0)
+        result2 = apply_noise_pipeline(img, NoiseTier.MODERATE_SCAN, "doc", 0)
+        np.testing.assert_array_equal(np.array(result1), np.array(result2))
+
+    def test_different_pages_produce_different_output(self):
+        """Per-page seed derivation produces per-page variation."""
+        img = self._make_white_image()
+        result0 = apply_noise_pipeline(img, NoiseTier.MODERATE_SCAN, "doc", 0)
+        result1 = apply_noise_pipeline(img, NoiseTier.MODERATE_SCAN, "doc", 1)
+        assert not np.array_equal(np.array(result0), np.array(result1))
+
+    def test_different_documents_produce_different_output(self):
+        img = self._make_white_image()
+        result_a = apply_noise_pipeline(img, NoiseTier.MODERATE_SCAN, "doc_a", 0)
+        result_b = apply_noise_pipeline(img, NoiseTier.MODERATE_SCAN, "doc_b", 0)
+        assert not np.array_equal(np.array(result_a), np.array(result_b))

@@ -300,20 +300,33 @@ def apply_gaussian_noise(
     return Image.fromarray(arr.astype(np.uint8))
 
 
-def apply_noise(
+# Fixed application order: blur -> rotation -> contrast -> gaussian_noise
+# (-> scanner_dust -> spatial_variation -> occlusion added in Phase 3).
+# Order matters: blur before noise ensures noise isn't blurred away.
+_ARTIFACT_PIPELINE: list[tuple[str, type]] = [
+    ("blur", BlurConfig),
+    ("rotation", RotationConfig),
+    ("contrast", ContrastConfig),
+    ("gaussian_noise", GaussianNoiseConfig),
+]
+
+
+def apply_noise_pipeline(
     img: Image.Image,
     tier: NoiseTier,
-    seed: int | None = None,
+    doc_name: str,
+    page_index: int,
 ) -> Image.Image:
-    """Apply noise transforms to a page image based on the noise tier.
+    """Apply noise artifacts to a page image via config-driven pipeline.
 
-    Uses numpy.random.RandomState for deterministic output across
-    numpy versions (frozen Mersenne Twister algorithm).
+    Replaces the former apply_noise() function. Uses TierConfig to determine
+    which artifacts to apply and derives per-page seeds for natural variation.
 
     Args:
         img: Source PIL Image (clean rendered page).
-        tier: Noise tier determining transform intensity.
-        seed: Random seed for reproducibility. If None, uses tier default.
+        tier: Noise tier determining which artifacts are enabled.
+        doc_name: Document name for seed derivation.
+        page_index: Zero-based page index for seed derivation.
 
     Returns:
         Transformed PIL Image.
@@ -321,60 +334,39 @@ def apply_noise(
     Raises:
         ValueError: If tier is CLEAN_EMBEDDED (embedded text, not image-based).
     """
-    if tier == NoiseTier.CLEAN_EMBEDDED:
+    config = TIER_CONFIGS[tier]
+
+    if config is None:
         raise ValueError(
             "CLEAN_EMBEDDED is embedded text, not image-based. "
             "Noise cannot be applied to this tier."
         )
 
-    if tier == NoiseTier.CLEAN_OCR:
-        return img.copy()
-
-    rng_seed = seed if seed is not None else _TIER_SEEDS.get(tier, 0)
-    rng = np.random.RandomState(rng_seed)
-
     result = img.copy()
 
-    if tier == NoiseTier.MODERATE_SCAN:
-        # Slight Gaussian blur (simulates slightly soft scan)
-        result = result.filter(ImageFilter.GaussianBlur(radius=0.5))
-        # Slight rotation (±1°)
-        angle = float(rng.uniform(-1.0, 1.0))
-        result = result.rotate(
-            angle,
-            fillcolor=(255, 255, 255),
-            expand=True,
-            resample=Image.Resampling.BILINEAR,
-        )
-        # Faint background noise
-        arr = np.array(result, dtype=np.float32)
-        noise = rng.normal(0, 5, arr.shape)
-        arr = np.clip(arr + noise, 0, 255)
-        result = Image.fromarray(arr.astype(np.uint8))
+    # Check if any artifacts are enabled
+    has_artifacts = any(
+        getattr(config, attr) is not None for attr, _ in _ARTIFACT_PIPELINE
+    )
+    if not has_artifacts:
+        return result
 
-    elif tier == NoiseTier.DEGRADED:
-        # Heavy blur
-        result = result.filter(ImageFilter.GaussianBlur(radius=1.5))
-        # Significant skew (±3°)
-        angle = float(rng.uniform(-3.0, 3.0))
-        result = result.rotate(
-            angle,
-            fillcolor=(255, 255, 255),
-            expand=True,
-            resample=Image.Resampling.BILINEAR,
-        )
-        # Reduce contrast
-        enhancer = ImageEnhance.Contrast(result)
-        result = enhancer.enhance(0.7)
-        # Heavy noise
-        arr = np.array(result, dtype=np.float32)
-        noise = rng.normal(0, 25, arr.shape)
-        arr = np.clip(arr + noise, 0, 255)
-        # Simulated bleed-through (faint reversed overlay)
-        flipped = np.fliplr(arr)
-        inverted = 255.0 - flipped
-        arr = np.clip(arr + 0.08 * inverted, 0, 255)
-        result = Image.fromarray(arr.astype(np.uint8))
+    # Derive per-page seed and create RNG
+    seed = derive_page_seed(tier, doc_name, page_index)
+    rng = np.random.RandomState(seed)
+
+    # Apply artifacts in fixed order
+    artifact_funcs = {
+        "blur": apply_blur,
+        "rotation": apply_rotation,
+        "contrast": apply_contrast,
+        "gaussian_noise": apply_gaussian_noise,
+    }
+
+    for attr, _ in _ARTIFACT_PIPELINE:
+        artifact_config = getattr(config, attr)
+        if artifact_config is not None:
+            result = artifact_funcs[attr](result, artifact_config, rng)
 
     return result
 
@@ -457,7 +449,11 @@ def generate_all_tiers(
     results: dict[NoiseTier, Path] = {NoiseTier.CLEAN_EMBEDDED: t0_path}
 
     for tier in [NoiseTier.CLEAN_OCR, NoiseTier.MODERATE_SCAN, NoiseTier.DEGRADED]:
-        tier_images = [apply_noise(img, tier) for img in page_images]
+        doc_name = source_md.stem
+        tier_images = [
+            apply_noise_pipeline(img, tier, doc_name, page_idx)
+            for page_idx, img in enumerate(page_images)
+        ]
         tier_path = output_dir / f"{tier.value}.pdf"
         create_image_pdf(tier_images, tier_path)
         results[tier] = tier_path
