@@ -128,22 +128,48 @@ class TierConfig:
     occlusion: OcclusionConfig | None = None
 
 
-# Tier configurations: current T2/T3 values expressed as single-point ranges.
-# Phase 5 will widen these to actual ranges for per-page variation.
-# Bleed-through deliberately omitted from T3 (design decision).
+# Tier configurations with calibrated parameter ranges.
+# Noise sigma reduced from design plan values to account for new artifact types
+# (scanner dust, spatial variation, occlusion) contributing overall difficulty.
 TIER_CONFIGS: dict[NoiseTier, TierConfig | None] = {
     NoiseTier.CLEAN_EMBEDDED: None,  # Embedded text PDF, no noise pipeline
     NoiseTier.CLEAN_OCR: TierConfig(),  # Image-only PDF, no artifacts
     NoiseTier.MODERATE_SCAN: TierConfig(
-        blur=BlurConfig(radius_range=(0.5, 0.5)),
-        rotation=RotationConfig(angle_range=(-1.0, 1.0)),
-        gaussian_noise=GaussianNoiseConfig(sigma_range=(5.0, 5.0)),
+        blur=BlurConfig(radius_range=(1.0, 2.0)),
+        rotation=RotationConfig(angle_range=(-3.0, 3.0)),
+        gaussian_noise=GaussianNoiseConfig(sigma_range=(8.0, 12.0)),
+        contrast=ContrastConfig(factor_range=(0.85, 0.85)),
+        scanner_dust=ScannerDustConfig(
+            speck_count_range=(3, 8),
+            speck_size_range=(2, 4),
+            roller_mark_count_range=(0, 1),
+        ),
+        spatial_variation=SpatialVariationConfig(
+            blur_intensity_range=(1.0, 2.0),
+            brightness_reduction_range=(0.05, 0.15),
+            blob_scale=100,
+        ),
     ),
     NoiseTier.DEGRADED: TierConfig(
-        blur=BlurConfig(radius_range=(1.5, 1.5)),
-        rotation=RotationConfig(angle_range=(-3.0, 3.0)),
-        contrast=ContrastConfig(factor_range=(0.7, 0.7)),
-        gaussian_noise=GaussianNoiseConfig(sigma_range=(25.0, 25.0)),
+        blur=BlurConfig(radius_range=(2.0, 3.0)),
+        rotation=RotationConfig(angle_range=(-5.0, 5.0)),
+        gaussian_noise=GaussianNoiseConfig(sigma_range=(12.0, 18.0)),
+        contrast=ContrastConfig(factor_range=(0.6, 0.75)),
+        scanner_dust=ScannerDustConfig(
+            speck_count_range=(8, 20),
+            speck_size_range=(2, 5),
+            roller_mark_count_range=(1, 3),
+        ),
+        spatial_variation=SpatialVariationConfig(
+            blur_intensity_range=(2.0, 4.0),
+            brightness_reduction_range=(0.1, 0.25),
+            blob_scale=80,
+        ),
+        occlusion=OcclusionConfig(
+            mark_count_range=(1, 2),
+            mark_opacity_range=(0.15, 0.35),
+            edge_bias=0.7,
+        ),
     ),
 }
 

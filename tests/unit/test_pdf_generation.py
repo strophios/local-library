@@ -373,21 +373,28 @@ class TestTierConfigs:
         assert config.rotation is None
         assert config.gaussian_noise is None
 
-    def test_moderate_scan_preserves_current_params(self):
+    def test_moderate_scan_has_calibrated_params(self):
         config = TIER_CONFIGS[NoiseTier.MODERATE_SCAN]
         assert config is not None
-        assert config.blur.radius_range == (0.5, 0.5)
-        assert config.rotation.angle_range == (-1.0, 1.0)
-        assert config.gaussian_noise.sigma_range == (5.0, 5.0)
-        assert config.contrast is None
+        assert config.blur.radius_range == (1.0, 2.0)
+        assert config.rotation.angle_range == (-3.0, 3.0)
+        assert config.gaussian_noise.sigma_range == (8.0, 12.0)
+        assert config.contrast.factor_range == (0.85, 0.85)
+        assert config.scanner_dust is not None
+        assert config.spatial_variation is not None
+        assert config.occlusion is None  # Only on T3
 
-    def test_degraded_preserves_current_params(self):
+    def test_degraded_has_calibrated_params(self):
         config = TIER_CONFIGS[NoiseTier.DEGRADED]
         assert config is not None
-        assert config.blur.radius_range == (1.5, 1.5)
-        assert config.rotation.angle_range == (-3.0, 3.0)
-        assert config.contrast.factor_range == (0.7, 0.7)
-        assert config.gaussian_noise.sigma_range == (25.0, 25.0)
+        assert config.blur.radius_range == (2.0, 3.0)
+        assert config.rotation.angle_range == (-5.0, 5.0)
+        assert config.gaussian_noise.sigma_range == (12.0, 18.0)
+        assert config.contrast.factor_range == (0.6, 0.75)
+        assert config.scanner_dust is not None
+        assert config.spatial_variation is not None
+        assert config.occlusion is not None
+        assert config.occlusion.mark_count_range == (1, 2)
 
     def test_entire_config_tree_is_hashable(self):
         """Full config tree must be hashable for cache invalidation via repr()."""
