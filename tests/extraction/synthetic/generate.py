@@ -137,9 +137,9 @@ TIER_CONFIGS: dict[NoiseTier, TierConfig | None] = {
     NoiseTier.CLEAN_EMBEDDED: None,  # Embedded text PDF, no noise pipeline
     NoiseTier.CLEAN_OCR: TierConfig(),  # Image-only PDF, no artifacts
     NoiseTier.MODERATE_SCAN: TierConfig(
-        blur=BlurConfig(radius_range=(1.0, 2.0)),
+        blur=BlurConfig(radius_range=(0.3, 0.8)),
         rotation=RotationConfig(angle_range=(-3.0, 3.0)),
-        gaussian_noise=GaussianNoiseConfig(sigma_range=(8.0, 12.0)),
+        gaussian_noise=GaussianNoiseConfig(sigma_range=(3.0, 6.0)),
         contrast=ContrastConfig(factor_range=(0.85, 0.85)),
         scanner_dust=ScannerDustConfig(
             speck_count_range=(3, 8),
@@ -153,10 +153,10 @@ TIER_CONFIGS: dict[NoiseTier, TierConfig | None] = {
         ),
     ),
     NoiseTier.DEGRADED: TierConfig(
-        blur=BlurConfig(radius_range=(2.0, 3.0)),
+        blur=BlurConfig(radius_range=(1.0, 2.0)),
         rotation=RotationConfig(angle_range=(-5.0, 5.0)),
-        gaussian_noise=GaussianNoiseConfig(sigma_range=(12.0, 18.0)),
-        contrast=ContrastConfig(factor_range=(0.6, 0.75)),
+        gaussian_noise=GaussianNoiseConfig(sigma_range=(8.0, 12.0)),
+        contrast=ContrastConfig(factor_range=(0.75, 0.85)),
         scanner_dust=ScannerDustConfig(
             speck_count_range=(8, 20),
             speck_size_range=(2, 5),

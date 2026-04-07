@@ -376,9 +376,9 @@ class TestTierConfigs:
     def test_moderate_scan_has_calibrated_params(self):
         config = TIER_CONFIGS[NoiseTier.MODERATE_SCAN]
         assert config is not None
-        assert config.blur.radius_range == (1.0, 2.0)
+        assert config.blur.radius_range == (0.3, 0.8)
         assert config.rotation.angle_range == (-3.0, 3.0)
-        assert config.gaussian_noise.sigma_range == (8.0, 12.0)
+        assert config.gaussian_noise.sigma_range == (3.0, 6.0)
         assert config.contrast.factor_range == (0.85, 0.85)
         assert config.scanner_dust is not None
         assert config.spatial_variation is not None
@@ -387,10 +387,10 @@ class TestTierConfigs:
     def test_degraded_has_calibrated_params(self):
         config = TIER_CONFIGS[NoiseTier.DEGRADED]
         assert config is not None
-        assert config.blur.radius_range == (2.0, 3.0)
+        assert config.blur.radius_range == (1.0, 2.0)
         assert config.rotation.angle_range == (-5.0, 5.0)
-        assert config.gaussian_noise.sigma_range == (12.0, 18.0)
-        assert config.contrast.factor_range == (0.6, 0.75)
+        assert config.gaussian_noise.sigma_range == (8.0, 12.0)
+        assert config.contrast.factor_range == (0.75, 0.85)
         assert config.scanner_dust is not None
         assert config.spatial_variation is not None
         assert config.occlusion is not None
