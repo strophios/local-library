@@ -4,8 +4,10 @@
 Generates 4 noise tiers from annotated source markdown:
   T0 (CLEAN_EMBEDDED): pandoc/pdflatex with embedded text
   T1 (CLEAN_OCR): T0 rendered to images, re-composited as image-only PDF
-  T2 (MODERATE_SCAN): T1 + slight blur, rotation, faint noise
-  T3 (DEGRADED): T1 + heavy noise, skew, contrast reduction, bleed-through
+  T2 (MODERATE_SCAN): blur, rotation, noise, contrast reduction, scanner dust,
+    spatial variation
+  T3 (DEGRADED): heavy blur, rotation, noise, contrast reduction, scanner dust,
+    spatial variation, occlusion
 
 Noise application is deterministic via numpy.random.RandomState (frozen
 algorithm, guaranteed same output across numpy versions given same seed).
