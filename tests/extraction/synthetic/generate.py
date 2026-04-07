@@ -9,7 +9,8 @@ Generates 4 noise tiers from annotated source markdown:
 
 Noise application is deterministic via numpy.random.RandomState (frozen
 algorithm, guaranteed same output across numpy versions given same seed).
-PDFs are cached via content hash to skip regeneration when source unchanged.
+PDFs are cached via combined content + parameter hash to skip regeneration
+when neither source content nor generation parameters have changed.
 """
 
 from __future__ import annotations
@@ -187,6 +188,51 @@ def content_hash(file_path: Path) -> str:
     h = hashlib.sha256()
     h.update(file_path.read_bytes())
     return h.hexdigest()
+
+
+def generation_params_hash(
+    configs: dict[NoiseTier, TierConfig | None] | None = None,
+) -> str:
+    """Compute SHA-256 hash of tier configuration parameters.
+
+    Captures every field value across all tiers. Changes to parameter
+    ranges, new artifacts enabled, or artifacts removed all change the hash.
+
+    Args:
+        configs: Tier configs to hash. Defaults to module-level TIER_CONFIGS.
+
+    Returns:
+        Hex digest of SHA-256 hash.
+    """
+    if configs is None:
+        configs = TIER_CONFIGS
+    h = hashlib.sha256()
+    h.update(repr(configs).encode())
+    return h.hexdigest()
+
+
+def generation_hash(
+    source_path: Path,
+    configs: dict[NoiseTier, TierConfig | None] | None = None,
+) -> str:
+    """Compute combined content + parameter hash for cache invalidation.
+
+    Both source content and generation parameters must match for a cache hit.
+    Parameter changes (range adjustments, new artifacts) automatically
+    invalidate the cache.
+
+    Args:
+        source_path: Path to source markdown file.
+        configs: Tier configs to hash. Defaults to module-level TIER_CONFIGS.
+
+    Returns:
+        Hex digest of combined SHA-256 hash.
+    """
+    c_hash = content_hash(source_path)
+    p_hash = generation_params_hash(configs)
+    combined = hashlib.sha256()
+    combined.update((c_hash + p_hash).encode())
+    return combined.hexdigest()
 
 
 def generate_clean_pdf(source_md: Path, output_pdf: Path) -> None:
@@ -550,7 +596,8 @@ def generate_all_tiers(
 ) -> dict[NoiseTier, Path]:
     """Generate all 4 noise tier PDFs from a single source markdown.
 
-    Checks content hash to skip regeneration when source hasn't changed.
+    Checks combined content + parameter hash to skip regeneration when
+    neither source nor generation parameters have changed.
     Produces:
       output_dir/T0_clean.pdf
       output_dir/T1_ocr_needed.pdf
@@ -565,8 +612,8 @@ def generate_all_tiers(
         Dict mapping NoiseTier to output PDF path.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
-    hash_file = output_dir / ".content_hash"
-    current_hash = content_hash(source_md)
+    hash_file = output_dir / ".generation_hash"
+    current_hash = generation_hash(source_md)
 
     # Check cache
     if hash_file.exists() and hash_file.read_text().strip() == current_hash:

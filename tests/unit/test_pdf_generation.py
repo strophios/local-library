@@ -32,6 +32,8 @@ from tests.extraction.synthetic.generate import (
     derive_page_seed,
     generate_all_tiers,
     generate_clean_pdf,
+    generation_hash,
+    generation_params_hash,
     render_pages_to_images,
 )
 
@@ -290,6 +292,29 @@ class TestGenerateAllTiers:
                 assert len(doc) >= 2, f"Tier {tier}: expected 2+ pages, got {len(doc)}"
             finally:
                 doc.close()
+
+    def test_uses_generation_hash_file(self, sample_source: Path, tmp_path: Path):
+        """Should write .generation_hash, not .content_hash."""
+        generate_all_tiers(sample_source, tmp_path)
+        assert (tmp_path / ".generation_hash").exists()
+        assert not (tmp_path / ".content_hash").exists()
+
+    def test_cache_miss_on_stale_hash(self, sample_source: Path, tmp_path: Path):
+        """Stale hash (simulating param change) should trigger regeneration."""
+        generate_all_tiers(sample_source, tmp_path)
+        hash_file = tmp_path / ".generation_hash"
+        hash_file.write_text("stale_hash_from_old_params")
+        generate_all_tiers(sample_source, tmp_path)
+        assert hash_file.read_text().strip() != "stale_hash_from_old_params"
+
+    def test_old_content_hash_file_ignored(self, sample_source: Path, tmp_path: Path):
+        """Old .content_hash files should not produce cache hits."""
+        generate_all_tiers(sample_source, tmp_path)
+        gen_hash = tmp_path / ".generation_hash"
+        gen_hash.unlink()
+        (tmp_path / ".content_hash").write_text("old_content_hash")
+        generate_all_tiers(sample_source, tmp_path)
+        assert gen_hash.exists()
 
 
 class TestConfigDataclasses:
@@ -662,3 +687,44 @@ class TestApplyOcclusion:
         )
         result = apply_occlusion(img, config, np.random.RandomState(42))
         np.testing.assert_array_equal(np.array(result), np.array(img))
+
+
+class TestCacheHashFunctions:
+    """Test generation parameter and combined hash functions."""
+
+    def test_params_hash_deterministic(self):
+        h1 = generation_params_hash()
+        h2 = generation_params_hash()
+        assert h1 == h2
+
+    def test_params_hash_changes_with_config(self):
+        h1 = generation_params_hash(TIER_CONFIGS)
+        modified = dict(TIER_CONFIGS)
+        modified[NoiseTier.MODERATE_SCAN] = TierConfig(
+            blur=BlurConfig(radius_range=(9.0, 9.0)),
+        )
+        h2 = generation_params_hash(modified)
+        assert h1 != h2
+
+    def test_generation_hash_deterministic(self, tmp_path: Path):
+        f = tmp_path / "test.md"
+        f.write_text("test content")
+        assert generation_hash(f) == generation_hash(f)
+
+    def test_generation_hash_changes_with_source(self, tmp_path: Path):
+        f1 = tmp_path / "a.md"
+        f2 = tmp_path / "b.md"
+        f1.write_text("content one")
+        f2.write_text("content two")
+        assert generation_hash(f1) != generation_hash(f2)
+
+    def test_generation_hash_changes_with_params(self, tmp_path: Path):
+        f = tmp_path / "test.md"
+        f.write_text("same content")
+        h1 = generation_hash(f, TIER_CONFIGS)
+        modified = dict(TIER_CONFIGS)
+        modified[NoiseTier.MODERATE_SCAN] = TierConfig(
+            blur=BlurConfig(radius_range=(9.0, 9.0)),
+        )
+        h2 = generation_hash(f, modified)
+        assert h1 != h2
