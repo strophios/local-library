@@ -155,7 +155,7 @@ TIER_CONFIGS: dict[NoiseTier, TierConfig | None] = {
     ),
     NoiseTier.DEGRADED: TierConfig(
         blur=BlurConfig(radius_range=(0.3, 1.0)),
-        rotation=RotationConfig(angle_range=(-3.0, 3.0)),
+        rotation=RotationConfig(angle_range=(-2.0, 2.0)),
         gaussian_noise=GaussianNoiseConfig(sigma_range=(3.0, 7.0)),
         contrast=ContrastConfig(factor_range=(0.85, 0.85)),
         scanner_dust=ScannerDustConfig(
