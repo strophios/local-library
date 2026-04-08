@@ -1,6 +1,6 @@
 # Ingestion Domain
 
-Last verified: 2026-04-01
+Last verified: 2026-04-08
 
 ## Purpose
 
@@ -41,6 +41,7 @@ Handles content acquisition (getting files into the system), extraction (convert
 - **Content-agnostic FileAcquirer**: Handles any local file; MIME detection via `mimetypes` module
 - **URL rejection**: FileAcquirer rejects URLs (http://, https://, ftp://, file://) to defer to future UrlAcquirer
 - **Lazy Marker loading**: PdfExtractor defers model load until first extraction (saves startup time)
+- **Marker metadata passthrough**: `ExtractionResult.metadata` contains Marker's `page_stats` with per-page `text_extraction_method` (`"pdftext"` for embedded text, `"surya"` for OCR). Enables post-import analysis of extraction source. Note: `text_from_rendered()` returns `"md"` as its second value, not metadata — use `rendered.metadata` directly.
 - **PdfExtractor LLM mode**: When `llm_enabled=True` and GEMINI_API_KEY is set, configures Marker with `use_llm`, `redo_inline_math`, and `disable_image_extraction` (images become text descriptions). Falls back silently to standard extraction without API key.
 - **Quality validation**: ExtractionResult.validate() checks min length and printable ratio
 - **compute_storage_path**: Git-style `ab/cd/hash.ext` layout for content-addressable storage
