@@ -1,7 +1,7 @@
 {
-  "run_id": "2026-04-04T16:15:53",
-  "pipeline_version": "d1b115c",
-  "timestamp": "2026-04-04T16:15:53.232639+00:00",
+  "run_id": "2026-04-08T16:11:07",
+  "pipeline_version": "6934511",
+  "timestamp": "2026-04-08T16:11:07.295530+00:00",
   "results": {
     "climate_modeling": {
       "T0_clean": {
@@ -399,7 +399,7 @@
             },
             "structural": {
               "detected": true,
-              "level_accuracy": 0.0
+              "level_accuracy": 1.0
             },
             "similarity": 1.0,
             "coverage": 1.0
@@ -479,7 +479,7 @@
             },
             "structural": {
               "detected": true,
-              "level_accuracy": 1.0
+              "level_accuracy": 0.0
             },
             "similarity": 1.0,
             "coverage": 1.0
@@ -536,12 +536,12 @@
       "T2_moderate_scan": {
         "tier": "T2_moderate_scan",
         "semantic": {
-          "CER": 0.0187,
-          "WER": 0.089
+          "CER": 0.0194,
+          "WER": 0.0902
         },
         "document_semantic": {
-          "CER": 0.0111,
-          "WER": 0.0513
+          "CER": 0.0138,
+          "WER": 0.0526
         },
         "structural": {
           "heading": {
@@ -589,13 +589,13 @@
             "region_id": "abstract",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0257,
-              "WER": 0.04
+              "CER": 0.0299,
+              "WER": 0.0514
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9868,
+            "similarity": 0.9846,
             "coverage": 1.0
           },
           {
@@ -669,13 +669,13 @@
             "region_id": "methods-intro",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0258,
+              "CER": 0.0286,
               "WER": 0.0204
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9859,
+            "similarity": 0.9845,
             "coverage": 1.0
           },
           {
@@ -695,14 +695,14 @@
             "region_id": "methods-body",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0171,
-              "WER": 0.0802
+              "CER": 0.0219,
+              "WER": 0.0943
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9914,
-            "coverage": 0.9858
+            "similarity": 0.989,
+            "coverage": 0.9953
           },
           {
             "region_id": "results",
@@ -740,7 +740,7 @@
             },
             "structural": {
               "detected": true,
-              "level_accuracy": 0.0
+              "level_accuracy": 1.0
             },
             "similarity": 1.0,
             "coverage": 1.0
@@ -767,7 +767,7 @@
             },
             "structural": {
               "detected": true,
-              "level_accuracy": 0.0
+              "level_accuracy": 1.0
             },
             "similarity": 1.0,
             "coverage": 1.0
@@ -776,13 +776,274 @@
             "region_id": "refs",
             "feature_type": "bibliography",
             "semantic": {
-              "CER": 0.016,
-              "WER": 0.0284
+              "CER": 0.015,
+              "WER": 0.0213
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9914,
+            "similarity": 0.9925,
+            "coverage": 1.0
+          }
+        ],
+        "alignment_failures": [
+          {
+            "region_id": "results-body",
+            "feature_type": "dense-prose",
+            "reason": "no sufficiently similar region found in extracted text"
+          }
+        ]
+      },
+      "T3_degraded": {
+        "tier": "T3_degraded",
+        "semantic": {
+          "CER": 0.0175,
+          "WER": 0.0881
+        },
+        "document_semantic": {
+          "CER": 0.013,
+          "WER": 0.0519
+        },
+        "structural": {
+          "heading": {
+            "detection_rate": 1.0,
+            "count": 6,
+            "skipped": 0
+          },
+          "dense": {
+            "detection_rate": 0.0,
+            "count": 0,
+            "skipped": 7
+          },
+          "inline": {
+            "detection_rate": 1.0,
+            "count": 1,
+            "skipped": 0
+          },
+          "display": {
+            "detection_rate": 0.0,
+            "count": 1,
+            "skipped": 0
+          },
+          "bibliography": {
+            "detection_rate": 0.0,
+            "count": 0,
+            "skipped": 1
+          }
+        },
+        "regions": [
+          {
+            "region_id": "title",
+            "feature_type": "heading-h1",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "abstract",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0257,
+              "WER": 0.04
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9868,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "introduction",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "intro-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "math-symbols",
+            "feature_type": "inline-math",
+            "semantic": {
+              "CER": 0.1031,
+              "WER": 0.3333
+            },
+            "structural": {
+              "detected": true
+            },
+            "similarity": 0.945,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "framework-scope",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "methods",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "methods-intro",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0143,
+              "WER": 0.0102
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9922,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "rmse-equation",
+            "feature_type": "display-math",
+            "semantic": {
+              "CER": 0.0943,
+              "WER": 0.8889
+            },
+            "structural": {
+              "detected": false
+            },
+            "similarity": 0.9505,
+            "coverage": 0.3333
+          },
+          {
+            "region_id": "methods-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0256,
+              "WER": 0.1038
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9871,
+            "coverage": 0.9906
+          },
+          {
+            "region_id": "results",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "discussion",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0176,
+              "WER": 0.0331
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9912,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "conclusion",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "conclusion-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "references",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "refs",
+            "feature_type": "bibliography",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
             "coverage": 1.0
           }
         ],
@@ -1135,12 +1396,12 @@
       "T1_ocr_needed": {
         "tier": "T1_ocr_needed",
         "semantic": {
-          "CER": 0.0299,
-          "WER": 0.0445
+          "CER": 0.0366,
+          "WER": 0.0764
         },
         "document_semantic": {
-          "CER": 0.0263,
-          "WER": 0.0603
+          "CER": 0.0345,
+          "WER": 0.0645
         },
         "structural": {
           "heading": {
@@ -1154,7 +1415,7 @@
             "skipped": 10
           },
           "display": {
-            "detection_rate": 0.0,
+            "detection_rate": 1.0,
             "count": 1,
             "skipped": 0
           },
@@ -1296,14 +1557,14 @@
             "region_id": "ddm-equation",
             "feature_type": "display-math",
             "semantic": {
-              "CER": 0.1702,
-              "WER": 0.2727
+              "CER": 0.2128,
+              "WER": 1.0
             },
             "structural": {
-              "detected": false
+              "detected": true
             },
-            "similarity": 0.9091,
-            "coverage": 1.0
+            "similarity": 0.8864,
+            "coverage": 0.4545
           },
           {
             "region_id": "ddm-explanation",
@@ -1349,14 +1610,14 @@
             "region_id": "results-summary",
             "feature_type": "table-complex",
             "semantic": {
-              "CER": 0.2589,
-              "WER": 0.1582
+              "CER": 0.3636,
+              "WER": 0.1329
             },
             "structural": {
               "detected": false
             },
-            "similarity": 0.8769,
-            "coverage": 0.9684
+            "similarity": 0.8406,
+            "coverage": 0.9937
           },
           {
             "region_id": "stat-notation",
@@ -1471,12 +1732,12 @@
       "T2_moderate_scan": {
         "tier": "T2_moderate_scan",
         "semantic": {
-          "CER": 0.0301,
-          "WER": 0.0449
+          "CER": 0.0907,
+          "WER": 0.0606
         },
         "document_semantic": {
-          "CER": 0.0262,
-          "WER": 0.0596
+          "CER": 0.1053,
+          "WER": 0.0962
         },
         "structural": {
           "heading": {
@@ -1524,13 +1785,13 @@
             "region_id": "abstract",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0378,
-              "WER": 0.083
+              "CER": 0.0373,
+              "WER": 0.0788
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9801,
+            "similarity": 0.9804,
             "coverage": 1.0
           },
           {
@@ -1592,13 +1853,13 @@
             "region_id": "design-body",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0294,
-              "WER": 0.0829
+              "CER": 0.0286,
+              "WER": 0.0939
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9852,
+            "similarity": 0.9857,
             "coverage": 1.0
           },
           {
@@ -1619,13 +1880,13 @@
             "region_id": "model-body",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0021,
-              "WER": 0.0169
+              "CER": 0.0,
+              "WER": 0.0
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9979,
+            "similarity": 1.0,
             "coverage": 1.0
           },
           {
@@ -1645,13 +1906,13 @@
             "region_id": "ddm-explanation",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0122,
-              "WER": 0.0426
+              "CER": 0.0132,
+              "WER": 0.0567
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9939,
+            "similarity": 0.9934,
             "coverage": 1.0
           },
           {
@@ -1663,7 +1924,7 @@
             },
             "structural": {
               "detected": true,
-              "level_accuracy": 1.0
+              "level_accuracy": 0.0
             },
             "similarity": 1.0,
             "coverage": 1.0
@@ -1672,27 +1933,27 @@
             "region_id": "results-intro",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.1139,
-              "WER": 0.1758
+              "CER": 0.1297,
+              "WER": 0.2088
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9408,
+            "similarity": 0.9353,
             "coverage": 1.0
           },
           {
             "region_id": "results-summary",
             "feature_type": "table-complex",
             "semantic": {
-              "CER": 0.2589,
-              "WER": 0.1582
+              "CER": 1.5747,
+              "WER": 0.462
             },
             "structural": {
               "detected": false
             },
-            "similarity": 0.8775,
-            "coverage": 0.9747
+            "similarity": 0.5537,
+            "coverage": 1.0
           },
           {
             "region_id": "stat-notation",
@@ -1711,13 +1972,13 @@
             "region_id": "ddm-results",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0227,
-              "WER": 0.0861
+              "CER": 0.0239,
+              "WER": 0.0902
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9879,
+            "similarity": 0.9873,
             "coverage": 1.0
           },
           {
@@ -1729,7 +1990,7 @@
             },
             "structural": {
               "detected": true,
-              "level_accuracy": 1.0
+              "level_accuracy": 0.0
             },
             "similarity": 1.0,
             "coverage": 1.0
@@ -1756,9 +2017,345 @@
             },
             "structural": {
               "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "conclusion-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "references",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "refs",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0061,
+              "WER": 0.029
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9959,
+            "coverage": 1.0
+          }
+        ],
+        "alignment_failures": []
+      },
+      "T3_degraded": {
+        "tier": "T3_degraded",
+        "semantic": {
+          "CER": 0.0362,
+          "WER": 0.085
+        },
+        "document_semantic": {
+          "CER": 0.0254,
+          "WER": 0.056
+        },
+        "structural": {
+          "heading": {
+            "detection_rate": 1.0,
+            "count": 9,
+            "skipped": 0
+          },
+          "dense": {
+            "detection_rate": 0.0,
+            "count": 0,
+            "skipped": 10
+          },
+          "display": {
+            "detection_rate": 0.0,
+            "count": 1,
+            "skipped": 0
+          },
+          "table": {
+            "detection_rate": 0.0,
+            "count": 1,
+            "skipped": 0
+          },
+          "inline": {
+            "detection_rate": 1.0,
+            "count": 1,
+            "skipped": 0
+          }
+        },
+        "regions": [
+          {
+            "region_id": "title",
+            "feature_type": "heading-h1",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
               "level_accuracy": 1.0
             },
             "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "abstract",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0351,
+              "WER": 0.0705
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9812,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "introduction",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "intro-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "methods",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "design",
+            "feature_type": "heading-h3",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "design-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.031,
+              "WER": 0.0884
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9845,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "model",
+            "feature_type": "heading-h3",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "model-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "ddm-equation",
+            "feature_type": "display-math",
+            "semantic": {
+              "CER": 0.1702,
+              "WER": 0.2727
+            },
+            "structural": {
+              "detected": false
+            },
+            "similarity": 0.9091,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "ddm-explanation",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0173,
+              "WER": 0.0426
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9908,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "results",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "results-intro",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.057,
+              "WER": 0.0769
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9711,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "results-summary",
+            "feature_type": "table-complex",
+            "semantic": {
+              "CER": 0.2465,
+              "WER": 0.1582
+            },
+            "structural": {
+              "detected": false
+            },
+            "similarity": 0.8826,
+            "coverage": 0.9747
+          },
+          {
+            "region_id": "stat-notation",
+            "feature_type": "inline-math",
+            "semantic": {
+              "CER": 0.0108,
+              "WER": 0.0417
+            },
+            "structural": {
+              "detected": true
+            },
+            "similarity": 0.9946,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "ddm-results",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0239,
+              "WER": 0.0902
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9873,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "discussion",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "discussion-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "conclusion",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.2,
+              "WER": 1.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 0.9091,
             "coverage": 1.0
           },
           {
@@ -2030,12 +2627,12 @@
       "T1_ocr_needed": {
         "tier": "T1_ocr_needed",
         "semantic": {
-          "CER": 0.0108,
-          "WER": 0.0219
+          "CER": 0.0126,
+          "WER": 0.0231
         },
         "document_semantic": {
-          "CER": 0.0156,
-          "WER": 0.0685
+          "CER": 0.016,
+          "WER": 0.0635
         },
         "structural": {
           "heading": {
@@ -2176,13 +2773,13 @@
             "region_id": "optimization-results",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0549,
-              "WER": 0.0714
+              "CER": 0.0626,
+              "WER": 0.0879
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.972,
+            "similarity": 0.9682,
             "coverage": 1.0
           },
           {
@@ -2194,7 +2791,7 @@
             },
             "structural": {
               "detected": true,
-              "level_accuracy": 1.0
+              "level_accuracy": 0.0
             },
             "similarity": 1.0,
             "coverage": 1.0
@@ -2221,7 +2818,7 @@
             },
             "structural": {
               "detected": true,
-              "level_accuracy": 1.0
+              "level_accuracy": 0.0
             },
             "similarity": 1.0,
             "coverage": 1.0
@@ -2230,13 +2827,13 @@
             "region_id": "refs",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0507,
+              "CER": 0.0677,
               "WER": 0.0909
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9721,
+            "similarity": 0.9638,
             "coverage": 1.0
           }
         ],
@@ -2251,12 +2848,233 @@
       "T2_moderate_scan": {
         "tier": "T2_moderate_scan",
         "semantic": {
-          "CER": 0.0094,
-          "WER": 0.0201
+          "CER": 0.0128,
+          "WER": 0.0233
         },
         "document_semantic": {
-          "CER": 0.0133,
-          "WER": 0.0585
+          "CER": 0.0151,
+          "WER": 0.0598
+        },
+        "structural": {
+          "heading": {
+            "detection_rate": 1.0,
+            "count": 7,
+            "skipped": 0
+          },
+          "dense": {
+            "detection_rate": 0.0,
+            "count": 0,
+            "skipped": 7
+          }
+        },
+        "regions": [
+          {
+            "region_id": "title",
+            "feature_type": "heading-h1",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "abstract",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0012,
+              "WER": 0.0094
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9991,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "introduction",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "intro-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "geometry-and-loads",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "geometry-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0218,
+              "WER": 0.051
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9891,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "finite-element-analysis",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "fea-methodology",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0296,
+              "WER": 0.0863
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9841,
+            "coverage": 0.9843
+          },
+          {
+            "region_id": "optimization-implementation",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "optimization-results",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.041,
+              "WER": 0.0604
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.979,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "conclusion",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "conclusion-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0175,
+              "WER": 0.0283
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9906,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "references",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "refs",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0677,
+              "WER": 0.0909
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9638,
+            "coverage": 1.0
+          }
+        ],
+        "alignment_failures": [
+          {
+            "region_id": "optimization-pseudocode",
+            "feature_type": "code-block",
+            "reason": "no sufficiently similar region found in extracted text"
+          }
+        ]
+      },
+      "T3_degraded": {
+        "tier": "T3_degraded",
+        "semantic": {
+          "CER": 0.0116,
+          "WER": 0.0227
+        },
+        "document_semantic": {
+          "CER": 0.0112,
+          "WER": 0.0554
         },
         "structural": {
           "heading": {
@@ -2307,7 +3125,7 @@
             },
             "structural": {
               "detected": true,
-              "level_accuracy": 0.0
+              "level_accuracy": 1.0
             },
             "similarity": 1.0,
             "coverage": 1.0
@@ -2370,14 +3188,14 @@
             "region_id": "fea-methodology",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0286,
+              "CER": 0.0296,
               "WER": 0.0863
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9847,
-            "coverage": 0.9961
+            "similarity": 0.9841,
+            "coverage": 0.9843
           },
           {
             "region_id": "optimization-implementation",
@@ -2388,7 +3206,7 @@
             },
             "structural": {
               "detected": true,
-              "level_accuracy": 0.0
+              "level_accuracy": 1.0
             },
             "similarity": 1.0,
             "coverage": 1.0
@@ -2397,13 +3215,13 @@
             "region_id": "optimization-results",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0386,
-              "WER": 0.0549
+              "CER": 0.041,
+              "WER": 0.0604
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9801,
+            "similarity": 0.979,
             "coverage": 1.0
           },
           {
@@ -2415,7 +3233,7 @@
             },
             "structural": {
               "detected": true,
-              "level_accuracy": 1.0
+              "level_accuracy": 0.0
             },
             "similarity": 1.0,
             "coverage": 1.0
@@ -2442,7 +3260,7 @@
             },
             "structural": {
               "detected": true,
-              "level_accuracy": 1.0
+              "level_accuracy": 0.0
             },
             "similarity": 1.0,
             "coverage": 1.0
@@ -2451,13 +3269,13 @@
             "region_id": "refs",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0507,
-              "WER": 0.0909
+              "CER": 0.0782,
+              "WER": 0.1212
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9721,
+            "similarity": 0.9577,
             "coverage": 1.0
           }
         ],
@@ -2780,12 +3598,12 @@
       "T1_ocr_needed": {
         "tier": "T1_ocr_needed",
         "semantic": {
-          "CER": 0.0184,
-          "WER": 0.0479
+          "CER": 0.0192,
+          "WER": 0.0494
         },
         "document_semantic": {
-          "CER": 0.0075,
-          "WER": 0.0262
+          "CER": 0.0077,
+          "WER": 0.0274
         },
         "structural": {
           "heading": {
@@ -2838,13 +3656,13 @@
             "region_id": "abstract",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0139,
-              "WER": 0.0398
+              "CER": 0.0125,
+              "WER": 0.0348
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9931,
+            "similarity": 0.9938,
             "coverage": 1.0
           },
           {
@@ -2856,7 +3674,7 @@
             },
             "structural": {
               "detected": true,
-              "level_accuracy": 0.0
+              "level_accuracy": 1.0
             },
             "similarity": 1.0,
             "coverage": 1.0
@@ -2883,7 +3701,7 @@
             },
             "structural": {
               "detected": true,
-              "level_accuracy": 0.0
+              "level_accuracy": 1.0
             },
             "similarity": 1.0,
             "coverage": 1.0
@@ -3052,13 +3870,13 @@
             "region_id": "refs",
             "feature_type": "bibliography",
             "semantic": {
-              "CER": 0.0025,
-              "WER": 0.0174
+              "CER": 0.0187,
+              "WER": 0.0522
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9975,
+            "similarity": 0.9887,
             "coverage": 1.0
           },
           {
@@ -3093,12 +3911,12 @@
       "T2_moderate_scan": {
         "tier": "T2_moderate_scan",
         "semantic": {
-          "CER": 0.0182,
-          "WER": 0.0465
+          "CER": 0.0219,
+          "WER": 0.0551
         },
         "document_semantic": {
-          "CER": 0.006,
-          "WER": 0.0202
+          "CER": 0.0091,
+          "WER": 0.0291
         },
         "structural": {
           "heading": {
@@ -3151,17 +3969,97 @@
             "region_id": "abstract",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0014,
-              "WER": 0.01
+              "CER": 0.0104,
+              "WER": 0.0299
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9986,
+            "similarity": 0.9948,
             "coverage": 1.0
           },
           {
             "region_id": "introduction",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "intro-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0131,
+              "WER": 0.019
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9932,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "historical-context",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "historical-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0008,
+              "WER": 0.0057
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9996,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "taft-hartley-quote",
+            "feature_type": "blockquote",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": false
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "postwar-consensus",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "methodology",
             "feature_type": "heading-h2",
             "semantic": {
               "CER": 0.0,
@@ -3175,16 +4073,249 @@
             "coverage": 1.0
           },
           {
-            "region_id": "intro-body",
+            "region_id": "methods-body",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0004,
-              "WER": 0.0032
+              "CER": 0.0,
+              "WER": 0.0
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9996,
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "inequality-regression",
+            "feature_type": "display-math",
+            "semantic": {
+              "CER": 0.2381,
+              "WER": 0.5
+            },
+            "structural": {
+              "detected": true
+            },
+            "similarity": 0.8571,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "regression-explanation",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0239,
+              "WER": 0.0649
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.988,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "results",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "results-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0246,
+              "WER": 0.0548
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9873,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "discussion",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "discussion-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "references",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "refs",
+            "feature_type": "bibliography",
+            "semantic": {
+              "CER": 0.0187,
+              "WER": 0.0522
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9887,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "fn1",
+            "feature_type": "footnote",
+            "semantic": {
+              "CER": 0.0099,
+              "WER": 0.0312
+            },
+            "structural": {
+              "detected": true
+            },
+            "similarity": 0.9901,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "fn2",
+            "feature_type": "footnote",
+            "semantic": {
+              "CER": 0.0986,
+              "WER": 0.3438
+            },
+            "structural": {
+              "detected": true
+            },
+            "similarity": 0.9431,
+            "coverage": 0.7812
+          }
+        ],
+        "alignment_failures": []
+      },
+      "T3_degraded": {
+        "tier": "T3_degraded",
+        "semantic": {
+          "CER": 0.0186,
+          "WER": 0.0439
+        },
+        "document_semantic": {
+          "CER": 0.0093,
+          "WER": 0.022
+        },
+        "structural": {
+          "heading": {
+            "detection_rate": 1.0,
+            "count": 7,
+            "skipped": 0
+          },
+          "dense": {
+            "detection_rate": 0.0,
+            "count": 0,
+            "skipped": 8
+          },
+          "blockquote": {
+            "detection_rate": 0.0,
+            "count": 1,
+            "skipped": 0
+          },
+          "display": {
+            "detection_rate": 1.0,
+            "count": 1,
+            "skipped": 0
+          },
+          "bibliography": {
+            "detection_rate": 0.0,
+            "count": 0,
+            "skipped": 1
+          },
+          "footnote": {
+            "detection_rate": 1.0,
+            "count": 2,
+            "skipped": 0
+          }
+        },
+        "regions": [
+          {
+            "region_id": "title",
+            "feature_type": "heading-h1",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "abstract",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "introduction",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "intro-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0105,
+              "WER": 0.0127
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9945,
             "coverage": 1.0
           },
           {
@@ -3205,13 +4336,13 @@
             "region_id": "historical-body",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0016,
-              "WER": 0.0114
+              "CER": 0.0291,
+              "WER": 0.0229
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9984,
+            "similarity": 0.9851,
             "coverage": 1.0
           },
           {
@@ -3284,13 +4415,13 @@
             "region_id": "regression-explanation",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0204,
-              "WER": 0.0519
+              "CER": 0.0239,
+              "WER": 0.0649
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9897,
+            "similarity": 0.988,
             "coverage": 1.0
           },
           {
@@ -3302,7 +4433,7 @@
             },
             "structural": {
               "detected": true,
-              "level_accuracy": 1.0
+              "level_accuracy": 0.0
             },
             "similarity": 1.0,
             "coverage": 1.0
@@ -3311,13 +4442,13 @@
             "region_id": "results-body",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0202,
-              "WER": 0.032
+              "CER": 0.0315,
+              "WER": 0.0548
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9898,
+            "similarity": 0.9841,
             "coverage": 1.0
           },
           {
@@ -3338,13 +4469,13 @@
             "region_id": "discussion-body",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0007,
-              "WER": 0.0054
+              "CER": 0.0,
+              "WER": 0.0
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9993,
+            "similarity": 1.0,
             "coverage": 1.0
           },
           {
@@ -3391,14 +4522,14 @@
             "region_id": "fn2",
             "feature_type": "footnote",
             "semantic": {
-              "CER": 0.0657,
-              "WER": 0.25
+              "CER": 0.0235,
+              "WER": 0.1562
             },
             "structural": {
               "detected": true
             },
-            "similarity": 0.9617,
-            "coverage": 0.8438
+            "similarity": 0.9836,
+            "coverage": 0.9688
           }
         ],
         "alignment_failures": []
@@ -3732,11 +4863,11 @@
       "T1_ocr_needed": {
         "tier": "T1_ocr_needed",
         "semantic": {
-          "CER": 0.008,
-          "WER": 0.0207
+          "CER": 0.0125,
+          "WER": 0.0367
         },
         "document_semantic": {
-          "CER": 0.0168,
+          "CER": 0.0169,
           "WER": 0.0522
         },
         "structural": {
@@ -3757,6 +4888,11 @@
           },
           "inline": {
             "detection_rate": 1.0,
+            "count": 1,
+            "skipped": 0
+          },
+          "code": {
+            "detection_rate": 0.0,
             "count": 1,
             "skipped": 0
           }
@@ -3839,7 +4975,7 @@
             },
             "structural": {
               "detected": true,
-              "level_accuracy": 1.0
+              "level_accuracy": 0.0
             },
             "similarity": 1.0,
             "coverage": 1.0
@@ -3927,6 +5063,19 @@
             "coverage": 1.0
           },
           {
+            "region_id": "mutation-code",
+            "feature_type": "code-block",
+            "semantic": {
+              "CER": 0.0835,
+              "WER": 0.3182
+            },
+            "structural": {
+              "detected": false
+            },
+            "similarity": 0.9559,
+            "coverage": 1.0
+          },
+          {
             "region_id": "experiments",
             "feature_type": "heading-h2",
             "semantic": {
@@ -3976,7 +5125,7 @@
             },
             "structural": {
               "detected": true,
-              "level_accuracy": 1.0
+              "level_accuracy": 0.0
             },
             "similarity": 1.0,
             "coverage": 1.0
@@ -4012,22 +5161,17 @@
             "region_id": "refs",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.023,
-              "WER": 0.0238
+              "CER": 0.0377,
+              "WER": 0.0476
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9884,
+            "similarity": 0.9809,
             "coverage": 1.0
           }
         ],
         "alignment_failures": [
-          {
-            "region_id": "mutation-code",
-            "feature_type": "code-block",
-            "reason": "no sufficiently similar region found in extracted text"
-          },
           {
             "region_id": "results-body",
             "feature_type": "dense-prose",
@@ -4038,12 +5182,12 @@
       "T2_moderate_scan": {
         "tier": "T2_moderate_scan",
         "semantic": {
-          "CER": 0.0106,
-          "WER": 0.0342
+          "CER": 0.0097,
+          "WER": 0.0307
         },
         "document_semantic": {
-          "CER": 0.0117,
-          "WER": 0.046
+          "CER": 0.017,
+          "WER": 0.048
         },
         "structural": {
           "heading": {
@@ -4091,13 +5235,13 @@
             "region_id": "abstract",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.004,
-              "WER": 0.0318
+              "CER": 0.0261,
+              "WER": 0.0573
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9968,
+            "similarity": 0.9854,
             "coverage": 1.0
           },
           {
@@ -4118,13 +5262,332 @@
             "region_id": "intro-body",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0018,
-              "WER": 0.0106
+              "CER": 0.0005,
+              "WER": 0.0035
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9986,
+            "similarity": 0.9998,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "methods",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "architecture-space",
+            "feature_type": "heading-h3",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "arch-space-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "search-space-hierarchy",
+            "feature_type": "nested-list",
+            "semantic": {
+              "CER": 0.0864,
+              "WER": 0.1944
+            },
+            "structural": {
+              "detected": true,
+              "item_count_accuracy": 0.058823529411764705,
+              "max_depth": 1.0
+            },
+            "similarity": 0.9541,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "algorithm-params",
+            "feature_type": "inline-math",
+            "semantic": {
+              "CER": 0.0063,
+              "WER": 0.05
+            },
+            "structural": {
+              "detected": true
+            },
+            "similarity": 0.9968,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "pbot-algorithm",
+            "feature_type": "heading-h3",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "pbot-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "mutation-pseudocode",
+            "feature_type": "heading-h4",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "mutation-code",
+            "feature_type": "code-block",
+            "semantic": {
+              "CER": 0.0371,
+              "WER": 0.2273
+            },
+            "structural": {
+              "detected": false
+            },
+            "similarity": 0.9802,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "experiments",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "exp-setup",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0185,
+              "WER": 0.0696
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9907,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "results",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "conclusion",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "conclusion-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "references",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "refs",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0197,
+              "WER": 0.0119
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9901,
+            "coverage": 1.0
+          }
+        ],
+        "alignment_failures": [
+          {
+            "region_id": "results-body",
+            "feature_type": "dense-prose",
+            "reason": "no sufficiently similar region found in extracted text"
+          }
+        ]
+      },
+      "T3_degraded": {
+        "tier": "T3_degraded",
+        "semantic": {
+          "CER": 0.0092,
+          "WER": 0.0281
+        },
+        "document_semantic": {
+          "CER": 0.0155,
+          "WER": 0.0446
+        },
+        "structural": {
+          "heading": {
+            "detection_rate": 1.0,
+            "count": 10,
+            "skipped": 0
+          },
+          "dense": {
+            "detection_rate": 0.0,
+            "count": 0,
+            "skipped": 7
+          },
+          "nested": {
+            "detection_rate": 1.0,
+            "count": 1,
+            "skipped": 0
+          },
+          "inline": {
+            "detection_rate": 1.0,
+            "count": 1,
+            "skipped": 0
+          },
+          "code": {
+            "detection_rate": 0.0,
+            "count": 1,
+            "skipped": 0
+          }
+        },
+        "regions": [
+          {
+            "region_id": "title",
+            "feature_type": "heading-h1",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "abstract",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0237,
+              "WER": 0.0573
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9866,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "introduction",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "intro-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0005,
+              "WER": 0.0035
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9998,
             "coverage": 1.0
           },
           {
@@ -4241,14 +5704,14 @@
             "region_id": "mutation-code",
             "feature_type": "code-block",
             "semantic": {
-              "CER": 0.0858,
-              "WER": 0.3409
+              "CER": 0.0348,
+              "WER": 0.1818
             },
             "structural": {
               "detected": false
             },
-            "similarity": 0.9548,
-            "coverage": 1.0
+            "similarity": 0.9814,
+            "coverage": 0.9773
           },
           {
             "region_id": "experiments",
@@ -4268,13 +5731,13 @@
             "region_id": "exp-setup",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0176,
-              "WER": 0.0633
+              "CER": 0.0185,
+              "WER": 0.0696
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9912,
+            "similarity": 0.9907,
             "coverage": 1.0
           },
           {
@@ -4336,13 +5799,13 @@
             "region_id": "refs",
             "feature_type": "dense-prose",
             "semantic": {
-              "CER": 0.0197,
-              "WER": 0.0119
+              "CER": 0.023,
+              "WER": 0.0238
             },
             "structural": {
               "detected": null
             },
-            "similarity": 0.9901,
+            "similarity": 0.9884,
             "coverage": 1.0
           }
         ],
@@ -4642,12 +6105,12 @@
       "T1_ocr_needed": {
         "tier": "T1_ocr_needed",
         "semantic": {
-          "CER": 0.0241,
-          "WER": 0.0462
+          "CER": 0.0232,
+          "WER": 0.039
         },
         "document_semantic": {
-          "CER": 0.0236,
-          "WER": 0.0616
+          "CER": 0.0228,
+          "WER": 0.0602
         },
         "structural": {
           "heading": {
@@ -4789,14 +6252,14 @@
             "region_id": "ridership-table",
             "feature_type": "table-simple",
             "semantic": {
-              "CER": 0.417,
-              "WER": 0.7738
+              "CER": 0.4017,
+              "WER": 0.6429
             },
             "structural": {
               "detected": true,
-              "column_accuracy": 0.060240963855421686
+              "column_accuracy": 0.07142857142857142
             },
-            "similarity": 0.7765,
+            "similarity": 0.7753,
             "coverage": 1.0
           },
           {
@@ -4925,12 +6388,12 @@
       "T2_moderate_scan": {
         "tier": "T2_moderate_scan",
         "semantic": {
-          "CER": 0.0107,
-          "WER": 0.0152
+          "CER": 0.0213,
+          "WER": 0.033
         },
         "document_semantic": {
-          "CER": 0.0073,
-          "WER": 0.0132
+          "CER": 0.0215,
+          "WER": 0.054
         },
         "structural": {
           "heading": {
@@ -5072,14 +6535,14 @@
             "region_id": "ridership-table",
             "feature_type": "table-simple",
             "semantic": {
-              "CER": 0.1769,
-              "WER": 0.2143
+              "CER": 0.3668,
+              "WER": 0.5357
             },
             "structural": {
               "detected": true,
-              "column_accuracy": 0.125
+              "column_accuracy": 0.0847457627118644
             },
-            "similarity": 0.9173,
+            "similarity": 0.7876,
             "coverage": 1.0
           },
           {
@@ -5105,6 +6568,289 @@
             "structural": {
               "detected": true,
               "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "discussion-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "conclusion",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "conclusion-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "references",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "refs",
+            "feature_type": "bibliography",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "fn1",
+            "feature_type": "footnote",
+            "semantic": {
+              "CER": 0.0082,
+              "WER": 0.0286
+            },
+            "structural": {
+              "detected": true
+            },
+            "similarity": 0.9918,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "fn2",
+            "feature_type": "footnote",
+            "semantic": {
+              "CER": 0.0074,
+              "WER": 0.0256
+            },
+            "structural": {
+              "detected": true
+            },
+            "similarity": 0.9926,
+            "coverage": 1.0
+          }
+        ],
+        "alignment_failures": []
+      },
+      "T3_degraded": {
+        "tier": "T3_degraded",
+        "semantic": {
+          "CER": 0.0204,
+          "WER": 0.0337
+        },
+        "document_semantic": {
+          "CER": 0.0239,
+          "WER": 0.0561
+        },
+        "structural": {
+          "heading": {
+            "detection_rate": 1.0,
+            "count": 7,
+            "skipped": 0
+          },
+          "dense": {
+            "detection_rate": 0.0,
+            "count": 0,
+            "skipped": 7
+          },
+          "table": {
+            "detection_rate": 1.0,
+            "count": 1,
+            "skipped": 0
+          },
+          "bibliography": {
+            "detection_rate": 0.0,
+            "count": 0,
+            "skipped": 1
+          },
+          "footnote": {
+            "detection_rate": 1.0,
+            "count": 2,
+            "skipped": 0
+          }
+        },
+        "regions": [
+          {
+            "region_id": "title",
+            "feature_type": "heading-h1",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "abstract",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "introduction",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 0.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "intro-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "methodology",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "methods-body",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0006,
+              "WER": 0.0044
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 0.9997,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "results",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "results-intro",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "ridership-table",
+            "feature_type": "table-simple",
+            "semantic": {
+              "CER": 0.3515,
+              "WER": 0.5476
+            },
+            "structural": {
+              "detected": true,
+              "column_accuracy": 0.078125
+            },
+            "similarity": 0.7966,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "results-detail",
+            "feature_type": "dense-prose",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": null
+            },
+            "similarity": 1.0,
+            "coverage": 1.0
+          },
+          {
+            "region_id": "discussion",
+            "feature_type": "heading-h2",
+            "semantic": {
+              "CER": 0.0,
+              "WER": 0.0
+            },
+            "structural": {
+              "detected": true,
+              "level_accuracy": 1.0
             },
             "similarity": 1.0,
             "coverage": 1.0
