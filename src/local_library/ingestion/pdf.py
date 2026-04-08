@@ -129,7 +129,17 @@ class PdfExtractor:
 
             # Run extraction
             rendered = self._converter(str(file_path))
-            text, metadata, images = text_from_rendered(rendered)
+            text, _, images = text_from_rendered(rendered)
+
+            # Marker's rendered.metadata contains page_stats with per-page
+            # text_extraction_method ("pdftext" for embedded text, "surya"
+            # for OCR). text_from_rendered's second return value is just the
+            # format string "md", not this metadata.
+            marker_metadata = (
+                rendered.metadata
+                if hasattr(rendered, "metadata") and isinstance(rendered.metadata, dict)
+                else {}
+            )
 
         except Exception as e:
             raise ExtractionError(
@@ -148,7 +158,7 @@ class PdfExtractor:
         # Build result with quality metrics
         result = ExtractionResult.from_text(
             text=text,
-            metadata=metadata if isinstance(metadata, dict) else {},
+            metadata=marker_metadata,
         )
 
         # Store images as bytes if available
