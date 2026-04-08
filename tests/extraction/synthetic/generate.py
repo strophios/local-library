@@ -50,7 +50,7 @@ _TIER_SEEDS: dict[NoiseTier, int] = {
     NoiseTier.DEGRADED: 137,
 }
 
-_RENDER_DPI = 100
+_RENDER_DPI = 150
 
 
 # --- Artifact configuration dataclasses ---
@@ -131,45 +131,46 @@ class TierConfig:
 
 
 # Tier configurations with calibrated parameter ranges.
-# Noise sigma reduced from design plan values to account for new artifact types
-# (scanner dust, spatial variation, occlusion) contributing overall difficulty.
+# Iteratively tuned: T2 is light degradation (legible with minor artifacts),
+# T3 is moderate degradation (legible but noticeably worse). Rotation uses
+# nearest-neighbor resampling (bilinear at >1° triggers surya encoder segfault).
 TIER_CONFIGS: dict[NoiseTier, TierConfig | None] = {
     NoiseTier.CLEAN_EMBEDDED: None,  # Embedded text PDF, no noise pipeline
     NoiseTier.CLEAN_OCR: TierConfig(),  # Image-only PDF, no artifacts
     NoiseTier.MODERATE_SCAN: TierConfig(
-        blur=BlurConfig(radius_range=(0.3, 0.8)),
+        blur=BlurConfig(radius_range=(0.2, 0.5)),
+        rotation=RotationConfig(angle_range=(-2.0, 2.0)),
+        gaussian_noise=GaussianNoiseConfig(sigma_range=(2.0, 4.0)),
+        contrast=ContrastConfig(factor_range=(0.9, 0.9)),
+        scanner_dust=ScannerDustConfig(
+            speck_count_range=(2, 5),
+            speck_size_range=(1, 3),
+            roller_mark_count_range=(0, 1),
+        ),
+        spatial_variation=SpatialVariationConfig(
+            blur_intensity_range=(0.2, 0.5),
+            brightness_reduction_range=(0.03, 0.08),
+            blob_scale=120,
+        ),
+    ),
+    NoiseTier.DEGRADED: TierConfig(
+        blur=BlurConfig(radius_range=(0.3, 1.0)),
         rotation=RotationConfig(angle_range=(-3.0, 3.0)),
-        gaussian_noise=GaussianNoiseConfig(sigma_range=(3.0, 6.0)),
+        gaussian_noise=GaussianNoiseConfig(sigma_range=(3.0, 7.0)),
         contrast=ContrastConfig(factor_range=(0.85, 0.85)),
         scanner_dust=ScannerDustConfig(
-            speck_count_range=(3, 8),
+            speck_count_range=(3, 10),
             speck_size_range=(2, 4),
-            roller_mark_count_range=(0, 1),
+            roller_mark_count_range=(0, 2),
         ),
         spatial_variation=SpatialVariationConfig(
             blur_intensity_range=(0.3, 0.8),
             brightness_reduction_range=(0.05, 0.15),
             blob_scale=100,
         ),
-    ),
-    NoiseTier.DEGRADED: TierConfig(
-        blur=BlurConfig(radius_range=(1.0, 2.0)),
-        rotation=RotationConfig(angle_range=(-5.0, 5.0)),
-        gaussian_noise=GaussianNoiseConfig(sigma_range=(8.0, 12.0)),
-        contrast=ContrastConfig(factor_range=(0.75, 0.85)),
-        scanner_dust=ScannerDustConfig(
-            speck_count_range=(8, 20),
-            speck_size_range=(2, 5),
-            roller_mark_count_range=(1, 3),
-        ),
-        spatial_variation=SpatialVariationConfig(
-            blur_intensity_range=(0.5, 1.5),
-            brightness_reduction_range=(0.05, 0.15),
-            blob_scale=80,
-        ),
         occlusion=OcclusionConfig(
             mark_count_range=(1, 2),
-            mark_opacity_range=(0.15, 0.35),
+            mark_opacity_range=(0.1, 0.25),
             edge_bias=0.7,
         ),
     ),
@@ -345,8 +346,8 @@ def apply_rotation(
     return img.rotate(
         angle,
         fillcolor=(255, 255, 255),
-        expand=True,
-        resample=Image.Resampling.BILINEAR,
+        expand=False,
+        resample=Image.Resampling.NEAREST,
     )
 
 
@@ -610,7 +611,10 @@ def create_image_pdf(
         for img in images:
             page = doc.new_page(width=page_width, height=page_height)
             bio = io.BytesIO()
-            img.save(bio, format="JPEG", quality=85)
+            # Convert to grayscale to match real scanned PDF characteristics.
+            # Noise artifacts are applied in RGB (some use color), but final
+            # output is grayscale since real academic scans are grayscale.
+            img.convert("L").save(bio, format="JPEG", quality=85)
             bio.seek(0)
             page.insert_image(pymupdf.Rect(0, 0, page_width, page_height), stream=bio)
         doc.save(str(output_pdf))

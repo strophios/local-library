@@ -376,10 +376,10 @@ class TestTierConfigs:
     def test_moderate_scan_has_calibrated_params(self):
         config = TIER_CONFIGS[NoiseTier.MODERATE_SCAN]
         assert config is not None
-        assert config.blur.radius_range == (0.3, 0.8)
-        assert config.rotation.angle_range == (-3.0, 3.0)
-        assert config.gaussian_noise.sigma_range == (3.0, 6.0)
-        assert config.contrast.factor_range == (0.85, 0.85)
+        assert config.blur.radius_range == (0.2, 0.5)
+        assert config.rotation.angle_range == (-2.0, 2.0)
+        assert config.gaussian_noise.sigma_range == (2.0, 4.0)
+        assert config.contrast.factor_range == (0.9, 0.9)
         assert config.scanner_dust is not None
         assert config.spatial_variation is not None
         assert config.occlusion is None  # Only on T3
@@ -387,10 +387,10 @@ class TestTierConfigs:
     def test_degraded_has_calibrated_params(self):
         config = TIER_CONFIGS[NoiseTier.DEGRADED]
         assert config is not None
-        assert config.blur.radius_range == (1.0, 2.0)
-        assert config.rotation.angle_range == (-5.0, 5.0)
-        assert config.gaussian_noise.sigma_range == (8.0, 12.0)
-        assert config.contrast.factor_range == (0.75, 0.85)
+        assert config.blur.radius_range == (0.3, 1.0)
+        assert config.rotation.angle_range == (-3.0, 3.0)
+        assert config.gaussian_noise.sigma_range == (3.0, 7.0)
+        assert config.contrast.factor_range == (0.85, 0.85)
         assert config.scanner_dust is not None
         assert config.spatial_variation is not None
         assert config.occlusion is not None
@@ -458,11 +458,12 @@ class TestIndividualArtifacts:
         result_arr = np.array(result)
         assert result_arr[99, 100, 0] < 255  # Blur spread to adjacent row
 
-    def test_apply_rotation_changes_dimensions(self):
+    def test_apply_rotation_preserves_dimensions(self):
+        """expand=False keeps original dimensions (nearest-neighbor resampling)."""
         img = self._make_white_image()
         rng = np.random.RandomState(42)
         result = apply_rotation(img, RotationConfig(angle_range=(5.0, 5.0)), rng)
-        assert result.size != img.size
+        assert result.size == img.size
 
     def test_apply_contrast_reduces_range(self):
         img = self._make_white_image()
