@@ -139,7 +139,8 @@ TIER_CONFIGS: dict[NoiseTier, TierConfig | None] = {
     NoiseTier.CLEAN_OCR: TierConfig(),  # Image-only PDF, no artifacts
     NoiseTier.MODERATE_SCAN: TierConfig(
         blur=BlurConfig(radius_range=(0.2, 0.5)),
-        rotation=RotationConfig(angle_range=(-2.0, 2.0)),
+        # rotation disabled: surya segfaults on rotated images regardless
+        # of resampling method. Re-enable if surya/marker fix is released.
         gaussian_noise=GaussianNoiseConfig(sigma_range=(2.0, 4.0)),
         contrast=ContrastConfig(factor_range=(0.9, 0.9)),
         scanner_dust=ScannerDustConfig(
@@ -155,7 +156,6 @@ TIER_CONFIGS: dict[NoiseTier, TierConfig | None] = {
     ),
     NoiseTier.DEGRADED: TierConfig(
         blur=BlurConfig(radius_range=(0.3, 1.0)),
-        rotation=RotationConfig(angle_range=(-2.0, 2.0)),
         gaussian_noise=GaussianNoiseConfig(sigma_range=(3.0, 7.0)),
         contrast=ContrastConfig(factor_range=(0.85, 0.85)),
         scanner_dust=ScannerDustConfig(

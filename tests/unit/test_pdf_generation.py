@@ -377,7 +377,7 @@ class TestTierConfigs:
         config = TIER_CONFIGS[NoiseTier.MODERATE_SCAN]
         assert config is not None
         assert config.blur.radius_range == (0.2, 0.5)
-        assert config.rotation.angle_range == (-2.0, 2.0)
+        assert config.rotation is None  # Disabled: surya segfaults on rotated images
         assert config.gaussian_noise.sigma_range == (2.0, 4.0)
         assert config.contrast.factor_range == (0.9, 0.9)
         assert config.scanner_dust is not None
@@ -388,7 +388,7 @@ class TestTierConfigs:
         config = TIER_CONFIGS[NoiseTier.DEGRADED]
         assert config is not None
         assert config.blur.radius_range == (0.3, 1.0)
-        assert config.rotation.angle_range == (-2.0, 2.0)
+        assert config.rotation is None  # Disabled: surya segfaults on rotated images
         assert config.gaussian_noise.sigma_range == (3.0, 7.0)
         assert config.contrast.factor_range == (0.85, 0.85)
         assert config.scanner_dust is not None
