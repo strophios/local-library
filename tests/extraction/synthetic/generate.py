@@ -50,7 +50,7 @@ _TIER_SEEDS: dict[NoiseTier, int] = {
     NoiseTier.DEGRADED: 137,
 }
 
-_RENDER_DPI = 150
+_RENDER_DPI = 100
 
 
 # --- Artifact configuration dataclasses ---

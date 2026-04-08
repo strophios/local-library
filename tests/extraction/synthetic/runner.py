@@ -21,6 +21,9 @@ from __future__ import annotations
 
 import json
 import logging
+import subprocess
+import sys
+import tempfile
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -29,7 +32,6 @@ from typing import Any
 
 from local_library.ingestion.artifact_cleanup import clean_artifacts
 from local_library.ingestion.markdown_cleanup import cleanup_markdown
-from local_library.ingestion.pdf import PdfExtractor
 from tests.extraction.synthetic.alignment import (
     align_regions,
 )
@@ -133,14 +135,79 @@ class ExtractionQualityRunner:
         self.sources_dir = sources_dir
         self.fixtures_dir = fixtures_dir
         self.results_dir = results_dir
-        self._extractor: PdfExtractor | None = None
 
-    @property
-    def extractor(self) -> PdfExtractor:
-        """Lazy-load PdfExtractor (models loaded on first extraction)."""
-        if self._extractor is None:
-            self._extractor = PdfExtractor(lazy_load=True)
-        return self._extractor
+    @staticmethod
+    def _extract_in_subprocess(pdf_path: Path, max_retries: int = 3) -> str:
+        """Extract PDF text in an isolated subprocess.
+
+        Surya's encoder can segfault due to accumulated torch state when
+        processing multiple PDFs sequentially in the same process. Running
+        each extraction in its own subprocess gives it a clean memory space.
+
+        Args:
+            pdf_path: Path to the PDF file.
+            max_retries: Number of attempts before giving up.
+
+        Returns:
+            Extracted text.
+
+        Raises:
+            RuntimeError: If all retry attempts fail.
+        """
+        script = f"""\
+import sys
+from pathlib import Path
+from local_library.ingestion.pdf import PdfExtractor
+
+ext = PdfExtractor(lazy_load=True)
+result = ext.extract(Path({str(pdf_path)!r}))
+out = Path(sys.argv[1])
+out.write_text(result.text, encoding="utf-8")
+"""
+        for attempt in range(1, max_retries + 1):
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tmp:
+                tmp_path = tmp.name
+
+            try:
+                proc = subprocess.run(
+                    [sys.executable, "-c", script, tmp_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                )
+                if proc.returncode == 0:
+                    text = Path(tmp_path).read_text(encoding="utf-8")
+                    return text
+
+                if proc.returncode < 0:
+                    signal_name = abs(proc.returncode)
+                    logger.warning(
+                        "Extraction subprocess killed by signal %d (attempt %d/%d): %s",
+                        signal_name,
+                        attempt,
+                        max_retries,
+                        pdf_path,
+                    )
+                else:
+                    logger.warning(
+                        "Extraction subprocess failed (exit %d, attempt %d/%d): %s\nstderr: %s",
+                        proc.returncode,
+                        attempt,
+                        max_retries,
+                        pdf_path,
+                        proc.stderr[:500] if proc.stderr else "",
+                    )
+            except subprocess.TimeoutExpired:
+                logger.warning(
+                    "Extraction subprocess timed out (attempt %d/%d): %s",
+                    attempt,
+                    max_retries,
+                    pdf_path,
+                )
+            finally:
+                Path(tmp_path).unlink(missing_ok=True)
+
+        raise RuntimeError(f"Extraction failed after {max_retries} attempts: {pdf_path}")
 
     def run(
         self,
@@ -255,12 +322,12 @@ class ExtractionQualityRunner:
         Returns:
             TierResult with per-region and summary scores.
         """
-        # Extract
+        # Extract in subprocess to avoid surya encoder segfaults from
+        # accumulated torch state across sequential extractions.
         try:
             extract_start = time.monotonic()
-            extraction = self.extractor.extract(pdf_path)
+            extracted_text = self._extract_in_subprocess(pdf_path)
             extract_elapsed = time.monotonic() - extract_start
-            extracted_text = extraction.text
             logger.info(
                 "    Extraction: %.1fs (%d chars)",
                 extract_elapsed,
