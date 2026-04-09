@@ -198,7 +198,14 @@ class Library:
         return self._conn
 
     def close(self) -> None:
-        """Close the database connection."""
+        """Close the database connection and release extractor resources."""
+        # Stop extraction worker subprocesses
+        for extractor in self._extractors:
+            if hasattr(extractor, "close"):
+                try:
+                    extractor.close()
+                except Exception:
+                    pass
         self._conn.close()
 
     def __enter__(self) -> Library:

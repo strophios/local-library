@@ -1,7 +1,6 @@
 """Unit tests for PDF extractor module."""
 
 from pathlib import Path
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -9,7 +8,7 @@ import pytest
 from local_library.core.errors import ErrorCode, ExtractionError, QualityError
 from local_library.core.models import ExtractionResult
 from local_library.ingestion.base import ContentExtractor
-from local_library.ingestion.pdf import PdfExtractor
+from local_library.ingestion.pdf import PdfExtractor, _WorkerCrashed
 
 
 class TestPdfExtractor:
@@ -47,25 +46,21 @@ class TestPdfExtractor:
 
         assert extractor.can_handle(txt_path) is False
 
-    # --- extract tests (mocked) ---
+    # --- extract tests (mocked at worker boundary) ---
 
     def test_extract_returns_extraction_result(
         self, extractor: PdfExtractor, sample_pdf: Path
     ) -> None:
-        """extract should return ExtractionResult with text."""
-        mock_converter = MagicMock()
-        mock_rendered = MagicMock()
-        mock_converter.return_value = mock_rendered
+        """extract should return ExtractionResult with text from worker."""
+        worker_response = {
+            "status": "ok",
+            "text": "Extracted markdown content",
+            "metadata": {"page_stats": []},
+        }
 
-        with patch("marker.converters.pdf.PdfConverter", return_value=mock_converter):
-            with patch("marker.models.create_model_dict", return_value={}):
-                with patch(
-                    "marker.output.text_from_rendered",
-                    return_value=("Extracted markdown content", {"title": "Test"}, []),
-                ):
-                    # Need to reload the extractor to use mocked imports
-                    extractor._converter = mock_converter
-                    result = extractor.extract(sample_pdf)
+        with patch.object(extractor, "_ensure_worker_running"):
+            with patch.object(extractor, "_send_request", return_value=worker_response):
+                result = extractor.extract(sample_pdf)
 
         assert isinstance(result, ExtractionResult)
         assert "Extracted markdown content" in result.text
@@ -85,19 +80,77 @@ class TestPdfExtractor:
         self, extractor: PdfExtractor, sample_pdf: Path
     ) -> None:
         """extract should raise ExtractionError for empty extraction."""
-        mock_converter = MagicMock()
-        mock_converter.return_value = MagicMock()
+        worker_response = {
+            "status": "error",
+            "error_type": "empty_output",
+            "message": "extraction produced empty output",
+        }
 
-        with patch(
-            "marker.output.text_from_rendered",
-            return_value=("", {}, []),
-        ):
-            extractor._converter = mock_converter
+        with patch.object(extractor, "_ensure_worker_running"):
+            with patch.object(extractor, "_send_request", return_value=worker_response):
+                with pytest.raises(ExtractionError) as exc_info:
+                    extractor.extract(sample_pdf)
 
-            with pytest.raises(ExtractionError) as exc_info:
-                extractor.extract(sample_pdf)
+                assert exc_info.value.code == ErrorCode.EXTRACTION_EMPTY_OUTPUT
 
-            assert exc_info.value.code == ErrorCode.EXTRACTION_EMPTY_OUTPUT
+    def test_extract_raises_for_worker_error(
+        self, extractor: PdfExtractor, sample_pdf: Path
+    ) -> None:
+        """extract should raise ExtractionError for worker extraction failure."""
+        worker_response = {
+            "status": "error",
+            "error_type": "extraction_failed",
+            "message": "marker crash",
+        }
+
+        with patch.object(extractor, "_ensure_worker_running"):
+            with patch.object(extractor, "_send_request", return_value=worker_response):
+                with pytest.raises(ExtractionError) as exc_info:
+                    extractor.extract(sample_pdf)
+
+                assert exc_info.value.code == ErrorCode.EXTRACTION_MARKER_CRASH
+
+    # --- CPU fallback tests ---
+
+    def test_extract_retries_on_cpu_after_crash(
+        self, extractor: PdfExtractor, sample_pdf: Path
+    ) -> None:
+        """extract should retry on CPU when MPS worker crashes."""
+        cpu_response = {
+            "status": "ok",
+            "text": "Extracted on CPU",
+            "metadata": {},
+        }
+
+        # First call crashes, CPU retry succeeds
+        with patch.object(extractor, "_ensure_worker_running"):
+            with patch.object(
+                extractor,
+                "_send_request",
+                side_effect=[
+                    _WorkerCrashed(-11, str(sample_pdf)),
+                    cpu_response,
+                ],
+            ):
+                with patch.object(extractor, "_stop_worker"):
+                    result = extractor.extract(sample_pdf)
+
+        assert result.text == "Extracted on CPU"
+
+    def test_extract_raises_when_both_mps_and_cpu_crash(
+        self, extractor: PdfExtractor, sample_pdf: Path
+    ) -> None:
+        """extract should raise when both MPS and CPU crash."""
+        with patch.object(extractor, "_ensure_worker_running"):
+            with patch.object(
+                extractor,
+                "_send_request",
+                side_effect=_WorkerCrashed(-11, str(sample_pdf)),
+            ):
+                with pytest.raises(ExtractionError) as exc_info:
+                    extractor.extract(sample_pdf)
+
+                assert "both MPS and CPU" in str(exc_info.value)
 
     # --- extract_and_validate tests ---
 
@@ -105,17 +158,12 @@ class TestPdfExtractor:
         self, extractor: PdfExtractor, sample_pdf: Path
     ) -> None:
         """extract_and_validate should pass for content meeting thresholds."""
-        mock_converter = MagicMock()
-        mock_converter.return_value = MagicMock()
-
         good_content = "x" * 200  # Well above min_length
+        worker_response = {"status": "ok", "text": good_content, "metadata": {}}
 
-        with patch(
-            "marker.output.text_from_rendered",
-            return_value=(good_content, {}, []),
-        ):
-            extractor._converter = mock_converter
-            result = extractor.extract_and_validate(sample_pdf)
+        with patch.object(extractor, "_ensure_worker_running"):
+            with patch.object(extractor, "_send_request", return_value=worker_response):
+                result = extractor.extract_and_validate(sample_pdf)
 
         assert result.character_count >= 100
 
@@ -123,64 +171,46 @@ class TestPdfExtractor:
         self, extractor: PdfExtractor, sample_pdf: Path
     ) -> None:
         """extract_and_validate should raise QualityError for short content."""
-        mock_converter = MagicMock()
-        mock_converter.return_value = MagicMock()
-
         short_content = "short"  # Below min_length
+        worker_response = {"status": "ok", "text": short_content, "metadata": {}}
 
-        with patch(
-            "marker.output.text_from_rendered",
-            return_value=(short_content, {}, []),
-        ):
-            extractor._converter = mock_converter
+        with patch.object(extractor, "_ensure_worker_running"):
+            with patch.object(extractor, "_send_request", return_value=worker_response):
+                with pytest.raises(QualityError) as exc_info:
+                    extractor.extract_and_validate(sample_pdf)
 
-            with pytest.raises(QualityError) as exc_info:
-                extractor.extract_and_validate(sample_pdf)
-
-            assert exc_info.value.code == ErrorCode.QUALITY_TOO_SHORT
+                assert exc_info.value.code == ErrorCode.QUALITY_TOO_SHORT
 
     def test_extract_and_validate_raises_for_low_printable(
         self, extractor: PdfExtractor, sample_pdf: Path
     ) -> None:
         """extract_and_validate should raise QualityError for garbled output."""
-        mock_converter = MagicMock()
-        mock_converter.return_value = MagicMock()
-
         # Content with many non-printable characters
         garbled_content = "Hello" + "\x00" * 200
+        worker_response = {"status": "ok", "text": garbled_content, "metadata": {}}
 
-        with patch(
-            "marker.output.text_from_rendered",
-            return_value=(garbled_content, {}, []),
-        ):
-            extractor._converter = mock_converter
+        with patch.object(extractor, "_ensure_worker_running"):
+            with patch.object(extractor, "_send_request", return_value=worker_response):
+                with pytest.raises(QualityError) as exc_info:
+                    extractor.extract_and_validate(sample_pdf)
 
-            with pytest.raises(QualityError) as exc_info:
-                extractor.extract_and_validate(sample_pdf)
-
-            assert exc_info.value.code == ErrorCode.QUALITY_LOW_PRINTABLE
+                assert exc_info.value.code == ErrorCode.QUALITY_LOW_PRINTABLE
 
     def test_extract_and_validate_uses_custom_thresholds(
         self, extractor: PdfExtractor, sample_pdf: Path
     ) -> None:
         """extract_and_validate should respect custom thresholds."""
-        mock_converter = MagicMock()
-        mock_converter.return_value = MagicMock()
-
         content = "x" * 50  # Would fail default min_length=100
+        worker_response = {"status": "ok", "text": content, "metadata": {}}
 
-        with patch(
-            "marker.output.text_from_rendered",
-            return_value=(content, {}, []),
-        ):
-            extractor._converter = mock_converter
+        with patch.object(extractor, "_ensure_worker_running"):
+            with patch.object(extractor, "_send_request", return_value=worker_response):
+                # Should pass with custom lower threshold
+                result = extractor.extract_and_validate(
+                    sample_pdf, min_length=10, min_printable_ratio=0.5
+                )
 
-            # Should pass with custom lower threshold
-            result = extractor.extract_and_validate(
-                sample_pdf, min_length=10, min_printable_ratio=0.5
-            )
-
-            assert result.character_count == 50
+                assert result.character_count == 50
 
 
 class TestProtocolConformance:
@@ -195,14 +225,7 @@ class TestProtocolConformance:
 
 
 class TestLLMConfiguration:
-    """Tests for PdfExtractor LLM-enhanced extraction configuration."""
-
-    @pytest.fixture
-    def sample_pdf(self, temp_dir: Path) -> Path:
-        """Create a sample PDF file for testing."""
-        pdf_path = temp_dir / "sample.pdf"
-        pdf_path.write_bytes(b"%PDF-1.4 test content")
-        return pdf_path
+    """Tests for PdfExtractor LLM configuration passed to worker."""
 
     def test_llm_enabled_default_false(self) -> None:
         """PdfExtractor should default to llm_enabled=False."""
@@ -214,115 +237,132 @@ class TestLLMConfiguration:
         extractor = PdfExtractor(lazy_load=True, llm_enabled=True)
         assert extractor._llm_enabled is True
 
-    def test_llm_config_passed_to_converter_when_enabled(
-        self, sample_pdf: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """When llm_enabled=True and API key present, LLM config should be passed to Marker."""
-        # Set the API key
-        monkeypatch.setenv("GEMINI_API_KEY", "test-api-key")
+    def test_worker_command_includes_llm_flag_when_enabled(self) -> None:
+        """Worker command should include --llm flag when llm_enabled=True."""
+        extractor = PdfExtractor(lazy_load=True, llm_enabled=True)
 
-        # Track what config was passed to ConfigParser
-        captured_config: dict[str, Any] = {}
+        with patch("subprocess.Popen") as mock_popen:
+            mock_proc = MagicMock()
+            mock_proc.stdout.readline.return_value = '{"status": "ready"}\n'
+            mock_proc.poll.return_value = None
+            mock_popen.return_value = mock_proc
 
-        mock_config_parser = MagicMock()
-        mock_config_parser.generate_config_dict.return_value = {"mocked": True}
+            extractor._start_worker()
 
-        def capture_config(config: dict[str, Any]) -> MagicMock:
-            captured_config.update(config)
-            return mock_config_parser
+            # Verify --llm flag was in the command
+            cmd = mock_popen.call_args[0][0]
+            assert "--llm" in cmd
 
-        mock_converter = MagicMock()
-        mock_converter.return_value = MagicMock()
+    def test_worker_command_omits_llm_flag_when_disabled(self) -> None:
+        """Worker command should not include --llm flag when llm_enabled=False."""
+        extractor = PdfExtractor(lazy_load=True, llm_enabled=False)
 
-        with patch("marker.config.parser.ConfigParser", side_effect=capture_config):
-            with patch("marker.converters.pdf.PdfConverter", return_value=mock_converter):
-                with patch("marker.models.create_model_dict", return_value={}):
-                    extractor = PdfExtractor(lazy_load=True, llm_enabled=True)
-                    extractor._ensure_models_loaded()
+        with patch("subprocess.Popen") as mock_popen:
+            mock_proc = MagicMock()
+            mock_proc.stdout.readline.return_value = '{"status": "ready"}\n'
+            mock_proc.poll.return_value = None
+            mock_popen.return_value = mock_proc
 
-        # Verify LLM config was included
-        assert captured_config.get("use_llm") is True
-        assert captured_config.get("llm_service") == "marker.services.gemini.GoogleGeminiService"
-        assert captured_config.get("redo_inline_math") is True
-        assert captured_config.get("disable_image_extraction") is True
+            extractor._start_worker()
 
-    def test_llm_config_not_passed_when_disabled(
-        self, sample_pdf: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """When llm_enabled=False, LLM config should not be passed to Marker."""
-        # Set API key to prove it's not about the key
-        monkeypatch.setenv("GEMINI_API_KEY", "test-api-key")
+            # Verify --llm flag was NOT in the command
+            cmd = mock_popen.call_args[0][0]
+            assert "--llm" not in cmd
 
-        captured_config: dict[str, Any] = {}
+    def test_worker_started_with_cpu_device_env(self) -> None:
+        """Worker should receive TORCH_DEVICE=cpu when device='cpu'."""
+        extractor = PdfExtractor(lazy_load=True)
 
-        mock_config_parser = MagicMock()
-        mock_config_parser.generate_config_dict.return_value = {"mocked": True}
+        with patch("subprocess.Popen") as mock_popen:
+            mock_proc = MagicMock()
+            mock_proc.stdout.readline.return_value = '{"status": "ready"}\n'
+            mock_proc.poll.return_value = None
+            mock_popen.return_value = mock_proc
 
-        def capture_config(config: dict[str, Any]) -> MagicMock:
-            captured_config.update(config)
-            return mock_config_parser
+            extractor._start_worker(device="cpu")
 
-        mock_converter = MagicMock()
+            # Verify TORCH_DEVICE was set in env
+            env = mock_popen.call_args[1].get("env", {})
+            assert env.get("TORCH_DEVICE") == "cpu"
 
-        with patch("marker.config.parser.ConfigParser", side_effect=capture_config):
-            with patch("marker.converters.pdf.PdfConverter", return_value=mock_converter):
-                with patch("marker.models.create_model_dict", return_value={}):
-                    extractor = PdfExtractor(lazy_load=True, llm_enabled=False)
-                    extractor._ensure_models_loaded()
+    def test_worker_started_without_device_env_by_default(self) -> None:
+        """Worker should not have TORCH_DEVICE set when device=None (auto)."""
+        extractor = PdfExtractor(lazy_load=True)
 
-        # Verify LLM config was NOT included
-        assert "use_llm" not in captured_config
+        with patch("subprocess.Popen") as mock_popen:
+            mock_proc = MagicMock()
+            mock_proc.stdout.readline.return_value = '{"status": "ready"}\n'
+            mock_proc.poll.return_value = None
+            mock_popen.return_value = mock_proc
 
-    def test_llm_config_not_passed_when_no_api_key(
-        self, sample_pdf: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """When llm_enabled=True but no API key, LLM config should not be passed."""
-        # Ensure no API key
-        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-        monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+            extractor._start_worker(device=None)
 
-        captured_config: dict[str, Any] = {}
+            # Verify env was not overridden (None = inherit)
+            env = mock_popen.call_args[1].get("env")
+            assert env is None
 
-        mock_config_parser = MagicMock()
-        mock_config_parser.generate_config_dict.return_value = {"mocked": True}
 
-        def capture_config(config: dict[str, Any]) -> MagicMock:
-            captured_config.update(config)
-            return mock_config_parser
+class TestWorkerLifecycle:
+    """Tests for worker subprocess lifecycle management."""
 
-        mock_converter = MagicMock()
+    def test_close_stops_worker(self) -> None:
+        """close() should terminate the worker subprocess."""
+        extractor = PdfExtractor(lazy_load=True)
 
-        with patch("marker.config.parser.ConfigParser", side_effect=capture_config):
-            with patch("marker.converters.pdf.PdfConverter", return_value=mock_converter):
-                with patch("marker.models.create_model_dict", return_value={}):
-                    extractor = PdfExtractor(lazy_load=True, llm_enabled=True)
-                    extractor._ensure_models_loaded()
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None
+        mock_proc.stdin = MagicMock()
+        extractor._worker = mock_proc
 
-        # Verify LLM config was NOT included (graceful fallback)
-        assert "use_llm" not in captured_config
+        extractor.close()
 
-    def test_gemini_api_key_passed_in_config(
-        self, sample_pdf: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """When llm_enabled=True, gemini_api_key should be passed in config dict."""
-        monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-key")
+        mock_proc.stdin.close.assert_called_once()
+        assert extractor._worker is None
 
-        captured_config: dict[str, Any] = {}
+    def test_ensure_worker_reuses_running_worker(self) -> None:
+        """_ensure_worker_running should reuse an active worker."""
+        extractor = PdfExtractor(lazy_load=True)
 
-        mock_config_parser = MagicMock()
-        mock_config_parser.generate_config_dict.return_value = {}
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None  # Still running
+        extractor._worker = mock_proc
+        extractor._worker_device = None
 
-        def capture_config(config: dict[str, Any]) -> MagicMock:
-            captured_config.update(config)
-            return mock_config_parser
+        with patch.object(extractor, "_start_worker") as mock_start:
+            extractor._ensure_worker_running(device=None)
 
-        mock_converter = MagicMock()
+            mock_start.assert_not_called()
 
-        with patch("marker.config.parser.ConfigParser", side_effect=capture_config):
-            with patch("marker.converters.pdf.PdfConverter", return_value=mock_converter):
-                with patch("marker.models.create_model_dict", return_value={}):
-                    extractor = PdfExtractor(lazy_load=True, llm_enabled=True)
-                    extractor._ensure_models_loaded()
+    def test_ensure_worker_restarts_on_device_change(self) -> None:
+        """_ensure_worker_running should restart worker if device changes."""
+        extractor = PdfExtractor(lazy_load=True)
 
-        # Verify gemini_api_key was passed in config (not set in environment)
-        assert captured_config.get("gemini_api_key") == "test-gemini-key"
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = None  # Still running
+        extractor._worker = mock_proc
+        extractor._worker_device = None  # Currently on auto/MPS
+
+        new_proc = MagicMock()
+        new_proc.poll.return_value = None
+
+        with patch.object(extractor, "_stop_worker") as mock_stop:
+            with patch.object(extractor, "_start_worker", return_value=new_proc):
+                extractor._ensure_worker_running(device="cpu")
+
+                mock_stop.assert_called_once()
+
+    def test_ensure_worker_starts_new_if_dead(self) -> None:
+        """_ensure_worker_running should start new worker if current is dead."""
+        extractor = PdfExtractor(lazy_load=True)
+
+        mock_proc = MagicMock()
+        mock_proc.poll.return_value = -11  # Dead (segfault)
+        extractor._worker = mock_proc
+
+        new_proc = MagicMock()
+        new_proc.poll.return_value = None
+
+        with patch.object(extractor, "_start_worker", return_value=new_proc):
+            extractor._ensure_worker_running()
+
+        assert extractor._worker is new_proc
