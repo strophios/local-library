@@ -9,7 +9,7 @@ import pytest
 from local_library.core.errors import ErrorCode, ZoteroError
 from local_library.ingestion.zotero import (
     AttachmentResolver,
-    BbtKeyMapper,
+    CitekeyMapper,
     CollectionResolver,
     DatabaseManager,
     LibraryJsonParser,
@@ -18,6 +18,31 @@ from local_library.ingestion.zotero import (
     ZoteroItem,
     ZoteroReader,
 )
+
+
+def _add_citekey_tables(conn: sqlite3.Connection) -> None:
+    """Add Zotero 8 native citation key EAV tables to a test database.
+
+    Creates the fields, itemDataValues, and itemData tables needed for
+    native citation key storage.
+    """
+    conn.execute("CREATE TABLE IF NOT EXISTS fields (fieldID INTEGER PRIMARY KEY, fieldName TEXT)")
+    conn.execute("INSERT OR IGNORE INTO fields VALUES (92, 'citationKey')")
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS itemDataValues (valueID INTEGER PRIMARY KEY, value TEXT)"
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS itemData (
+            itemID INTEGER, fieldID INTEGER, valueID INTEGER,
+            PRIMARY KEY (itemID, fieldID)
+        )"""
+    )
+
+
+def _add_citekey(conn: sqlite3.Connection, item_id: int, citekey: str, value_id: int) -> None:
+    """Insert a citation key mapping into the test database EAV tables."""
+    conn.execute("INSERT INTO itemDataValues VALUES (?, ?)", (value_id, citekey))
+    conn.execute("INSERT INTO itemData VALUES (?, 92, ?)", (item_id, value_id))
 
 
 class TestZoteroAttachment:
@@ -409,7 +434,7 @@ class TestDatabaseManager:
 
     @pytest.fixture
     def zotero_dir(self, temp_dir: Path) -> Path:
-        """Create a mock Zotero directory with test databases."""
+        """Create a mock Zotero directory with test database."""
         # Create directory structure
         zotero_path = temp_dir / "Zotero"
         zotero_path.mkdir()
@@ -419,14 +444,6 @@ class TestDatabaseManager:
         conn = sqlite3.connect(zotero_db)
         conn.execute("CREATE TABLE items (itemID INTEGER PRIMARY KEY)")
         conn.execute("INSERT INTO items (itemID) VALUES (1)")
-        conn.commit()
-        conn.close()
-
-        # Create minimal better-bibtex.sqlite
-        bbt_db = zotero_path / "better-bibtex.sqlite"
-        conn = sqlite3.connect(bbt_db)
-        conn.execute("CREATE TABLE citationkey (itemID INTEGER, citationKey TEXT)")
-        conn.execute("INSERT INTO citationkey VALUES (1, 'smith2023')")
         conn.commit()
         conn.close()
 
@@ -459,20 +476,17 @@ class TestDatabaseManager:
         finally:
             manager.close()
 
-    def test_can_access_both_databases(self, zotero_dir: Path) -> None:
-        """Manager should provide access to both Zotero and BBT databases."""
+    def test_can_access_database_by_name(self, zotero_dir: Path) -> None:
+        """Manager should provide access to database by filename."""
         manager = DatabaseManager(zotero_dir)
 
         try:
             zotero_conn = manager.get_connection("zotero.sqlite")
-            bbt_conn = manager.get_connection("better-bibtex.sqlite")
 
-            # Verify we can read from both
+            # Verify we can read
             zotero_rows = zotero_conn.execute("SELECT * FROM items").fetchall()
-            bbt_rows = bbt_conn.execute("SELECT * FROM citationkey").fetchall()
 
             assert len(zotero_rows) == 1
-            assert len(bbt_rows) == 1
         finally:
             manager.close()
 
@@ -645,16 +659,16 @@ class TestDatabaseManager:
             assert not temp_path.exists()
 
 
-class TestBbtKeyMapper:
-    """Tests for BbtKeyMapper class."""
+class TestCitekeyMapper:
+    """Tests for CitekeyMapper class."""
 
     @pytest.fixture
     def zotero_dir_with_citekeys(self, temp_dir: Path) -> Path:
-        """Create mock Zotero directory with BBT citekey data."""
+        """Create mock Zotero directory with native citation key data."""
         zotero_path = temp_dir / "Zotero"
         zotero_path.mkdir()
 
-        # Create zotero.sqlite with items table
+        # Create zotero.sqlite with items and native citekey EAV tables
         zotero_db = zotero_path / "zotero.sqlite"
         conn = sqlite3.connect(zotero_db)
         conn.execute("""
@@ -666,21 +680,12 @@ class TestBbtKeyMapper:
         conn.execute("INSERT INTO items (itemID, key) VALUES (100, 'SMITH001')")
         conn.execute("INSERT INTO items (itemID, key) VALUES (200, 'JONES002')")
         conn.execute("INSERT INTO items (itemID, key) VALUES (300, 'BROWN003')")
-        conn.commit()
-        conn.close()
 
-        # Create better-bibtex.sqlite with citationkey table
-        bbt_db = zotero_path / "better-bibtex.sqlite"
-        conn = sqlite3.connect(bbt_db)
-        conn.execute("""
-            CREATE TABLE citationkey (
-                itemID INTEGER PRIMARY KEY,
-                citationKey TEXT NOT NULL
-            )
-        """)
-        conn.execute("INSERT INTO citationkey VALUES (100, 'smith2023')")
-        conn.execute("INSERT INTO citationkey VALUES (200, 'jones2022')")
-        # Note: itemID 300 has no citekey in BBT
+        # Add native citation key tables
+        _add_citekey_tables(conn)
+        _add_citekey(conn, 100, "smith2023", value_id=1)
+        _add_citekey(conn, 200, "jones2022", value_id=2)
+        # Note: itemID 300 has no citekey
         conn.commit()
         conn.close()
 
@@ -695,7 +700,7 @@ class TestBbtKeyMapper:
 
     def test_lookup_returns_item_ids(self, db_manager: DatabaseManager) -> None:
         """lookup should return (itemID, itemKey) tuple."""
-        mapper = BbtKeyMapper(db_manager)
+        mapper = CitekeyMapper(db_manager)
 
         item_id, item_key = mapper.lookup("smith2023")
 
@@ -704,7 +709,7 @@ class TestBbtKeyMapper:
 
     def test_lookup_different_citekey(self, db_manager: DatabaseManager) -> None:
         """lookup should work for different citekeys."""
-        mapper = BbtKeyMapper(db_manager)
+        mapper = CitekeyMapper(db_manager)
 
         item_id, item_key = mapper.lookup("jones2022")
 
@@ -713,68 +718,88 @@ class TestBbtKeyMapper:
 
     def test_has_citekey_returns_true_for_existing(self, db_manager: DatabaseManager) -> None:
         """has_citekey should return True for existing citekey."""
-        mapper = BbtKeyMapper(db_manager)
+        mapper = CitekeyMapper(db_manager)
 
         assert mapper.has_citekey("smith2023") is True
         assert mapper.has_citekey("jones2022") is True
 
     def test_has_citekey_returns_false_for_missing(self, db_manager: DatabaseManager) -> None:
         """has_citekey should return False for missing citekey."""
-        mapper = BbtKeyMapper(db_manager)
+        mapper = CitekeyMapper(db_manager)
 
         assert mapper.has_citekey("nonexistent") is False
 
     def test_lookup_raises_for_missing_citekey(self, db_manager: DatabaseManager) -> None:
-        """lookup should raise error for citekey not in BBT."""
-        mapper = BbtKeyMapper(db_manager)
+        """lookup should raise error for citekey not in Zotero."""
+        mapper = CitekeyMapper(db_manager)
 
         with pytest.raises(ZoteroError) as exc_info:
             mapper.lookup("nonexistent")
 
-        assert exc_info.value.code == ErrorCode.ZOTERO_CITEKEY_NOT_IN_BBT
+        assert exc_info.value.code == ErrorCode.ZOTERO_CITEKEY_NOT_FOUND
         assert "nonexistent" in str(exc_info.value)
 
-    def test_lookup_raises_for_orphaned_bbt_entry(self, temp_dir: Path) -> None:
-        """lookup should raise if BBT entry points to missing Zotero item."""
-        # Create Zotero dir with mismatched data
-        zotero_path = temp_dir / "ZoteroOrphan"
-        zotero_path.mkdir()
+    def test_get_citekey_returns_citekey_for_item(self, db_manager: DatabaseManager) -> None:
+        """get_citekey should return citekey string for valid itemID."""
+        mapper = CitekeyMapper(db_manager)
 
-        # Zotero DB without itemID 999
-        zotero_db = zotero_path / "zotero.sqlite"
-        conn = sqlite3.connect(zotero_db)
-        conn.execute("CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT)")
-        conn.execute("INSERT INTO items VALUES (1, 'REAL0001')")
-        conn.commit()
-        conn.close()
+        assert mapper.get_citekey(100) == "smith2023"
+        assert mapper.get_citekey(200) == "jones2022"
 
-        # BBT DB with orphaned reference to itemID 999
-        bbt_db = zotero_path / "better-bibtex.sqlite"
-        conn = sqlite3.connect(bbt_db)
-        conn.execute("CREATE TABLE citationkey (itemID INTEGER, citationKey TEXT)")
-        conn.execute("INSERT INTO citationkey VALUES (999, 'orphan2023')")
-        conn.commit()
-        conn.close()
+    def test_get_citekey_returns_none_for_missing(self, db_manager: DatabaseManager) -> None:
+        """get_citekey should return None for item without citekey."""
+        mapper = CitekeyMapper(db_manager)
 
-        manager = DatabaseManager(zotero_path)
-        mapper = BbtKeyMapper(manager)
-
-        try:
-            with pytest.raises(ZoteroError) as exc_info:
-                mapper.lookup("orphan2023")
-
-            assert exc_info.value.code == ErrorCode.ZOTERO_ITEM_NOT_FOUND
-        finally:
-            manager.close()
+        assert mapper.get_citekey(300) is None
+        assert mapper.get_citekey(999) is None
 
     def test_lookup_is_case_sensitive(self, db_manager: DatabaseManager) -> None:
         """Citekey lookup should be case-sensitive."""
-        mapper = BbtKeyMapper(db_manager)
+        mapper = CitekeyMapper(db_manager)
 
         # smith2023 exists, SMITH2023 does not
         assert mapper.has_citekey("smith2023") is True
         assert mapper.has_citekey("SMITH2023") is False
         assert mapper.has_citekey("Smith2023") is False
+
+    def test_raises_for_missing_citekey_field(self, temp_dir: Path) -> None:
+        """CitekeyMapper should raise if citationKey field not in schema (pre-Zotero 8)."""
+        zotero_path = temp_dir / "ZoteroOld"
+        zotero_path.mkdir()
+
+        # Database without fields table (simulates pre-Zotero 8)
+        zotero_db = zotero_path / "zotero.sqlite"
+        conn = sqlite3.connect(zotero_db)
+        conn.execute("CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT)")
+        conn.execute("CREATE TABLE fields (fieldID INTEGER PRIMARY KEY, fieldName TEXT)")
+        # No citationKey field inserted
+        conn.commit()
+        conn.close()
+
+        manager = DatabaseManager(zotero_path)
+        mapper = CitekeyMapper(manager)
+
+        try:
+            with pytest.raises(ZoteroError) as exc_info:
+                mapper.lookup("anything")
+
+            assert exc_info.value.code == ErrorCode.ZOTERO_DATABASE_ERROR
+            assert "Zotero 8" in str(exc_info.value)
+        finally:
+            manager.close()
+
+    def test_field_id_is_cached(self, db_manager: DatabaseManager) -> None:
+        """Field ID should be looked up once and cached."""
+        mapper = CitekeyMapper(db_manager)
+
+        # First call triggers lookup
+        mapper.has_citekey("smith2023")
+        assert mapper._citekey_field_id is not None
+
+        # Cached value used on subsequent calls
+        cached_id = mapper._citekey_field_id
+        mapper.has_citekey("jones2022")
+        assert mapper._citekey_field_id == cached_id
 
 
 class TestAttachmentResolver:
@@ -847,13 +872,6 @@ class TestAttachmentResolver:
             (103, 100, 0, 'image/png', 'storage:figure.png')
         """)
 
-        conn.commit()
-        conn.close()
-
-        # Create empty BBT database (required by DatabaseManager)
-        bbt_db = zotero_path / "better-bibtex.sqlite"
-        conn = sqlite3.connect(bbt_db)
-        conn.execute("CREATE TABLE citationkey (itemID INTEGER, citationKey TEXT)")
         conn.commit()
         conn.close()
 
@@ -980,13 +998,6 @@ class TestAttachmentResolver:
         conn.commit()
         conn.close()
 
-        # Empty BBT database
-        bbt_db = zotero_path / "better-bibtex.sqlite"
-        conn = sqlite3.connect(bbt_db)
-        conn.execute("CREATE TABLE citationkey (itemID INTEGER, citationKey TEXT)")
-        conn.commit()
-        conn.close()
-
         manager = DatabaseManager(zotero_path)
         resolver = AttachmentResolver(manager, zotero_path)
 
@@ -1018,12 +1029,6 @@ class TestAttachmentResolver:
         """)
         # Attachment with NULL path (e.g., embedded note or URL-only)
         conn.execute("INSERT INTO itemAttachments VALUES (301, 300, 2, 'text/html', NULL)")
-        conn.commit()
-        conn.close()
-
-        bbt_db = zotero_path / "better-bibtex.sqlite"
-        conn = sqlite3.connect(bbt_db)
-        conn.execute("CREATE TABLE citationkey (itemID INTEGER, citationKey TEXT)")
         conn.commit()
         conn.close()
 
@@ -1114,15 +1119,11 @@ class TestZoteroReader:
             INSERT INTO itemAttachments VALUES
             (101, 100, 0, 'application/pdf', 'storage:paper.pdf')
         """)
-        conn.commit()
-        conn.close()
 
-        # Create better-bibtex.sqlite
-        bbt_db = zotero_path / "better-bibtex.sqlite"
-        conn = sqlite3.connect(bbt_db)
-        conn.execute("CREATE TABLE citationkey (itemID INTEGER, citationKey TEXT)")
-        conn.execute("INSERT INTO citationkey VALUES (100, 'smith2023')")
-        conn.execute("INSERT INTO citationkey VALUES (200, 'jones2022')")
+        # Add native citation key tables
+        _add_citekey_tables(conn)
+        _add_citekey(conn, 100, "smith2023", value_id=1)
+        _add_citekey(conn, 200, "jones2022", value_id=2)
         conn.commit()
         conn.close()
 
@@ -1200,9 +1201,8 @@ class TestZoteroReader:
         zotero_dir = temp_dir / "ZoteroNoJson"
         zotero_dir.mkdir()
 
-        # Create databases but no library.json
+        # Create database but no library.json
         (zotero_dir / "zotero.sqlite").touch()
-        (zotero_dir / "better-bibtex.sqlite").touch()
 
         with pytest.raises(ZoteroError) as exc_info:
             ZoteroReader(zotero_dir)
@@ -1217,9 +1217,9 @@ class TestZoteroReader:
 
         assert exc_info.value.code == ErrorCode.ZOTERO_ITEM_NOT_FOUND
 
-    def test_get_item_raises_for_citekey_not_in_bbt(self, complete_zotero_dir: Path) -> None:
-        """get_item should raise error if citekey in JSON but not BBT database."""
-        # Add citekey to library.json but not to BBT database
+    def test_get_item_raises_for_citekey_not_in_zotero(self, complete_zotero_dir: Path) -> None:
+        """get_item should raise error if citekey in JSON but not Zotero database."""
+        # Add citekey to library.json but not to Zotero's itemData tables
         library_json_path = complete_zotero_dir / "library.json"
         with open(library_json_path) as f:
             items = json.load(f)
@@ -1241,7 +1241,7 @@ class TestZoteroReader:
             with pytest.raises(ZoteroError) as exc_info:
                 reader.get_item("orphan2023")
 
-        assert exc_info.value.code == ErrorCode.ZOTERO_CITEKEY_NOT_IN_BBT
+        assert exc_info.value.code == ErrorCode.ZOTERO_CITEKEY_NOT_FOUND
 
     def test_custom_library_json_path(self, complete_zotero_dir: Path) -> None:
         """ZoteroReader should accept custom library.json path."""
@@ -1382,21 +1382,11 @@ class TestCollectionResolver:
         # ML Papers (nested) has item 200
         conn.execute("INSERT INTO collectionItems VALUES (3, 200)")
 
-        conn.commit()
-        conn.close()
-
-        # Create better-bibtex.sqlite with citekey mappings
-        bbt_db = zotero_path / "better-bibtex.sqlite"
-        conn = sqlite3.connect(bbt_db)
-        conn.execute("""
-            CREATE TABLE citationkey (
-                itemID INTEGER PRIMARY KEY,
-                citationKey TEXT NOT NULL
-            )
-        """)
-        conn.execute("INSERT INTO citationkey VALUES (100, 'smith2023')")
-        conn.execute("INSERT INTO citationkey VALUES (200, 'jones2022')")
-        conn.execute("INSERT INTO citationkey VALUES (300, 'brown2021')")
+        # Add native citation key tables
+        _add_citekey_tables(conn)
+        _add_citekey(conn, 100, "smith2023", value_id=1)
+        _add_citekey(conn, 200, "jones2022", value_id=2)
+        _add_citekey(conn, 300, "brown2021", value_id=3)
         conn.commit()
         conn.close()
 
@@ -1406,7 +1396,7 @@ class TestCollectionResolver:
     def collection_resolver(self, zotero_dir_with_collections: Path) -> CollectionResolver:
         """Provide CollectionResolver for tests."""
         db_manager = DatabaseManager(zotero_dir_with_collections)
-        key_mapper = BbtKeyMapper(db_manager)
+        key_mapper = CitekeyMapper(db_manager)
         resolver = CollectionResolver(db_manager, key_mapper)
         yield resolver
         db_manager.close()
@@ -1478,7 +1468,7 @@ class TestCollectionResolver:
         conn.close()
 
         db_manager = DatabaseManager(zotero_dir_with_collections)
-        key_mapper = BbtKeyMapper(db_manager)
+        key_mapper = CitekeyMapper(db_manager)
         resolver = CollectionResolver(db_manager, key_mapper)
 
         try:
@@ -1560,20 +1550,10 @@ class TestZoteroReaderCollections:
             )
         """)
 
-        conn.commit()
-        conn.close()
-
-        # Create better-bibtex.sqlite
-        bbt_db = zotero_path / "better-bibtex.sqlite"
-        conn = sqlite3.connect(bbt_db)
-        conn.execute("""
-            CREATE TABLE citationkey (
-                itemID INTEGER PRIMARY KEY,
-                citationKey TEXT NOT NULL
-            )
-        """)
-        conn.execute("INSERT INTO citationkey VALUES (100, 'smith2023')")
-        conn.execute("INSERT INTO citationkey VALUES (200, 'jones2022')")
+        # Add native citation key tables
+        _add_citekey_tables(conn)
+        _add_citekey(conn, 100, "smith2023", value_id=1)
+        _add_citekey(conn, 200, "jones2022", value_id=2)
         conn.commit()
         conn.close()
 

@@ -72,7 +72,7 @@ Handles content acquisition (getting files into the system), extraction (convert
 - `text_extraction.py` - TextMetadataExtractor, LLMExtractor, field extractors (extract_title, extract_authors, extract_date, extract_doc_type), build_csl_json converter
 - `artifact_cleanup.py` - clean_artifacts (four-pass content artifact removal: non-Latin script filtering, image description reformatting, watermark removal, publisher boilerplate stripping), BoilerplateRule dataclass, BOILERPLATE_RULES catalog
 - `markdown_cleanup.py` - cleanup_markdown (three-pass post-processing: HTML coercion, dehyphenation, paragraph reflow)
-- `zotero.py` - ZoteroAttachment, ZoteroItem, ZoteroCollection, ZoteroLibrary frozen dataclasses; ZoteroReader facade; CollectionResolver for collection queries; LibraryResolver for multi-library support
+- `zotero.py` - ZoteroAttachment, ZoteroItem, ZoteroCollection, ZoteroLibrary frozen dataclasses; ZoteroReader facade; CitekeyMapper (native Zotero 8 citation key lookup via EAV schema); CollectionResolver for collection queries; LibraryResolver for multi-library support
 
 ## Gotchas
 

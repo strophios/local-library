@@ -33,8 +33,10 @@ Each document record contains:
 ## Zotero Interoperability
 
 ### Reading from Zotero
-- Direct SQLite access to `zotero.sqlite` for read operations
+- Direct SQLite access to `zotero.sqlite` for read operations (Zotero 8+ required)
+- Citation keys read from Zotero's native `citationKey` field via itemData EAV schema (fieldID looked up dynamically from `fields` table)
 - Note: Zotero locks the database while running; copy file first if Zotero is active
+- CSL-JSON metadata read from Better BibTeX `library.json` export
 - Query items, attachments, tags, and notes from stable schema
 
 ### Writing to Zotero
@@ -95,7 +97,7 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - CLI interface (add, list, show, delete, open, update, review, reextract, embed, search, ask commands)
 - @citekey identifier support with fuzzy matching suggestions
 - Pagination support (--limit, --all flags on list command)
-- Zotero read-only access: ZoteroReader facade with database and JSON export backends, BetterBibTeX citekey mapping, attachment resolution, collection and library filtering
+- Zotero read-only access: ZoteroReader facade with database and JSON export backends, native Zotero 8 citekey mapping (CitekeyMapper via EAV schema), attachment resolution, collection and library filtering
 - **Batch import from Zotero**: `zotero import` command with library/collection filtering, dry-run mode, progress tracking, and continue-on-error (defaults to personal library)
 - **Reextract command**: `reextract` CLI command re-runs text extraction on existing documents (useful after extraction pipeline improvements)
 - **Extraction quality framework**: Synthetic document benchmark in `tests/extraction/synthetic/` measures extraction fidelity across 4 noise tiers (T0 clean embedded, T1 clean OCR, T2 moderate scan, T3 degraded) with CER/WER metrics and structural validators. Config-driven noise pipeline with 7 artifact types and per-page deterministic seeds. 6 annotated source documents. Opt-in via `--run-extraction-quality` pytest flag.

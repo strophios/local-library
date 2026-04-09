@@ -2,7 +2,7 @@
 
 Provides read-only access to Zotero library data by coordinating:
 - CSL-JSON metadata from Better BibTeX export (library.json)
-- Citekey-to-itemID mapping from Better BibTeX SQLite database
+- Citekey-to-itemID mapping from Zotero's native citation key field (Zotero 8+)
 - Attachment paths from Zotero's main SQLite database
 """
 
@@ -279,7 +279,6 @@ class DatabaseManager:
 
     # Database filenames in Zotero profile directory
     ZOTERO_DB = "zotero.sqlite"
-    BBT_DB = "better-bibtex.sqlite"
 
     def __init__(self, zotero_dir: Path, temp_dir: Path | None = None) -> None:
         """Initialize database manager.
@@ -390,7 +389,7 @@ class DatabaseManager:
         Connections are cached for reuse within a session.
 
         Args:
-            db_name: Database filename (e.g., "zotero.sqlite" or "better-bibtex.sqlite")
+            db_name: Database filename (e.g., "zotero.sqlite")
 
         Returns:
             Read-only database connection
@@ -451,30 +450,60 @@ class DatabaseManager:
             self._managed_temp_dir = None
 
 
-class BbtKeyMapper:
-    """Maps Better BibTeX citekeys to Zotero item identifiers.
+class CitekeyMapper:
+    """Maps citation keys to Zotero item identifiers via native Zotero 8 field.
 
-    Queries the Better BibTeX SQLite database to resolve citekeys to
-    Zotero's internal itemID and stable itemKey.
+    Queries Zotero's itemData EAV schema to resolve citekeys. In Zotero 8,
+    citation keys are a native field stored in the standard itemData/
+    itemDataValues/fields tables (fieldName='citationKey').
 
-    The BBT database schema includes a `citationkey` table that maps
-    itemID to citationKey. We join with Zotero's items table to get
-    the stable itemKey (8-character alphanumeric key).
+    Replaces BbtKeyMapper which queried the now-removed better-bibtex.sqlite.
     """
 
     def __init__(self, db_manager: DatabaseManager) -> None:
         """Initialize with database manager.
 
         Args:
-            db_manager: DatabaseManager providing access to BBT and Zotero databases
+            db_manager: DatabaseManager providing access to Zotero database
         """
         self._db_manager = db_manager
+        self._citekey_field_id: int | None = None
+
+    def _get_field_id(self) -> int:
+        """Look up the fieldID for citationKey from the Zotero schema.
+
+        Cached after first lookup.
+
+        Returns:
+            The fieldID for the citationKey field
+
+        Raises:
+            ZoteroError: If citationKey field not found (requires Zotero 8+)
+        """
+        if self._citekey_field_id is not None:
+            return self._citekey_field_id
+
+        conn = self._db_manager.get_connection(DatabaseManager.ZOTERO_DB)
+        cursor = conn.execute(
+            "SELECT fieldID FROM fields WHERE fieldName = 'citationKey'"
+        )
+        row = cursor.fetchone()
+
+        if row is None:
+            raise ZoteroError(
+                message="citationKey field not found in Zotero schema (requires Zotero 8+)",
+                code=ErrorCode.ZOTERO_DATABASE_ERROR,
+                details={"field_name": "citationKey"},
+            )
+
+        self._citekey_field_id = row["fieldID"]
+        return self._citekey_field_id
 
     def lookup(self, citekey: str) -> tuple[int, str]:
         """Resolve a citekey to Zotero item identifiers.
 
         Args:
-            citekey: Better BibTeX citation key
+            citekey: Citation key string
 
         Returns:
             Tuple of (itemID, itemKey) where:
@@ -482,60 +511,77 @@ class BbtKeyMapper:
             - itemKey: Zotero's 8-character stable key (used for storage paths)
 
         Raises:
-            ZoteroError: If citekey not found (ZOTERO_CITEKEY_NOT_IN_BBT)
+            ZoteroError: If citekey not found (ZOTERO_CITEKEY_NOT_FOUND)
         """
-        bbt_conn = self._db_manager.get_connection(DatabaseManager.BBT_DB)
-        zotero_conn = self._db_manager.get_connection(DatabaseManager.ZOTERO_DB)
+        field_id = self._get_field_id()
+        conn = self._db_manager.get_connection(DatabaseManager.ZOTERO_DB)
 
-        # Query BBT for itemID
-        cursor = bbt_conn.execute(
-            "SELECT itemID FROM citationkey WHERE citationKey = ?",
-            (citekey,),
+        cursor = conn.execute(
+            """
+            SELECT id.itemID, i.key
+            FROM itemData id
+            JOIN itemDataValues idv ON id.valueID = idv.valueID
+            JOIN items i ON id.itemID = i.itemID
+            WHERE id.fieldID = ? AND idv.value = ?
+            """,
+            (field_id, citekey),
         )
         row = cursor.fetchone()
 
         if row is None:
             raise ZoteroError(
-                message=f"citekey not found in Better BibTeX: {citekey}",
-                code=ErrorCode.ZOTERO_CITEKEY_NOT_IN_BBT,
+                message=f"citekey not found in Zotero database: {citekey}",
+                code=ErrorCode.ZOTERO_CITEKEY_NOT_FOUND,
                 details={"citekey": citekey},
             )
 
-        item_id = row["itemID"]
-
-        # Query Zotero for itemKey
-        cursor = zotero_conn.execute(
-            "SELECT key FROM items WHERE itemID = ?",
-            (item_id,),
-        )
-        row = cursor.fetchone()
-
-        if row is None:
-            # This shouldn't happen if BBT and Zotero are in sync
-            raise ZoteroError(
-                message=f"itemID {item_id} from BBT not found in Zotero database",
-                code=ErrorCode.ZOTERO_ITEM_NOT_FOUND,
-                details={"citekey": citekey, "item_id": item_id},
-            )
-
-        return (item_id, row["key"])
+        return (row["itemID"], row["key"])
 
     def has_citekey(self, citekey: str) -> bool:
-        """Check if a citekey exists in Better BibTeX.
+        """Check if a citekey exists in Zotero.
 
         Args:
-            citekey: Better BibTeX citation key
+            citekey: Citation key string
 
         Returns:
             True if citekey exists, False otherwise
         """
-        bbt_conn = self._db_manager.get_connection(DatabaseManager.BBT_DB)
+        field_id = self._get_field_id()
+        conn = self._db_manager.get_connection(DatabaseManager.ZOTERO_DB)
 
-        cursor = bbt_conn.execute(
-            "SELECT 1 FROM citationkey WHERE citationKey = ? LIMIT 1",
-            (citekey,),
+        cursor = conn.execute(
+            """
+            SELECT 1 FROM itemData id
+            JOIN itemDataValues idv ON id.valueID = idv.valueID
+            WHERE id.fieldID = ? AND idv.value = ? LIMIT 1
+            """,
+            (field_id, citekey),
         )
         return cursor.fetchone() is not None
+
+    def get_citekey(self, item_id: int) -> str | None:
+        """Reverse lookup: get citekey for an itemID.
+
+        Args:
+            item_id: Zotero's internal numeric item ID
+
+        Returns:
+            Citation key string, or None if item has no citekey
+        """
+        field_id = self._get_field_id()
+        conn = self._db_manager.get_connection(DatabaseManager.ZOTERO_DB)
+
+        cursor = conn.execute(
+            """
+            SELECT idv.value
+            FROM itemData id
+            JOIN itemDataValues idv ON id.valueID = idv.valueID
+            WHERE id.fieldID = ? AND id.itemID = ?
+            """,
+            (field_id, item_id),
+        )
+        row = cursor.fetchone()
+        return row["value"] if row is not None else None
 
 
 class AttachmentResolver:
@@ -694,12 +740,12 @@ class CollectionResolver:
     - collectionItems: collectionID, itemID (many-to-many junction)
     """
 
-    def __init__(self, db_manager: DatabaseManager, key_mapper: BbtKeyMapper) -> None:
+    def __init__(self, db_manager: DatabaseManager, key_mapper: CitekeyMapper) -> None:
         """Initialize collection resolver.
 
         Args:
             db_manager: DatabaseManager providing database access
-            key_mapper: BbtKeyMapper for resolving itemID to citekey
+            key_mapper: CitekeyMapper for resolving itemID to citekey
         """
         self._db_manager = db_manager
         self._key_mapper = key_mapper
@@ -802,8 +848,8 @@ class CollectionResolver:
     def get_citekeys_in_collection(self, collection_name: str) -> Iterator[str]:
         """Get all citekeys for items in a collection.
 
-        Resolves item IDs to citekeys via Better BibTeX. Items without
-        citekeys (not in BBT) are silently skipped.
+        Resolves item IDs to citekeys via Zotero's native citation key field.
+        Items without citekeys are silently skipped.
 
         Args:
             collection_name: Collection name (case-sensitive)
@@ -817,18 +863,10 @@ class CollectionResolver:
         collection = self.get_collection(collection_name)
         item_ids = self.get_item_ids_in_collection(collection.collection_id)
 
-        # Get BBT database connection for reverse lookup
-        bbt_conn = self._db_manager.get_connection(DatabaseManager.BBT_DB)
-
         for item_id in item_ids:
-            # Look up citekey from BBT
-            cursor = bbt_conn.execute(
-                "SELECT citationKey FROM citationkey WHERE itemID = ?",
-                (item_id,),
-            )
-            row = cursor.fetchone()
-            if row is not None:
-                yield row["citationKey"]
+            citekey = self._key_mapper.get_citekey(item_id)
+            if citekey is not None:
+                yield citekey
 
 
 class LibraryResolver:
@@ -988,8 +1026,8 @@ class ZoteroReader:
 
     Coordinates three data sources to provide complete item data:
     - library.json (CSL-JSON export from Better BibTeX) for metadata
-    - better-bibtex.sqlite for citekey-to-itemID mapping
-    - zotero.sqlite for attachment paths
+    - zotero.sqlite native citation key field for citekey-to-itemID mapping
+    - zotero.sqlite attachment tables for file paths
 
     Usage:
         with ZoteroReader(zotero_dir) as reader:
@@ -1042,7 +1080,7 @@ class ZoteroReader:
         # Initialize components
         self._json_parser = LibraryJsonParser(library_json_path)
         self._db_manager = DatabaseManager(zotero_dir, temp_dir=temp_dir)
-        self._key_mapper = BbtKeyMapper(self._db_manager)
+        self._key_mapper = CitekeyMapper(self._db_manager)
         self._attachment_resolver = AttachmentResolver(self._db_manager, zotero_dir)
         self._collection_resolver = CollectionResolver(self._db_manager, self._key_mapper)
         self._library_resolver = LibraryResolver(self._db_manager)
@@ -1060,7 +1098,7 @@ class ZoteroReader:
 
         Raises:
             ZoteroError: If citekey not found in library.json (ZOTERO_ITEM_NOT_FOUND)
-            ZoteroError: If citekey not in BBT database (ZOTERO_CITEKEY_NOT_IN_BBT)
+            ZoteroError: If citekey not in Zotero database (ZOTERO_CITEKEY_NOT_FOUND)
         """
         # Get metadata from library.json
         metadata = self._json_parser.get_metadata(citekey)
@@ -1181,7 +1219,7 @@ class ZoteroReader:
         """Iterate over citekeys in a specific library.
 
         Filters to items that belong to the specified library.
-        Items without citekeys (not in BBT) are silently skipped.
+        Items without citekeys are silently skipped.
 
         Args:
             library_id: Library ID (1 for personal library)
@@ -1192,24 +1230,17 @@ class ZoteroReader:
         # Get item IDs in this library
         item_ids = set(self._library_resolver.get_item_ids_in_library(library_id))
 
-        # Get BBT connection for citekey lookup
-        bbt_conn = self._db_manager.get_connection(DatabaseManager.BBT_DB)
-
         for item_id in item_ids:
-            cursor = bbt_conn.execute(
-                "SELECT citationKey FROM citationkey WHERE itemID = ?",
-                (item_id,),
-            )
-            row = cursor.fetchone()
-            if row is not None:
+            citekey = self._key_mapper.get_citekey(item_id)
+            if citekey is not None:
                 # Verify it's also in library.json
-                if self._json_parser.has_citekey(row["citationKey"]):
-                    yield row["citationKey"]
+                if self._json_parser.has_citekey(citekey):
+                    yield citekey
 
     def refresh(self) -> None:
         """Reload library.json from disk.
 
-        Call this after Better BibTeX has re-exported the library.
+        Call this after the library export has been updated.
         Database connections are not affected (they reflect current
         database state on each query).
         """

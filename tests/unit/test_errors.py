@@ -177,7 +177,7 @@ class TestZoteroErrorCodes:
         assert ErrorCode.ZOTERO_LIBRARY_JSON_NOT_FOUND.value == "ZOTERO_LIBRARY_JSON_NOT_FOUND"
         assert ErrorCode.ZOTERO_LIBRARY_JSON_PARSE_ERROR.value == "ZOTERO_LIBRARY_JSON_PARSE_ERROR"
         assert ErrorCode.ZOTERO_ITEM_NOT_FOUND.value == "ZOTERO_ITEM_NOT_FOUND"
-        assert ErrorCode.ZOTERO_CITEKEY_NOT_IN_BBT.value == "ZOTERO_CITEKEY_NOT_IN_BBT"
+        assert ErrorCode.ZOTERO_CITEKEY_NOT_FOUND.value == "ZOTERO_CITEKEY_NOT_FOUND"
         assert ErrorCode.ZOTERO_ATTACHMENT_MISSING.value == "ZOTERO_ATTACHMENT_MISSING"
 
     def test_zotero_error_inherits_from_base(self) -> None:
