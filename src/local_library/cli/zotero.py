@@ -115,6 +115,13 @@ def check_api_key_available(
 
 @app.command(name="import")
 def import_from_zotero(
+    citekeys_arg: Annotated[
+        list[str] | None,
+        typer.Argument(
+            help="Specific citekeys to import (e.g., Smith2023). "
+            "If omitted, imports all matching items.",
+        ),
+    ] = None,
     zotero_dir: Annotated[
         Path | None,
         typer.Option(
@@ -202,7 +209,11 @@ def import_from_zotero(
     with their CSL-JSON metadata. Existing documents (by citekey or content
     hash) are automatically skipped.
 
-    Requires Better BibTeX extension for citekey mapping and library.json export.
+    Pass specific citekeys as arguments to import individual items:
+
+        local-library zotero import Smith2023 Jones2022
+
+    Omit citekeys to import all matching items (filtered by --library/--collection).
 
     Use --skip-embed for large imports and run `local-library embed --pending`
     afterwards for batch embedding.
@@ -268,7 +279,10 @@ def import_from_zotero(
 
     # Get citekeys to process
     try:
-        if collection:
+        if citekeys_arg:
+            # Explicit citekeys provided — strip leading @ if present
+            citekeys = [ck.lstrip("@") for ck in citekeys_arg]
+        elif collection:
             citekeys = list(reader.list_citekeys_in_collection(collection))
             # Filter by library if specified
             if effective_library_id is not None:
