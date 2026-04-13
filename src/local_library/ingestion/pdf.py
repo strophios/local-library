@@ -90,7 +90,7 @@ class PdfExtractor:
                 cmd,
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
                 text=True,
                 env=env,
             )
@@ -104,9 +104,8 @@ class PdfExtractor:
         try:
             ready_line = proc.stdout.readline()
             if not ready_line:
-                stderr = proc.stderr.read() if proc.stderr else ""
                 raise ExtractionError(
-                    f"extraction worker exited during startup: {stderr[:500]}",
+                    "extraction worker exited during startup (no ready signal)",
                     ErrorCode.EXTRACTION_MARKER_CRASH,
                 )
             ready_msg = json.loads(ready_line)
