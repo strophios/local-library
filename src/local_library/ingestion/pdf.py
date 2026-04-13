@@ -12,6 +12,8 @@ import json
 import logging
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 from local_library.core.errors import ErrorCode, ExtractionError, QualityError
@@ -25,8 +27,11 @@ _WORKER_MODULE = "local_library.ingestion._extraction_worker"
 # Timeout for worker readiness signal after startup (seconds)
 _WORKER_READY_TIMEOUT = 120
 
-# Timeout for a single extraction (seconds)
-_EXTRACTION_TIMEOUT = 600
+# Default timeout for a single extraction (seconds)
+_DEFAULT_EXTRACTION_TIMEOUT = 900  # 15 minutes
+
+# Interval for progress logging during extraction (seconds)
+_PROGRESS_LOG_INTERVAL = 30
 
 
 class PdfExtractor:
@@ -45,7 +50,12 @@ class PdfExtractor:
     DEFAULT_MIN_LENGTH = 100
     DEFAULT_MIN_PRINTABLE_RATIO = 0.8
 
-    def __init__(self, lazy_load: bool = True, llm_enabled: bool = False) -> None:
+    def __init__(
+        self,
+        lazy_load: bool = True,
+        llm_enabled: bool = False,
+        extraction_timeout: int = _DEFAULT_EXTRACTION_TIMEOUT,
+    ) -> None:
         """Initialize the PDF extractor.
 
         Args:
@@ -54,10 +64,14 @@ class PdfExtractor:
             llm_enabled: If True, enable Marker's LLM-enhanced extraction for
                          better table, math, and image handling. Requires
                          GEMINI_API_KEY environment variable.
+            extraction_timeout: Maximum seconds for a single extraction before
+                               killing the worker. Default 15 minutes.
         """
         self._llm_enabled = llm_enabled
+        self._extraction_timeout = extraction_timeout
         self._worker: subprocess.Popen | None = None
         self._worker_device: str | None = None  # None = auto (MPS/CUDA), "cpu" = forced CPU
+        self._last_extraction_info: dict | None = None
 
         if not lazy_load:
             self._ensure_worker_running()
@@ -162,6 +176,8 @@ class PdfExtractor:
     def _send_request(self, file_path: str) -> dict:
         """Send an extraction request to the worker and read the response.
 
+        Uses a reader thread for timeout support and periodic progress logging.
+
         Args:
             file_path: Absolute path to the PDF file.
 
@@ -169,7 +185,7 @@ class PdfExtractor:
             Response dict from worker.
 
         Raises:
-            ExtractionError: If worker crashes or communication fails.
+            ExtractionError: If worker crashes, times out, or communication fails.
         """
         if self._worker is None or self._worker.stdin is None or self._worker.stdout is None:
             raise ExtractionError(
@@ -188,16 +204,67 @@ class PdfExtractor:
                 details={"path": file_path},
             ) from e
 
-        # Read response (blocks until worker responds or dies)
-        try:
-            response_line = self._worker.stdout.readline()
-        except Exception as e:
+        # Read response in a thread so we can timeout and log progress
+        result_line: list[str | None] = [None]
+        read_error: list[Exception | None] = [None]
+
+        def _reader() -> None:
+            try:
+                result_line[0] = self._worker.stdout.readline()
+            except Exception as e:
+                read_error[0] = e
+
+        thread = threading.Thread(target=_reader, daemon=True)
+        thread.start()
+
+        file_name = Path(file_path).name
+        device_label = self._worker_device or "mps"
+        start_time = time.monotonic()
+        last_log = start_time
+
+        while thread.is_alive():
+            thread.join(timeout=_PROGRESS_LOG_INTERVAL)
+            if not thread.is_alive():
+                break
+
+            elapsed = time.monotonic() - start_time
+            now = time.monotonic()
+
+            # Log progress periodically
+            if now - last_log >= _PROGRESS_LOG_INTERVAL:
+                logger.info(
+                    "extracting %s on %s... (%.0fs elapsed)",
+                    file_name,
+                    device_label,
+                    elapsed,
+                )
+                last_log = now
+
+            # Check timeout
+            if elapsed > self._extraction_timeout:
+                logger.error(
+                    "extraction timed out after %.0fs on %s: %s",
+                    elapsed,
+                    device_label,
+                    file_name,
+                )
+                self._stop_worker()
+                raise ExtractionError(
+                    f"extraction timed out after {elapsed:.0f}s: {file_name}",
+                    ErrorCode.EXTRACTION_TIMEOUT,
+                    details={"path": file_path, "timeout": self._extraction_timeout},
+                )
+
+        duration = time.monotonic() - start_time
+
+        if read_error[0] is not None:
             raise ExtractionError(
-                f"failed to read worker response: {e}",
+                f"failed to read worker response: {read_error[0]}",
                 ErrorCode.EXTRACTION_MARKER_CRASH,
                 details={"path": file_path},
-            ) from e
+            ) from read_error[0]
 
+        response_line = result_line[0]
         if not response_line:
             # Worker died — stdout closed
             exit_code = self._worker.wait()
@@ -205,13 +272,29 @@ class PdfExtractor:
             raise _WorkerCrashed(exit_code, file_path)
 
         try:
-            return json.loads(response_line)
+            response = json.loads(response_line)
         except json.JSONDecodeError as e:
             raise ExtractionError(
                 f"worker sent invalid response: {response_line.strip()!r}",
                 ErrorCode.EXTRACTION_MARKER_CRASH,
                 details={"path": file_path},
             ) from e
+
+        # Track extraction info for metadata
+        self._last_extraction_info = {
+            "extraction_duration_seconds": round(duration, 1),
+            "extraction_device": device_label,
+        }
+
+        if duration > 60:
+            logger.info(
+                "extracted %s on %s in %.0fs",
+                file_name,
+                device_label,
+                duration,
+            )
+
+        return response
 
     def can_handle(self, file_path: Path) -> bool:
         """Check if this extractor can handle the given file.
@@ -235,7 +318,8 @@ class PdfExtractor:
             file_path: Path to the PDF file
 
         Returns:
-            ExtractionResult with extracted markdown text
+            ExtractionResult with extracted markdown text and extraction
+            metadata (duration, device, fallback status)
 
         Raises:
             ExtractionError: If extraction fails on both MPS and CPU
@@ -248,6 +332,7 @@ class PdfExtractor:
             )
 
         file_path_str = str(file_path.resolve())
+        was_fallback = False
 
         # Try with current device (MPS/auto)
         try:
@@ -259,10 +344,27 @@ class PdfExtractor:
                 e.exit_code,
                 file_path.name,
             )
-            # Retry on CPU
+            was_fallback = True
             response = self._extract_with_cpu_fallback(file_path_str)
 
-        return self._handle_response(response, file_path_str)
+        result = self._handle_response(response, file_path_str)
+
+        # Merge extraction run info into result metadata
+        if self._last_extraction_info:
+            extraction_info = {**self._last_extraction_info}
+            if was_fallback:
+                extraction_info["extraction_device"] = "cpu (fallback)"
+                extraction_info["extraction_fallback"] = True
+            result = ExtractionResult(
+                text=result.text,
+                metadata={**result.metadata, **extraction_info},
+                images=result.images,
+                page_count=result.page_count,
+                character_count=result.character_count,
+                printable_ratio=result.printable_ratio,
+            )
+
+        return result
 
     def _extract_with_cpu_fallback(self, file_path: str) -> dict:
         """Retry extraction on CPU after an MPS crash.

@@ -39,8 +39,26 @@ app.command(name="ask")(ask_cmd.ask)
 app.add_typer(zotero_cmd.app, name="zotero")
 
 
+def _configure_logging() -> None:
+    """Configure logging for local_library namespace.
+
+    INFO level shows extraction progress (elapsed time, device, fallback events).
+    Other libraries (marker, torch, surya) stay at WARNING to avoid noise.
+    """
+    import logging
+    import sys
+
+    lib_logger = logging.getLogger("local_library")
+    lib_logger.setLevel(logging.INFO)
+    if not lib_logger.handlers:
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        lib_logger.addHandler(handler)
+
+
 def main() -> None:
     """CLI entry point."""
+    _configure_logging()
     app()
 
 
