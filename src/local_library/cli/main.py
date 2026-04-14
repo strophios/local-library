@@ -58,6 +58,13 @@ def _configure_logging() -> None:
 
 def main() -> None:
     """CLI entry point."""
+    import os
+
+    # Suppress HuggingFace tokenizer fork warning. The tokenizer auto-disables
+    # its internal Rust parallelism when it detects a fork (from the extraction
+    # worker subprocess); this just makes the disable proactive instead of noisy.
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
     _configure_logging()
     app()
 
