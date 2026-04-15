@@ -36,7 +36,13 @@ from local_library.core.errors import (
     MetadataError,
     QualityError,
 )
-from local_library.core.models import AddResult, Document, DocumentStatus, EmbeddingStatus, MetadataSource
+from local_library.core.models import (
+    AddResult,
+    Document,
+    DocumentStatus,
+    EmbeddingStatus,
+    MetadataSource,
+)
 from local_library.core.storage import (
     create_document,
     delete_document,
@@ -665,8 +671,9 @@ class Library:
             metadata: Optional CSL-JSON metadata dict
             citekey: Optional citekey to use (bypasses generation from metadata).
                     Useful when importing from external systems like Zotero.
-            metadata_source: Provenance of metadata (ZOTERO, EXPLICIT, FILENAME, TEXT_EXTRACTED).
-                           If None, defaults to FILENAME for bare paths or EXPLICIT for explicit metadata.
+            metadata_source: Provenance of metadata (ZOTERO, EXPLICIT, FILENAME,
+                           TEXT_EXTRACTED). If None, defaults to FILENAME for bare
+                           paths or EXPLICIT for explicit metadata.
 
         Returns:
             AddResult containing the document and duplicate status

@@ -1422,3 +1422,69 @@ class TestMetadataUpgrade:
         # Document should be flagged if citekey would change
         if result.document.status == DocumentStatus.NEEDS_REVIEW:
             assert "citekey" in (result.document.error_message or "").lower()
+
+
+class TestReextractFailedDocuments:
+    """Tests for reextract on FAILED documents with preliminary metadata."""
+
+    @pytest.fixture
+    def library_with_failed_doc(self, temp_dir: Path) -> tuple[Library, str]:
+        """Create a library with a FAILED document that has preliminary metadata."""
+        library = Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=False,
+        )
+
+        pdf_path = temp_dir / "Smith - 2020 - Test Article.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 test content")
+
+        with patch.object(
+            library._extractors[0],
+            "extract_and_validate",
+            side_effect=ExtractionError("timeout", ErrorCode.EXTRACTION_TIMEOUT),
+        ):
+            try:
+                library.add(str(pdf_path))
+            except ExtractionError:
+                pass
+
+        docs = library.list()
+        assert len(docs) == 1
+        assert docs[0].status == DocumentStatus.FAILED
+        assert docs[0].citekey is not None  # Has preliminary metadata
+
+        return library, str(docs[0].id)
+
+    def test_reextract_failed_document_succeeds(
+        self, library_with_failed_doc: tuple[Library, str]
+    ) -> None:
+        """reextract() should work on FAILED documents with preliminary metadata."""
+        library, doc_id = library_with_failed_doc
+
+        successful_result = ExtractionResult.from_text(
+            text="Successfully reextracted content. " * 20,
+        )
+        with patch.object(
+            library._extractors[0],
+            "extract_and_validate",
+            return_value=successful_result,
+        ):
+            updated = library.reextract(doc_id)
+
+        assert updated.status == DocumentStatus.READY
+        assert updated.extracted_path is not None
+        assert updated.citekey is not None
+
+    def test_failed_document_retains_citekey(
+        self, library_with_failed_doc: tuple[Library, str]
+    ) -> None:
+        """FAILED documents should have citekey from preliminary metadata."""
+        library, doc_id = library_with_failed_doc
+        doc = library.get(doc_id)
+
+        assert doc.status == DocumentStatus.FAILED
+        assert doc.citekey is not None
+        assert doc.csl_json is not None
+        assert doc.csl_json.get("_metadata_source") == "FILENAME"

@@ -25,6 +25,7 @@ from local_library.core import (
     ExtractionError,
     Library,
     MetadataError,
+    MetadataSource,
     QualityError,
 )
 from local_library.core.errors import ZoteroError
@@ -714,7 +715,12 @@ def _process_single_item(
 
     # Import the PDF with metadata, preserving Zotero's citekey
     try:
-        result = lib.add(str(pdf.path), metadata=item.csl_json, citekey=citekey)
+        result = lib.add(
+            str(pdf.path),
+            metadata=item.csl_json,
+            citekey=citekey,
+            metadata_source=MetadataSource.ZOTERO,
+        )
 
         if result.is_duplicate:
             stats["skipped_duplicate"] += 1
