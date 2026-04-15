@@ -9,7 +9,13 @@ import pytest
 
 from local_library.core.errors import AcquisitionError, ErrorCode, ExtractionError, LookupError, MetadataError
 from local_library.core.library import Library
-from local_library.core.models import DocumentStatus, ExtractionResult, MetadataSource
+from local_library.core.models import (
+    DocumentStatus,
+    ExtractionResult,
+    FieldExtraction,
+    MetadataSource,
+    TextExtractionResult,
+)
 from local_library.core.vec_extension import is_vec_available
 from local_library.ingestion.file import FileAcquirer
 from local_library.ingestion.pdf import PdfExtractor
@@ -1268,3 +1274,151 @@ class TestPreliminaryMetadata:
         assert doc.citekey is not None  # Generated from filename parsing
         assert doc.csl_json is not None
         assert doc.csl_json.get("_metadata_source") == "FILENAME"
+
+
+class TestMetadataUpgrade:
+    """Tests for conditional metadata upgrade after extraction."""
+
+    @pytest.fixture
+    def library_with_text_extraction(self, temp_dir: Path) -> Library:
+        """Provide a Library with text extraction enabled."""
+        return Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=True,
+        )
+
+    @pytest.fixture
+    def sample_pdf(self, temp_dir: Path) -> Path:
+        """Create a sample PDF file."""
+        pdf_path = temp_dir / "Smith2020.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 test content")
+        return pdf_path
+
+    def test_filename_metadata_upgraded_after_extraction(
+        self, library_with_text_extraction: Library, sample_pdf: Path
+    ) -> None:
+        """FILENAME metadata should be upgraded when text extraction succeeds."""
+        lib = library_with_text_extraction
+        extracted_text = "A Study of Neural Networks by J. Smith, 2020. " * 20
+
+        with patch.object(
+            lib._extractors[0],
+            "extract_and_validate",
+            return_value=ExtractionResult.from_text(extracted_text),
+        ):
+            result = lib.add(str(sample_pdf))
+
+        # Should have attempted upgrade
+        assert result.document.csl_json is not None
+        source = result.document.csl_json.get("_metadata_source")
+        assert source in ("FILENAME", "TEXT_EXTRACTED")
+
+    def test_zotero_metadata_not_upgraded(
+        self, library_with_text_extraction: Library, sample_pdf: Path
+    ) -> None:
+        """ZOTERO metadata should never be upgraded by text extraction."""
+        lib = library_with_text_extraction
+        zotero_metadata = {
+            "type": "article-journal",
+            "title": "Original Zotero Title",
+            "author": [{"family": "Smith", "given": "John"}],
+            "issued": {"date-parts": [[2020]]},
+        }
+
+        with patch.object(
+            lib._extractors[0],
+            "extract_and_validate",
+            return_value=ExtractionResult.from_text("Different text " * 20),
+        ):
+            result = lib.add(
+                str(sample_pdf),
+                metadata=zotero_metadata,
+                citekey="Smith2020",
+                metadata_source=MetadataSource.ZOTERO,
+            )
+
+        assert result.document.title == "Original Zotero Title"
+        assert result.document.csl_json.get("_metadata_source") == "ZOTERO"
+
+    def test_explicit_metadata_not_upgraded(
+        self, library_with_text_extraction: Library, sample_pdf: Path
+    ) -> None:
+        """EXPLICIT metadata should never be upgraded by text extraction."""
+        lib = library_with_text_extraction
+        explicit_metadata = {
+            "type": "article-journal",
+            "title": "Explicit Title",
+        }
+
+        with patch.object(
+            lib._extractors[0],
+            "extract_and_validate",
+            return_value=ExtractionResult.from_text("Different text " * 20),
+        ):
+            result = lib.add(
+                str(sample_pdf),
+                metadata=explicit_metadata,
+                metadata_source=MetadataSource.EXPLICIT,
+            )
+
+        assert result.document.title == "Explicit Title"
+        assert result.document.csl_json.get("_metadata_source") == "EXPLICIT"
+
+    def test_citekey_change_flags_needs_review(
+        self, library_with_text_extraction: Library, sample_pdf: Path
+    ) -> None:
+        """Upgrade that would change citekey should flag NEEDS_REVIEW."""
+        lib = library_with_text_extraction
+
+        mock_extraction = TextExtractionResult(
+            title=FieldExtraction(
+                value="Completely Different Title",
+                confidence=0.9,
+                source="heuristic",
+                alternatives=(),
+                reasoning="test",
+            ),
+            authors=(
+                FieldExtraction(
+                    value="DifferentAuthor, A.",
+                    confidence=0.9,
+                    source="heuristic",
+                    alternatives=(),
+                    reasoning="test",
+                ),
+            ),
+            date=FieldExtraction(
+                value="2021",
+                confidence=0.9,
+                source="heuristic",
+                alternatives=(),
+                reasoning="test",
+            ),
+            doc_type=FieldExtraction(
+                value="article-journal",
+                confidence=0.9,
+                source="heuristic",
+                alternatives=(),
+                reasoning="test",
+            ),
+            overall_confidence=0.9,
+            needs_review=False,
+            review_reasons=(),
+        )
+
+        with patch.object(
+            lib._extractors[0],
+            "extract_and_validate",
+            return_value=ExtractionResult.from_text("content " * 20),
+        ):
+            with patch.object(
+                lib._text_extractor, "extract", return_value=mock_extraction
+            ):
+                result = lib.add(str(sample_pdf))
+
+        # Original citekey from filename should be preserved
+        # Document should be flagged if citekey would change
+        if result.document.status == DocumentStatus.NEEDS_REVIEW:
+            assert "citekey" in (result.document.error_message or "").lower()

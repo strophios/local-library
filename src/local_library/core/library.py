@@ -566,10 +566,73 @@ class Library:
                 return doc
 
     def _attempt_metadata_upgrade(self, doc: Document, text: str) -> Document:
-        """Stub for conditional metadata upgrade.
+        """Attempt to upgrade filename-derived metadata with text extraction.
 
-        Will be implemented in Task 3. For now, just return the document unchanged.
+        Only called when _metadata_source is FILENAME. If text extraction
+        produces useful metadata, upgrades the document. If the upgrade would
+        change the existing citekey, flags NEEDS_REVIEW instead of auto-applying.
+
+        Args:
+            doc: Document with FILENAME-sourced metadata.
+            text: Extracted text content for metadata extraction.
+
+        Returns:
+            Updated Document (possibly with upgraded metadata or NEEDS_REVIEW status).
         """
+        extraction = self._text_extractor.extract(text)
+        csl_json = build_csl_json(extraction)
+
+        if "title" not in csl_json and "author" not in csl_json:
+            # Nothing useful extracted -- keep filename metadata
+            return doc
+
+        # Tag as text-extracted
+        csl_json["_metadata_source"] = MetadataSource.TEXT_EXTRACTED.value
+
+        # Check citekey stability
+        try:
+            result = self._metadata_handler.process(csl_json)
+        except MetadataError:
+            # Invalid metadata -- keep filename version
+            return doc
+
+        candidate_citekey = result.citekey
+
+        if doc.citekey and candidate_citekey != doc.citekey:
+            # Upgrade would change citekey -- flag for review, don't auto-apply
+            return update_document_status(
+                self._conn,
+                doc.id,
+                DocumentStatus.NEEDS_REVIEW,
+                error_message=(
+                    f"Text extraction suggests different metadata (citekey would change "
+                    f"from @{doc.citekey} to @{candidate_citekey}). "
+                    "Use `local-library review` to accept or reject the upgrade."
+                ),
+            )
+
+        # Same citekey (or no existing citekey) -- apply upgrade
+        unique_citekey = get_unique_citekey(self._conn, candidate_citekey)
+
+        doc = update_document_metadata(
+            self._conn,
+            doc.id,
+            citekey=unique_citekey,
+            csl_json=result.csl_json,
+            title=result.title,
+            authors=result.authors,
+            issued_date=result.issued_date,
+        )
+
+        # Set NEEDS_REVIEW if extraction confidence is low
+        if extraction.needs_review:
+            doc = update_document_status(
+                self._conn,
+                doc.id,
+                DocumentStatus.NEEDS_REVIEW,
+                error_message="; ".join(extraction.review_reasons),
+            )
+
         return doc
 
     def add(
