@@ -1,6 +1,8 @@
 """Unit tests for PDF extractor module."""
 
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pymupdf as fitz_lib
@@ -901,3 +903,137 @@ class TestSendRequestTimeout:
 
         response = extractor._send_request("/fake/path.pdf")
         assert response["status"] == "ok"
+
+
+class TestProgressCallback:
+    """Tests for ProgressCallback integration in PdfExtractor."""
+
+    @pytest.fixture
+    def callback_log(self) -> list[tuple[str, float, dict[str, Any]]]:
+        """Provide a list to capture callback invocations."""
+        return []
+
+    @pytest.fixture
+    def recording_callback(
+        self, callback_log: list[tuple[str, float, dict[str, Any]]]
+    ) -> "Callable[[str, float, dict[str, Any]], None]":
+        """Provide a callback that records all invocations."""
+
+        def callback(message: str, elapsed: float, context: dict[str, Any]) -> None:
+            callback_log.append((message, elapsed, context))
+
+        return callback
+
+    @pytest.fixture
+    def sample_pdf(self, temp_dir: Path) -> Path:
+        """Create a sample PDF file for testing."""
+        pdf_path = temp_dir / "sample.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 test content")
+        return pdf_path
+
+    def test_callback_receives_precheck_event(
+        self,
+        sample_pdf: Path,
+        recording_callback,
+        callback_log: list,
+    ) -> None:
+        """Callback should receive pre-check completion event."""
+        extractor = PdfExtractor(lazy_load=True, progress_callback=recording_callback)
+        precheck = PreCheckResult(
+            page_count=10, has_extractable_text=True, computed_timeout=900
+        )
+        worker_response = {
+            "status": "ok",
+            "text": "Extracted content",
+            "metadata": {},
+        }
+
+        with patch("local_library.ingestion.pdf._precheck_pdf", return_value=precheck):
+            with patch.object(extractor, "_ensure_worker_running"):
+                with patch.object(extractor, "_send_request", return_value=worker_response):
+                    extractor.extract(sample_pdf)
+
+        precheck_events = [e for e in callback_log if e[2].get("event") == "precheck_complete"]
+        assert len(precheck_events) == 1
+        assert precheck_events[0][2]["page_count"] == 10
+        assert precheck_events[0][2]["has_text"] is True
+        assert precheck_events[0][2]["timeout"] == 900
+
+    def test_callback_receives_completion_event(
+        self,
+        sample_pdf: Path,
+        recording_callback,
+        callback_log: list,
+    ) -> None:
+        """Callback should receive extraction completion event."""
+        extractor = PdfExtractor(lazy_load=True, progress_callback=recording_callback)
+        precheck = PreCheckResult(
+            page_count=5, has_extractable_text=True, computed_timeout=900
+        )
+        worker_response = {
+            "status": "ok",
+            "text": "Extracted content",
+            "metadata": {},
+        }
+
+        with patch("local_library.ingestion.pdf._precheck_pdf", return_value=precheck):
+            with patch.object(extractor, "_ensure_worker_running"):
+                with patch.object(extractor, "_send_request", return_value=worker_response):
+                    extractor.extract(sample_pdf)
+
+        completion_events = [
+            e for e in callback_log if e[2].get("event") == "extraction_complete"
+        ]
+        assert len(completion_events) == 1
+
+    def test_no_callback_falls_back_to_logging(self, sample_pdf: Path) -> None:
+        """extract() should use logger when no callback provided."""
+        extractor = PdfExtractor(lazy_load=True)
+        assert extractor._progress_callback is None
+
+        precheck = PreCheckResult(
+            page_count=5, has_extractable_text=True, computed_timeout=900
+        )
+        worker_response = {
+            "status": "ok",
+            "text": "Extracted content",
+            "metadata": {},
+        }
+
+        # Should not raise -- falls back to logger.info
+        with patch("local_library.ingestion.pdf._precheck_pdf", return_value=precheck):
+            with patch.object(extractor, "_ensure_worker_running"):
+                with patch.object(extractor, "_send_request", return_value=worker_response):
+                    extractor.extract(sample_pdf)
+
+    def test_callback_receives_fallback_event(
+        self,
+        sample_pdf: Path,
+        recording_callback,
+        callback_log: list,
+    ) -> None:
+        """Callback should receive fallback event when pdftext fallback is used."""
+        extractor = PdfExtractor(lazy_load=True, progress_callback=recording_callback)
+        fallback_text = "Sufficient fallback text for testing purposes. " * 10
+        precheck = PreCheckResult(
+            page_count=5,
+            has_extractable_text=True,
+            computed_timeout=900,
+            fallback_text=fallback_text,
+        )
+
+        with patch("local_library.ingestion.pdf._precheck_pdf", return_value=precheck):
+            with patch.object(extractor, "_ensure_worker_running"):
+                with patch.object(
+                    extractor,
+                    "_send_request",
+                    side_effect=ExtractionError(
+                        "timeout", ErrorCode.EXTRACTION_TIMEOUT
+                    ),
+                ):
+                    extractor.extract(sample_pdf)
+
+        fallback_events = [
+            e for e in callback_log if e[2].get("event") == "extraction_fallback"
+        ]
+        assert len(fallback_events) == 1

@@ -14,13 +14,19 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from local_library.core.errors import ErrorCode, ExtractionError, QualityError
 from local_library.core.models import ExtractionResult
 
 logger = logging.getLogger(__name__)
+
+# Progress callback protocol: (message, elapsed_seconds, context_dict) -> None
+# Events emitted: precheck_complete, extraction_progress, extraction_complete, extraction_fallback
+ProgressCallback = Callable[[str, float, dict[str, Any]], None]
 
 # Path to the worker script, relative to this module
 _WORKER_MODULE = "local_library.ingestion._extraction_worker"
@@ -174,6 +180,7 @@ class PdfExtractor:
         llm_enabled: bool = False,
         extraction_timeout: int = _DEFAULT_EXTRACTION_TIMEOUT,
         max_extraction_timeout: int = _DEFAULT_MAX_EXTRACTION_TIMEOUT,
+        progress_callback: ProgressCallback | None = None,
     ) -> None:
         """Initialize the PDF extractor.
 
@@ -188,16 +195,34 @@ class PdfExtractor:
                                Default 15 minutes.
             max_extraction_timeout: Absolute maximum timeout cap in seconds.
                                    Default 4 hours (14400s).
+            progress_callback: Optional callback for progress events. Receives
+                              (message, elapsed_seconds, context_dict).
         """
         self._llm_enabled = llm_enabled
         self._extraction_timeout = extraction_timeout
         self._max_extraction_timeout = max_extraction_timeout
+        self._progress_callback = progress_callback
         self._worker: subprocess.Popen | None = None
         self._worker_device: str | None = None  # None = auto (MPS/CUDA), "cpu" = forced CPU
         self._last_extraction_info: dict | None = None
 
         if not lazy_load:
             self._ensure_worker_running()
+
+    def _emit_progress(
+        self, message: str, elapsed: float, context: dict[str, Any]
+    ) -> None:
+        """Emit progress event via callback or fallback to logger.
+
+        Args:
+            message: Human-readable progress message.
+            elapsed: Elapsed time in seconds.
+            context: Dictionary with event details (event type, file name, etc).
+        """
+        if self._progress_callback is not None:
+            self._progress_callback(message, elapsed, context)
+        else:
+            logger.info(message)
 
     def _start_worker(self, device: str | None = None) -> subprocess.Popen:
         """Start a new extraction worker subprocess.
@@ -357,11 +382,15 @@ class PdfExtractor:
 
             # Log progress periodically
             if now - last_log >= _PROGRESS_LOG_INTERVAL:
-                logger.info(
-                    "extracting %s on %s... (%.0fs elapsed)",
-                    file_name,
-                    device_label,
+                self._emit_progress(
+                    f"extracting {file_name} on {device_label}... ({elapsed:.0f}s elapsed)",
                     elapsed,
+                    {
+                        "event": "extraction_progress",
+                        "file_name": file_name,
+                        "device": device_label,
+                        "elapsed": elapsed,
+                    },
                 )
                 last_log = now
 
@@ -411,14 +440,6 @@ class PdfExtractor:
             "extraction_device": device_label,
         }
 
-        if duration > 60:
-            logger.info(
-                "extracted %s on %s in %.0fs",
-                file_name,
-                device_label,
-                duration,
-            )
-
         return response
 
     def can_handle(self, file_path: Path) -> bool:
@@ -467,12 +488,17 @@ class PdfExtractor:
                 max_timeout=self._max_extraction_timeout,
             )
             timeout = precheck.computed_timeout
-            logger.info(
-                "pre-check: %s -- %d pages, text=%s, timeout=%ds",
-                file_path.name,
-                precheck.page_count,
-                precheck.has_extractable_text,
-                timeout,
+            self._emit_progress(
+                f"pre-check: {file_path.name} -- {precheck.page_count} pages, "
+                f"text={precheck.has_extractable_text}, timeout={timeout}s",
+                0.0,
+                {
+                    "event": "precheck_complete",
+                    "file_name": file_path.name,
+                    "page_count": precheck.page_count,
+                    "has_text": precheck.has_extractable_text,
+                    "timeout": timeout,
+                },
             )
         except Exception:
             timeout = self._extraction_timeout
@@ -522,15 +548,33 @@ class PdfExtractor:
                     printable_ratio=result.printable_ratio,
                 )
 
+            # Emit completion event
+            duration = extraction_info.get("extraction_duration_seconds", 0.0)
+            device = extraction_info.get("extraction_device", "unknown")
+            self._emit_progress(
+                f"extracted {file_path.name} on {device} in {duration:.0f}s",
+                duration,
+                {
+                    "event": "extraction_complete",
+                    "file_name": file_path.name,
+                    "device": device,
+                    "duration": duration,
+                },
+            )
+
             return result
 
         except ExtractionError as marker_error:
             # Marker failed -- try pdftext fallback if text was available
             if precheck is not None and precheck.fallback_text is not None:
-                logger.warning(
-                    "Marker failed for %s (%s), using pdftext fallback",
-                    file_path.name,
-                    marker_error.code.value,
+                self._emit_progress(
+                    f"using pdftext fallback for {file_path.name}",
+                    0.0,
+                    {
+                        "event": "extraction_fallback",
+                        "file_name": file_path.name,
+                        "marker_failure": str(marker_error),
+                    },
                 )
                 return ExtractionResult.from_text(
                     text=precheck.fallback_text,
