@@ -786,9 +786,7 @@ class TestFilenameMetadataParser:
 
     def test_author_et_al_dash_year_dash_title(self, tmp_path: Path) -> None:
         """Should handle 'et al.' in author field."""
-        result = parse_filename_metadata(
-            tmp_path / "Smith et al. - 2021 - Neural Networks.pdf"
-        )
+        result = parse_filename_metadata(tmp_path / "Smith et al. - 2021 - Neural Networks.pdf")
 
         assert result["author"][0]["family"] == "Smith"
         assert result["title"] == "Neural Networks"

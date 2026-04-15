@@ -295,7 +295,7 @@ def parse_filename_metadata(file_path: Path) -> dict[str, Any]:
     csl: dict[str, Any] = {"type": "document", "_metadata_source": "FILENAME"}
 
     # Pattern 1: Author - Year - Title (dash or en-dash separated)
-    match = re.match(r'^(.+?)\s*[-\u2013]\s*(\d{4})\s*[-\u2013]\s*(.+)$', stem)
+    match = re.match(r"^(.+?)\s*[-\u2013]\s*(\d{4})\s*[-\u2013]\s*(.+)$", stem)
     if match:
         author_str, year_str, title = match.groups()
         _set_author(csl, _clean_author(author_str))
@@ -304,7 +304,7 @@ def parse_filename_metadata(file_path: Path) -> dict[str, Any]:
         return csl
 
     # Pattern 2: Author_Year_Title (underscore separated)
-    match = re.match(r'^([A-Za-z][A-Za-z\s]*)_(\d{4})_(.+)$', stem)
+    match = re.match(r"^([A-Za-z][A-Za-z\s]*)_(\d{4})_(.+)$", stem)
     if match:
         author_str, year_str, title = match.groups()
         _set_author(csl, author_str.strip())
@@ -313,22 +313,20 @@ def parse_filename_metadata(file_path: Path) -> dict[str, Any]:
         return csl
 
     # Pattern 3: AuthorYear or AuthorYear_suffix (concatenated)
-    match = re.match(
-        r'^([A-Z][a-z]+(?:\s+(?:et\s+al\.?|and|&)\s+[A-Z][a-z]+)*)(\d{4})(.*)$', stem
-    )
+    match = re.match(r"^([A-Z][a-z]+(?:\s+(?:et\s+al\.?|and|&)\s+[A-Z][a-z]+)*)(\d{4})(.*)$", stem)
     if match:
         author_str, year_str, suffix = match.groups()
         _set_author(csl, author_str.strip())
         _set_year(csl, int(year_str))
         if suffix:
             # Remove leading underscore/dash from suffix
-            title = re.sub(r'^[_\-\s]+', '', suffix).replace("_", " ").strip()
+            title = re.sub(r"^[_\-\s]+", "", suffix).replace("_", " ").strip()
             if title:
                 csl["title"] = title
         return csl
 
     # Pattern 4: Author - Title (no year)
-    match = re.match(r'^([A-Z][A-Za-z\s]*?)\s*[-\u2013]\s*(.+)$', stem)
+    match = re.match(r"^([A-Z][A-Za-z\s]*?)\s*[-\u2013]\s*(.+)$", stem)
     if match:
         author_str, title = match.groups()
         # Only accept if author part looks like a name (not too long)
@@ -351,7 +349,7 @@ def _clean_author(author_str: str) -> str:
     Returns:
         Cleaned author family name.
     """
-    cleaned = re.sub(r'\s+et\s+al\.?\s*$', '', author_str, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\s+et\s+al\.?\s*$", "", author_str, flags=re.IGNORECASE)
     return cleaned.strip()
 
 
