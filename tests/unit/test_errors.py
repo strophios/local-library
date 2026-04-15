@@ -38,6 +38,11 @@ class TestErrorCode:
         assert ErrorCode.EXTRACTION_UNSUPPORTED_FORMAT == "EXTRACTION_UNSUPPORTED_FORMAT"
         assert isinstance(ErrorCode.EXTRACTION_UNSUPPORTED_FORMAT, str)
 
+    def test_extraction_fallback_error_code(self) -> None:
+        """EXTRACTION_FALLBACK should be a valid ErrorCode."""
+        assert ErrorCode.EXTRACTION_FALLBACK == "EXTRACTION_FALLBACK"
+        assert ErrorCode.EXTRACTION_FALLBACK.value == "EXTRACTION_FALLBACK"
+
 
 class TestLocalLibraryError:
     """Tests for base exception class."""
