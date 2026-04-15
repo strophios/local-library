@@ -4,6 +4,7 @@
 
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -49,7 +50,7 @@ EXTRACTION_BATCH_SIZE = 50
 
 def _make_console_progress_callback(
     target_console: Console,
-):
+) -> Callable[[str, float, dict[str, Any]], None]:
     """Create a progress callback that prints to a Rich console.
 
     Used when the Rich progress bar is stopped during extraction.
@@ -78,19 +79,14 @@ def _make_console_progress_callback(
             device = context.get("device", "?")
             mins, secs = divmod(int(elapsed), 60)
             target_console.print(
-                f"  [dim]extracting {file_name} on {device}... "
-                f"{mins}m {secs:02d}s elapsed[/dim]"
+                f"  [dim]extracting {file_name} on {device}... {mins}m {secs:02d}s elapsed[/dim]"
             )
         elif event == "extraction_complete":
             duration = context.get("duration", elapsed)
             mins, secs = divmod(int(duration), 60)
-            target_console.print(
-                f"  [dim]extracted in {mins}m {secs:02d}s[/dim]"
-            )
+            target_console.print(f"  [dim]extracted in {mins}m {secs:02d}s[/dim]")
         elif event == "extraction_fallback":
-            target_console.print(
-                f"  [yellow]using pdftext fallback for {file_name}[/yellow]"
-            )
+            target_console.print(f"  [yellow]using pdftext fallback for {file_name}[/yellow]")
 
     return callback
 

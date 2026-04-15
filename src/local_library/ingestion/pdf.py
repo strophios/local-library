@@ -209,9 +209,7 @@ class PdfExtractor:
         if not lazy_load:
             self._ensure_worker_running()
 
-    def _emit_progress(
-        self, message: str, elapsed: float, context: dict[str, Any]
-    ) -> None:
+    def _emit_progress(self, message: str, elapsed: float, context: dict[str, Any]) -> None:
         """Emit progress event via callback or fallback to logger.
 
         Args:
@@ -567,6 +565,11 @@ class PdfExtractor:
         except ExtractionError as marker_error:
             # Marker failed -- try pdftext fallback if text was available
             if precheck is not None and precheck.fallback_text is not None:
+                logger.warning(
+                    "Marker failed for %s (%s), using pdftext fallback",
+                    file_path.name,
+                    marker_error.code.value,
+                )
                 self._emit_progress(
                     f"using pdftext fallback for {file_path.name}",
                     0.0,

@@ -65,3 +65,22 @@ class TestConsoleProgressCallback:
         )
 
         assert "fallback" in output.getvalue()
+
+    def test_completion_event_prints(self) -> None:
+        """Callback should handle extraction_complete event without error."""
+        output = io.StringIO()
+        console = Console(file=output, no_color=True)
+        callback = _make_console_progress_callback(console)
+
+        callback(
+            "extracted",
+            150.0,
+            {
+                "event": "extraction_complete",
+                "file_name": "test.pdf",
+                "device": "mps",
+                "duration": 150.0,
+            },
+        )
+
+        assert "2m 30s" in output.getvalue()

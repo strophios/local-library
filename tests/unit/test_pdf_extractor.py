@@ -939,9 +939,7 @@ class TestProgressCallback:
     ) -> None:
         """Callback should receive pre-check completion event."""
         extractor = PdfExtractor(lazy_load=True, progress_callback=recording_callback)
-        precheck = PreCheckResult(
-            page_count=10, has_extractable_text=True, computed_timeout=900
-        )
+        precheck = PreCheckResult(page_count=10, has_extractable_text=True, computed_timeout=900)
         worker_response = {
             "status": "ok",
             "text": "Extracted content",
@@ -967,9 +965,7 @@ class TestProgressCallback:
     ) -> None:
         """Callback should receive extraction completion event."""
         extractor = PdfExtractor(lazy_load=True, progress_callback=recording_callback)
-        precheck = PreCheckResult(
-            page_count=5, has_extractable_text=True, computed_timeout=900
-        )
+        precheck = PreCheckResult(page_count=5, has_extractable_text=True, computed_timeout=900)
         worker_response = {
             "status": "ok",
             "text": "Extracted content",
@@ -981,9 +977,7 @@ class TestProgressCallback:
                 with patch.object(extractor, "_send_request", return_value=worker_response):
                     extractor.extract(sample_pdf)
 
-        completion_events = [
-            e for e in callback_log if e[2].get("event") == "extraction_complete"
-        ]
+        completion_events = [e for e in callback_log if e[2].get("event") == "extraction_complete"]
         assert len(completion_events) == 1
 
     def test_no_callback_falls_back_to_logging(self, sample_pdf: Path) -> None:
@@ -991,9 +985,7 @@ class TestProgressCallback:
         extractor = PdfExtractor(lazy_load=True)
         assert extractor._progress_callback is None
 
-        precheck = PreCheckResult(
-            page_count=5, has_extractable_text=True, computed_timeout=900
-        )
+        precheck = PreCheckResult(page_count=5, has_extractable_text=True, computed_timeout=900)
         worker_response = {
             "status": "ok",
             "text": "Extracted content",
@@ -1027,13 +1019,9 @@ class TestProgressCallback:
                 with patch.object(
                     extractor,
                     "_send_request",
-                    side_effect=ExtractionError(
-                        "timeout", ErrorCode.EXTRACTION_TIMEOUT
-                    ),
+                    side_effect=ExtractionError("timeout", ErrorCode.EXTRACTION_TIMEOUT),
                 ):
                     extractor.extract(sample_pdf)
 
-        fallback_events = [
-            e for e in callback_log if e[2].get("event") == "extraction_fallback"
-        ]
+        fallback_events = [e for e in callback_log if e[2].get("event") == "extraction_fallback"]
         assert len(fallback_events) == 1
