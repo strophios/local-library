@@ -678,9 +678,7 @@ class TestPdftextFallback:
         pdf_path.write_bytes(b"%PDF-1.4 test content")
         return pdf_path
 
-    def test_fallback_on_marker_timeout(
-        self, extractor: PdfExtractor, sample_pdf: Path
-    ) -> None:
+    def test_fallback_on_marker_timeout(self, extractor: PdfExtractor, sample_pdf: Path) -> None:
         """extract() should return fallback text when Marker times out."""
         fallback_text = "This is sufficient fallback text content. " * 10
         precheck = PreCheckResult(
@@ -695,9 +693,7 @@ class TestPdftextFallback:
                 with patch.object(
                     extractor,
                     "_send_request",
-                    side_effect=ExtractionError(
-                        "timed out", ErrorCode.EXTRACTION_TIMEOUT
-                    ),
+                    side_effect=ExtractionError("timed out", ErrorCode.EXTRACTION_TIMEOUT),
                 ):
                     result = extractor.extract(sample_pdf)
 
@@ -705,9 +701,7 @@ class TestPdftextFallback:
         assert "timed out" in result.metadata["marker_failure_reason"]
         assert result.text == fallback_text
 
-    def test_fallback_on_marker_crash(
-        self, extractor: PdfExtractor, sample_pdf: Path
-    ) -> None:
+    def test_fallback_on_marker_crash(self, extractor: PdfExtractor, sample_pdf: Path) -> None:
         """extract() should return fallback text when Marker crashes on both devices."""
         fallback_text = "Recovered text from pymupdf get_text(). " * 10
         precheck = PreCheckResult(
@@ -745,9 +739,7 @@ class TestPdftextFallback:
                 with patch.object(
                     extractor,
                     "_send_request",
-                    side_effect=ExtractionError(
-                        "timed out", ErrorCode.EXTRACTION_TIMEOUT
-                    ),
+                    side_effect=ExtractionError("timed out", ErrorCode.EXTRACTION_TIMEOUT),
                 ):
                     with pytest.raises(ExtractionError):
                         extractor.extract(sample_pdf)
@@ -764,9 +756,7 @@ class TestPdftextFallback:
                 with patch.object(
                     extractor,
                     "_send_request",
-                    side_effect=ExtractionError(
-                        "timed out", ErrorCode.EXTRACTION_TIMEOUT
-                    ),
+                    side_effect=ExtractionError("timed out", ErrorCode.EXTRACTION_TIMEOUT),
                 ):
                     with pytest.raises(ExtractionError):
                         extractor.extract(sample_pdf)
@@ -788,9 +778,7 @@ class TestPdftextFallback:
                 with patch.object(
                     extractor,
                     "_send_request",
-                    side_effect=ExtractionError(
-                        "crashed", ErrorCode.EXTRACTION_MARKER_CRASH
-                    ),
+                    side_effect=ExtractionError("crashed", ErrorCode.EXTRACTION_MARKER_CRASH),
                 ):
                     result = extractor.extract(sample_pdf)
 
@@ -815,9 +803,7 @@ class TestPdftextFallback:
 
         with patch("local_library.ingestion.pdf._precheck_pdf", return_value=precheck):
             with patch.object(extractor, "_ensure_worker_running"):
-                with patch.object(
-                    extractor, "_send_request", return_value=worker_response
-                ):
+                with patch.object(extractor, "_send_request", return_value=worker_response):
                     result = extractor.extract(sample_pdf)
 
         assert "Marker extracted markdown" in result.text
@@ -846,9 +832,7 @@ class TestPdftextFallback:
                 with patch.object(
                     extractor,
                     "_send_request",
-                    side_effect=ExtractionError(
-                        "timed out", ErrorCode.EXTRACTION_TIMEOUT
-                    ),
+                    side_effect=ExtractionError("timed out", ErrorCode.EXTRACTION_TIMEOUT),
                 ):
                     with pytest.raises(QualityError) as exc_info:
                         extractor.extract_and_validate(sample_pdf)
@@ -872,9 +856,7 @@ class TestPdftextFallback:
                 with patch.object(
                     extractor,
                     "_send_request",
-                    side_effect=ExtractionError(
-                        "crashed", ErrorCode.EXTRACTION_MARKER_CRASH
-                    ),
+                    side_effect=ExtractionError("crashed", ErrorCode.EXTRACTION_MARKER_CRASH),
                 ):
                     with pytest.raises(QualityError) as exc_info:
                         extractor.extract_and_validate(sample_pdf)

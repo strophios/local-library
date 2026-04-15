@@ -531,9 +531,7 @@ class TestLibraryReextract:
 
         return library, str(result.document.id)
 
-    def test_reextract_updates_markdown(
-        self, library_with_doc: tuple[Library, str]
-    ) -> None:
+    def test_reextract_updates_markdown(self, library_with_doc: tuple[Library, str]) -> None:
         """reextract() should overwrite the extracted markdown with new text."""
         library, doc_id = library_with_doc
         doc = library.get(doc_id)
@@ -547,9 +545,7 @@ class TestLibraryReextract:
         assert new_text != old_text
         assert "Improved" in new_text
 
-    def test_reextract_marks_embeddings_stale(
-        self, library_with_doc: tuple[Library, str]
-    ) -> None:
+    def test_reextract_marks_embeddings_stale(self, library_with_doc: tuple[Library, str]) -> None:
         """reextract() should mark embeddings as STALE."""
         library, doc_id = library_with_doc
 
@@ -561,9 +557,7 @@ class TestLibraryReextract:
 
         assert updated.embedding_status == EmbeddingStatus.STALE
 
-    def test_reextract_preserves_metadata(
-        self, library_with_doc: tuple[Library, str]
-    ) -> None:
+    def test_reextract_preserves_metadata(self, library_with_doc: tuple[Library, str]) -> None:
         """reextract() should not modify existing metadata."""
         library, doc_id = library_with_doc
         doc = library.get(doc_id)
@@ -577,9 +571,7 @@ class TestLibraryReextract:
         assert updated.citekey == original_citekey
         assert updated.csl_json == original_csl
 
-    def test_reextract_returns_ready_document(
-        self, library_with_doc: tuple[Library, str]
-    ) -> None:
+    def test_reextract_returns_ready_document(self, library_with_doc: tuple[Library, str]) -> None:
         """reextract() should return document with READY status."""
         library, doc_id = library_with_doc
 
@@ -589,9 +581,7 @@ class TestLibraryReextract:
 
         assert updated.status == DocumentStatus.READY
 
-    def test_reextract_not_found_raises(
-        self, library_with_doc: tuple[Library, str]
-    ) -> None:
+    def test_reextract_not_found_raises(self, library_with_doc: tuple[Library, str]) -> None:
         """reextract() should raise LookupError for nonexistent ID."""
         library, _ = library_with_doc
 
@@ -644,9 +634,7 @@ class TestLibraryFallbackStatus:
         assert result.document.error_code == "EXTRACTION_FALLBACK"
         assert "pdftext fallback" in result.document.error_message
 
-    def test_add_normal_extraction_stays_ready(
-        self, library: Library, sample_pdf: Path
-    ) -> None:
+    def test_add_normal_extraction_stays_ready(self, library: Library, sample_pdf: Path) -> None:
         """add() should keep READY status for normal Marker extraction."""
         normal_result = ExtractionResult.from_text(
             text="Normal Marker extracted text content. " * 20,
@@ -661,9 +649,7 @@ class TestLibraryFallbackStatus:
         assert result.document.status == DocumentStatus.READY
         assert result.document.error_code is None
 
-    def test_add_fallback_document_still_embeds(
-        self, library: Library, sample_pdf: Path
-    ) -> None:
+    def test_add_fallback_document_still_embeds(self, library: Library, sample_pdf: Path) -> None:
         """add() should still attempt embedding for fallback documents."""
         fallback_result = ExtractionResult.from_text(
             text="Fallback text for embedding test. " * 20,
@@ -731,9 +717,7 @@ class TestLibraryReextractFallback:
         assert updated.status == DocumentStatus.NEEDS_REVIEW
         assert updated.error_code == "EXTRACTION_FALLBACK"
 
-    def test_reextract_normal_sets_ready(
-        self, library_with_doc: tuple[Library, str]
-    ) -> None:
+    def test_reextract_normal_sets_ready(self, library_with_doc: tuple[Library, str]) -> None:
         """reextract() should set READY for normal Marker extraction results."""
         library, doc_id = library_with_doc
 
