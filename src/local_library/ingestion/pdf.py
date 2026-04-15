@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from local_library.core.errors import ErrorCode, ExtractionError, QualityError
@@ -32,6 +33,110 @@ _DEFAULT_EXTRACTION_TIMEOUT = 900  # 15 minutes
 
 # Interval for progress logging during extraction (seconds)
 _PROGRESS_LOG_INTERVAL = 30
+
+# Maximum timeout cap (seconds) -- documents exceeding this need alternative
+# extraction methods (olmOCR on remote GPU, manual splitting)
+_DEFAULT_MAX_EXTRACTION_TIMEOUT = 14400  # 4 hours
+
+
+@dataclass(frozen=True)
+class PreCheckResult:
+    """Result of pre-extraction PDF analysis.
+
+    Captures page count and text extractability from a fast pymupdf scan.
+    Used to set document-appropriate extraction timeouts.
+    """
+
+    page_count: int
+    has_extractable_text: bool
+    computed_timeout: int
+
+
+def _compute_dynamic_timeout(
+    page_count: int,
+    has_extractable_text: bool,
+    base_timeout: int = _DEFAULT_EXTRACTION_TIMEOUT,
+    max_timeout: int = _DEFAULT_MAX_EXTRACTION_TIMEOUT,
+) -> int:
+    """Compute extraction timeout based on document characteristics.
+
+    Text-extractable PDFs are fast (embedded text, pdftext extraction).
+    Image-only PDFs need OCR via surya, which is much slower per page.
+
+    Args:
+        page_count: Number of pages in the PDF.
+        has_extractable_text: Whether the PDF contains extractable text.
+        base_timeout: Minimum timeout floor from PdfExtractor configuration.
+        max_timeout: Absolute maximum timeout cap.
+
+    Returns:
+        Timeout in seconds, clamped between base_timeout and max_timeout.
+    """
+    if has_extractable_text:
+        dynamic = max(900, page_count * 5)
+    else:
+        dynamic = max(1800, page_count * 45)
+
+    return min(max(base_timeout, dynamic), max_timeout)
+
+
+def _precheck_pdf(
+    file_path: Path,
+    base_timeout: int = _DEFAULT_EXTRACTION_TIMEOUT,
+    max_timeout: int = _DEFAULT_MAX_EXTRACTION_TIMEOUT,
+) -> PreCheckResult:
+    """Analyze PDF before extraction to determine timeout and text availability.
+
+    Opens the PDF with pymupdf (takes milliseconds), counts pages, and samples
+    pages for extractable text. A PDF is considered text-extractable if sampled
+    pages collectively yield >100 characters of text.
+
+    Samples pages 0, middle, and last to avoid false negatives on documents
+    with text-only intros or appendices.
+
+    Args:
+        file_path: Path to the PDF file.
+        base_timeout: Minimum timeout floor from PdfExtractor configuration.
+        max_timeout: Absolute maximum timeout cap.
+
+    Returns:
+        PreCheckResult with page count, text availability, and computed timeout.
+
+    Raises:
+        Exception: If pymupdf cannot open the file (corrupt, missing, etc.).
+    """
+    import pymupdf
+
+    doc = pymupdf.open(str(file_path))
+    try:
+        page_count = len(doc)
+
+        if page_count == 0:
+            has_text = False
+        else:
+            # Sample first, middle, and last pages
+            sample_indices = {0}
+            if page_count > 1:
+                sample_indices.add(page_count - 1)
+            if page_count > 2:
+                sample_indices.add(page_count // 2)
+
+            total_text_len = 0
+            for idx in sorted(sample_indices):
+                page_text = doc[idx].get_text()
+                total_text_len += len(page_text.strip())
+
+            has_text = total_text_len > 100
+    finally:
+        doc.close()
+
+    timeout = _compute_dynamic_timeout(page_count, has_text, base_timeout, max_timeout)
+
+    return PreCheckResult(
+        page_count=page_count,
+        has_extractable_text=has_text,
+        computed_timeout=timeout,
+    )
 
 
 class PdfExtractor:
@@ -55,6 +160,7 @@ class PdfExtractor:
         lazy_load: bool = True,
         llm_enabled: bool = False,
         extraction_timeout: int = _DEFAULT_EXTRACTION_TIMEOUT,
+        max_extraction_timeout: int = _DEFAULT_MAX_EXTRACTION_TIMEOUT,
     ) -> None:
         """Initialize the PDF extractor.
 
@@ -64,11 +170,15 @@ class PdfExtractor:
             llm_enabled: If True, enable Marker's LLM-enhanced extraction for
                          better table, math, and image handling. Requires
                          GEMINI_API_KEY environment variable.
-            extraction_timeout: Maximum seconds for a single extraction before
-                               killing the worker. Default 15 minutes.
+            extraction_timeout: Base timeout in seconds for a single extraction.
+                               Used as the floor for dynamic timeout computation.
+                               Default 15 minutes.
+            max_extraction_timeout: Absolute maximum timeout cap in seconds.
+                                   Default 4 hours (14400s).
         """
         self._llm_enabled = llm_enabled
         self._extraction_timeout = extraction_timeout
+        self._max_extraction_timeout = max_extraction_timeout
         self._worker: subprocess.Popen | None = None
         self._worker_device: str | None = None  # None = auto (MPS/CUDA), "cpu" = forced CPU
         self._last_extraction_info: dict | None = None
@@ -173,13 +283,14 @@ class PdfExtractor:
         self._worker = None
         self._worker_device = None
 
-    def _send_request(self, file_path: str) -> dict:
+    def _send_request(self, file_path: str, timeout: int | None = None) -> dict:
         """Send an extraction request to the worker and read the response.
 
         Uses a reader thread for timeout support and periodic progress logging.
 
         Args:
             file_path: Absolute path to the PDF file.
+            timeout: Override timeout in seconds (uses self._extraction_timeout if None).
 
         Returns:
             Response dict from worker.
@@ -221,6 +332,7 @@ class PdfExtractor:
         device_label = self._worker_device or "mps"
         start_time = time.monotonic()
         last_log = start_time
+        effective_timeout = timeout if timeout is not None else self._extraction_timeout
 
         while thread.is_alive():
             thread.join(timeout=_PROGRESS_LOG_INTERVAL)
@@ -241,7 +353,7 @@ class PdfExtractor:
                 last_log = now
 
             # Check timeout
-            if elapsed > self._extraction_timeout:
+            if elapsed > effective_timeout:
                 logger.error(
                     "extraction timed out after %.0fs on %s: %s",
                     elapsed,
@@ -252,7 +364,7 @@ class PdfExtractor:
                 raise ExtractionError(
                     f"extraction timed out after {elapsed:.0f}s: {file_name}",
                     ErrorCode.EXTRACTION_TIMEOUT,
-                    details={"path": file_path, "timeout": self._extraction_timeout},
+                    details={"path": file_path, "timeout": effective_timeout},
                 )
 
         duration = time.monotonic() - start_time
@@ -334,10 +446,34 @@ class PdfExtractor:
         file_path_str = str(file_path.resolve())
         was_fallback = False
 
+        # Pre-check: analyze PDF for timeout scaling
+        precheck: PreCheckResult | None = None
+        try:
+            precheck = _precheck_pdf(
+                file_path,
+                base_timeout=self._extraction_timeout,
+                max_timeout=self._max_extraction_timeout,
+            )
+            timeout = precheck.computed_timeout
+            logger.info(
+                "pre-check: %s -- %d pages, text=%s, timeout=%ds",
+                file_path.name,
+                precheck.page_count,
+                precheck.has_extractable_text,
+                timeout,
+            )
+        except Exception:
+            timeout = self._extraction_timeout
+            logger.warning(
+                "pre-check failed for %s, using base timeout %ds",
+                file_path.name,
+                timeout,
+            )
+
         # Try with current device (MPS/auto)
         try:
             self._ensure_worker_running()
-            response = self._send_request(file_path_str)
+            response = self._send_request(file_path_str, timeout=timeout)
         except _WorkerCrashed as e:
             logger.warning(
                 "extraction worker crashed (exit=%d) on %s, retrying on CPU",
@@ -345,16 +481,24 @@ class PdfExtractor:
                 file_path.name,
             )
             was_fallback = True
-            response = self._extract_with_cpu_fallback(file_path_str)
+            response = self._extract_with_cpu_fallback(file_path_str, timeout=timeout)
 
         result = self._handle_response(response, file_path_str)
 
         # Merge extraction run info into result metadata
+        extraction_info: dict = {}
         if self._last_extraction_info:
             extraction_info = {**self._last_extraction_info}
             if was_fallback:
                 extraction_info["extraction_device"] = "cpu (fallback)"
                 extraction_info["extraction_fallback"] = True
+
+        # Include pre-check results in metadata
+        if precheck is not None:
+            extraction_info["precheck_page_count"] = precheck.page_count
+            extraction_info["precheck_has_text"] = precheck.has_extractable_text
+
+        if extraction_info:
             result = ExtractionResult(
                 text=result.text,
                 metadata={**result.metadata, **extraction_info},
@@ -366,18 +510,22 @@ class PdfExtractor:
 
         return result
 
-    def _extract_with_cpu_fallback(self, file_path: str) -> dict:
+    def _extract_with_cpu_fallback(self, file_path: str, timeout: int | None = None) -> dict:
         """Retry extraction on CPU after an MPS crash.
 
         After CPU extraction succeeds, restarts the worker on MPS for
         subsequent documents.
+
+        Args:
+            file_path: Absolute path to the PDF file.
+            timeout: Override timeout in seconds (uses self._extraction_timeout if None).
 
         Raises:
             ExtractionError: If CPU extraction also fails.
         """
         try:
             self._ensure_worker_running(device="cpu")
-            response = self._send_request(file_path)
+            response = self._send_request(file_path, timeout=timeout)
         except _WorkerCrashed as e:
             raise ExtractionError(
                 f"extraction crashed on both MPS and CPU (exit={e.exit_code})",

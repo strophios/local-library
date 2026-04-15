@@ -3,12 +3,19 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pymupdf as fitz_lib
 import pytest
 
 from local_library.core.errors import ErrorCode, ExtractionError, QualityError
 from local_library.core.models import ExtractionResult
 from local_library.ingestion.base import ContentExtractor
-from local_library.ingestion.pdf import PdfExtractor, _WorkerCrashed
+from local_library.ingestion.pdf import (
+    PdfExtractor,
+    PreCheckResult,
+    _compute_dynamic_timeout,
+    _precheck_pdf,
+    _WorkerCrashed,
+)
 
 
 class TestPdfExtractor:
@@ -366,3 +373,292 @@ class TestWorkerLifecycle:
             extractor._ensure_worker_running()
 
         assert extractor._worker is new_proc
+
+
+class TestPreCheckTimeoutComputation:
+    """Tests for _compute_dynamic_timeout() pure function."""
+
+    # --- Text-extractable documents ---
+
+    def test_text_pdf_short_uses_minimum(self) -> None:
+        """Short text PDFs should use the 900s minimum."""
+        result = _compute_dynamic_timeout(page_count=10, has_extractable_text=True)
+        assert result == 900
+
+    def test_text_pdf_medium_scales_linearly(self) -> None:
+        """Medium text PDFs should scale at 5s/page when above minimum."""
+        result = _compute_dynamic_timeout(page_count=200, has_extractable_text=True)
+        assert result == 1000  # 200 * 5 = 1000 > 900
+
+    def test_text_pdf_long_scales_linearly(self) -> None:
+        """Long text PDFs should scale at 5s/page."""
+        result = _compute_dynamic_timeout(page_count=500, has_extractable_text=True)
+        assert result == 2500  # 500 * 5
+
+    # --- Image-only documents ---
+
+    def test_image_pdf_short_uses_minimum(self) -> None:
+        """Short image PDFs should use the 1800s minimum."""
+        result = _compute_dynamic_timeout(page_count=10, has_extractable_text=False)
+        assert result == 1800
+
+    def test_image_pdf_medium_scales_linearly(self) -> None:
+        """Medium image PDFs should scale at 45s/page when above minimum."""
+        result = _compute_dynamic_timeout(page_count=50, has_extractable_text=False)
+        assert result == 2250  # 50 * 45 = 2250 > 1800
+
+    def test_image_pdf_long_scales_linearly(self) -> None:
+        """Long image PDFs should scale at 45s/page."""
+        result = _compute_dynamic_timeout(page_count=100, has_extractable_text=False)
+        assert result == 4500  # 100 * 45
+
+    # --- Clamping ---
+
+    def test_capped_at_max_timeout(self) -> None:
+        """Timeout should be capped at max_timeout."""
+        result = _compute_dynamic_timeout(page_count=10000, has_extractable_text=True)
+        assert result == 14400  # Default max (4 hours)
+
+    def test_image_pdf_capped_at_max_timeout(self) -> None:
+        """Image PDF timeout should be capped at max_timeout."""
+        result = _compute_dynamic_timeout(page_count=1000, has_extractable_text=False)
+        assert result == 14400  # 1000 * 45 = 45000, capped at 14400
+
+    def test_custom_max_timeout(self) -> None:
+        """Custom max_timeout should cap the result."""
+        result = _compute_dynamic_timeout(
+            page_count=500, has_extractable_text=True, max_timeout=2000
+        )
+        assert result == 2000  # 500 * 5 = 2500, capped at 2000
+
+    def test_custom_base_timeout_raises_floor(self) -> None:
+        """Custom base_timeout should raise the floor above type minimum."""
+        result = _compute_dynamic_timeout(
+            page_count=10, has_extractable_text=True, base_timeout=3600
+        )
+        assert result == 3600  # base_timeout > type minimum (900)
+
+    def test_zero_pages_uses_type_minimum(self) -> None:
+        """Zero-page PDF should use type-specific minimum."""
+        result = _compute_dynamic_timeout(page_count=0, has_extractable_text=True)
+        assert result == 900
+
+    def test_zero_pages_image_uses_type_minimum(self) -> None:
+        """Zero-page image PDF should use image minimum."""
+        result = _compute_dynamic_timeout(page_count=0, has_extractable_text=False)
+        assert result == 1800
+
+
+class TestPreCheckResult:
+    """Tests for PreCheckResult dataclass."""
+
+    def test_creates_frozen_dataclass(self) -> None:
+        """PreCheckResult should be immutable."""
+        result = PreCheckResult(page_count=10, has_extractable_text=True, computed_timeout=900)
+        assert result.page_count == 10
+        assert result.has_extractable_text is True
+        assert result.computed_timeout == 900
+
+        with pytest.raises(AttributeError):
+            result.page_count = 20  # type: ignore[misc]
+
+
+class TestPreCheckPdf:
+    """Tests for _precheck_pdf() function using real pymupdf PDFs."""
+
+    @pytest.fixture
+    def text_pdf(self, temp_dir: Path) -> Path:
+        """Create a valid PDF with extractable text (3 pages)."""
+        pdf_path = temp_dir / "text_document.pdf"
+        doc = fitz_lib.open()
+        for i in range(3):
+            page = doc.new_page()
+            # Insert enough text to exceed the 100-char threshold per page
+            page.insert_text(
+                (50, 50),
+                f"Page {i + 1}: This is a test document with enough text content "
+                "to be detected as having extractable text by the pre-check function. "
+                "The quick brown fox jumps over the lazy dog.",
+            )
+        doc.save(str(pdf_path))
+        doc.close()
+        return pdf_path
+
+    @pytest.fixture
+    def image_only_pdf(self, temp_dir: Path) -> Path:
+        """Create a valid PDF with no extractable text (blank pages)."""
+        pdf_path = temp_dir / "image_only.pdf"
+        doc = fitz_lib.open()
+        for _ in range(5):
+            doc.new_page()  # Blank pages -- no text
+        doc.save(str(pdf_path))
+        doc.close()
+        return pdf_path
+
+    @pytest.fixture
+    def minimal_text_pdf(self, temp_dir: Path) -> Path:
+        """Create a PDF with text below the 100-char threshold."""
+        pdf_path = temp_dir / "minimal_text.pdf"
+        doc = fitz_lib.open()
+        page = doc.new_page()
+        page.insert_text((50, 50), "Short")  # Well under 100 chars
+        doc.save(str(pdf_path))
+        doc.close()
+        return pdf_path
+
+    def test_text_pdf_detected(self, text_pdf: Path) -> None:
+        """Pre-check should detect text-extractable PDFs."""
+        result = _precheck_pdf(text_pdf)
+
+        assert result.page_count == 3
+        assert result.has_extractable_text is True
+        assert result.computed_timeout == 900  # max(900, 3*5=15) = 900
+
+    def test_image_only_pdf_detected(self, image_only_pdf: Path) -> None:
+        """Pre-check should detect image-only PDFs."""
+        result = _precheck_pdf(image_only_pdf)
+
+        assert result.page_count == 5
+        assert result.has_extractable_text is False
+        assert result.computed_timeout == 1800  # max(1800, 5*45=225) = 1800
+
+    def test_minimal_text_below_threshold(self, minimal_text_pdf: Path) -> None:
+        """Pre-check should treat PDFs with <100 chars as not text-extractable."""
+        result = _precheck_pdf(minimal_text_pdf)
+
+        assert result.page_count == 1
+        assert result.has_extractable_text is False
+        assert result.computed_timeout == 1800  # Treated as image-only
+
+    def test_passes_timeout_parameters(self, text_pdf: Path) -> None:
+        """Pre-check should forward base and max timeout to computation."""
+        result = _precheck_pdf(text_pdf, base_timeout=3600, max_timeout=7200)
+
+        assert result.computed_timeout == 3600  # base > type minimum
+
+
+class TestExtractWithPreCheck:
+    """Tests for PdfExtractor.extract() with pre-check integration."""
+
+    @pytest.fixture
+    def extractor(self) -> PdfExtractor:
+        """Provide a PdfExtractor with lazy loading."""
+        return PdfExtractor(lazy_load=True)
+
+    @pytest.fixture
+    def sample_pdf(self, temp_dir: Path) -> Path:
+        """Create a sample PDF file for testing."""
+        pdf_path = temp_dir / "sample.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 test content")
+        return pdf_path
+
+    def test_extract_uses_precheck_timeout(self, extractor: PdfExtractor, sample_pdf: Path) -> None:
+        """extract() should pass pre-check timeout to _send_request."""
+        precheck = PreCheckResult(page_count=200, has_extractable_text=True, computed_timeout=1000)
+        worker_response = {
+            "status": "ok",
+            "text": "Extracted content",
+            "metadata": {},
+        }
+
+        with patch("local_library.ingestion.pdf._precheck_pdf", return_value=precheck):
+            with patch.object(extractor, "_ensure_worker_running"):
+                with patch.object(
+                    extractor, "_send_request", return_value=worker_response
+                ) as mock_send:
+                    extractor.extract(sample_pdf)
+
+        # Verify timeout was passed through
+        mock_send.assert_called_once()
+        _, kwargs = mock_send.call_args
+        assert kwargs.get("timeout") == 1000
+
+    def test_extract_falls_back_to_base_timeout_on_precheck_failure(
+        self, extractor: PdfExtractor, sample_pdf: Path
+    ) -> None:
+        """extract() should use base timeout if pre-check fails."""
+        worker_response = {
+            "status": "ok",
+            "text": "Extracted content",
+            "metadata": {},
+        }
+
+        with patch(
+            "local_library.ingestion.pdf._precheck_pdf",
+            side_effect=Exception("corrupt PDF"),
+        ):
+            with patch.object(extractor, "_ensure_worker_running"):
+                with patch.object(
+                    extractor, "_send_request", return_value=worker_response
+                ) as mock_send:
+                    extractor.extract(sample_pdf)
+
+        # Should fall back to base timeout (900)
+        _, kwargs = mock_send.call_args
+        assert kwargs.get("timeout") == 900
+
+    def test_max_extraction_timeout_constructor_parameter(self) -> None:
+        """PdfExtractor should accept max_extraction_timeout parameter."""
+        extractor = PdfExtractor(
+            lazy_load=True, extraction_timeout=1800, max_extraction_timeout=7200
+        )
+        assert extractor._extraction_timeout == 1800
+        assert extractor._max_extraction_timeout == 7200
+
+    def test_precheck_result_in_extraction_metadata(
+        self, extractor: PdfExtractor, sample_pdf: Path
+    ) -> None:
+        """extract() should include pre-check info in result metadata."""
+        precheck = PreCheckResult(page_count=42, has_extractable_text=True, computed_timeout=900)
+        worker_response = {
+            "status": "ok",
+            "text": "Extracted content with enough length " * 5,
+            "metadata": {"page_stats": []},
+        }
+
+        with patch("local_library.ingestion.pdf._precheck_pdf", return_value=precheck):
+            with patch.object(extractor, "_ensure_worker_running"):
+                with patch.object(extractor, "_send_request", return_value=worker_response):
+                    result = extractor.extract(sample_pdf)
+
+        assert result.metadata.get("precheck_page_count") == 42
+        assert result.metadata.get("precheck_has_text") is True
+
+
+class TestSendRequestTimeout:
+    """Tests for _send_request timeout parameter."""
+
+    def test_send_request_uses_provided_timeout(self) -> None:
+        """_send_request should use explicit timeout over self._extraction_timeout."""
+        extractor = PdfExtractor(lazy_load=True, extraction_timeout=900)
+
+        mock_proc = MagicMock()
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdout = MagicMock()
+        mock_proc.stdout.readline.return_value = (
+            '{"status": "ok", "text": "test", "metadata": {}}\n'
+        )
+        mock_proc.poll.return_value = None
+        extractor._worker = mock_proc
+        extractor._worker_device = None
+
+        # Extraction completes immediately since readline returns right away
+        response = extractor._send_request("/fake/path.pdf", timeout=60)
+        assert response["status"] == "ok"
+
+    def test_send_request_defaults_to_instance_timeout(self) -> None:
+        """_send_request should use self._extraction_timeout when timeout=None."""
+        extractor = PdfExtractor(lazy_load=True, extraction_timeout=900)
+
+        mock_proc = MagicMock()
+        mock_proc.stdin = MagicMock()
+        mock_proc.stdout = MagicMock()
+        mock_proc.stdout.readline.return_value = (
+            '{"status": "ok", "text": "test", "metadata": {}}\n'
+        )
+        mock_proc.poll.return_value = None
+        extractor._worker = mock_proc
+        extractor._worker_device = None
+
+        response = extractor._send_request("/fake/path.pdf")
+        assert response["status"] == "ok"
