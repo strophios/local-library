@@ -272,6 +272,110 @@ def _extract_titleword_for_citekey(csl_json: dict[str, Any]) -> str:
     return ""
 
 
+def parse_filename_metadata(file_path: Path) -> dict[str, Any]:
+    """Parse best-effort metadata from a PDF filename.
+
+    Tries common academic PDF naming conventions in order:
+    1. Author - Year - Title.pdf (dash-separated with year)
+    2. Author_Year_Title.pdf (underscore-separated with year)
+    3. AuthorYear.pdf or AuthorYear_suffix.pdf (concatenated author+year)
+    4. Author - Title.pdf (dash-separated without year)
+    5. Fallback: filename stem as title
+
+    Accepts Path (not str) to prevent accidental URL parsing. The file
+    does not need to exist -- only the filename is examined.
+
+    Args:
+        file_path: Path to the PDF file (only filename is used).
+
+    Returns:
+        CSL-JSON dict with best-effort metadata and _metadata_source: "FILENAME".
+    """
+    stem = file_path.stem
+    csl: dict[str, Any] = {"type": "document", "_metadata_source": "FILENAME"}
+
+    # Pattern 1: Author - Year - Title (dash or en-dash separated)
+    match = re.match(r'^(.+?)\s*[-\u2013]\s*(\d{4})\s*[-\u2013]\s*(.+)$', stem)
+    if match:
+        author_str, year_str, title = match.groups()
+        _set_author(csl, _clean_author(author_str))
+        _set_year(csl, int(year_str))
+        csl["title"] = title.strip()
+        return csl
+
+    # Pattern 2: Author_Year_Title (underscore separated)
+    match = re.match(r'^([A-Za-z][A-Za-z\s]*)_(\d{4})_(.+)$', stem)
+    if match:
+        author_str, year_str, title = match.groups()
+        _set_author(csl, author_str.strip())
+        _set_year(csl, int(year_str))
+        csl["title"] = title.replace("_", " ").strip()
+        return csl
+
+    # Pattern 3: AuthorYear or AuthorYear_suffix (concatenated)
+    match = re.match(
+        r'^([A-Z][a-z]+(?:\s+(?:et\s+al\.?|and|&)\s+[A-Z][a-z]+)*)(\d{4})(.*)$', stem
+    )
+    if match:
+        author_str, year_str, suffix = match.groups()
+        _set_author(csl, author_str.strip())
+        _set_year(csl, int(year_str))
+        if suffix:
+            # Remove leading underscore/dash from suffix
+            title = re.sub(r'^[_\-\s]+', '', suffix).replace("_", " ").strip()
+            if title:
+                csl["title"] = title
+        return csl
+
+    # Pattern 4: Author - Title (no year)
+    match = re.match(r'^([A-Z][A-Za-z\s]*?)\s*[-\u2013]\s*(.+)$', stem)
+    if match:
+        author_str, title = match.groups()
+        # Only accept if author part looks like a name (not too long)
+        if len(author_str.split()) <= 4:
+            _set_author(csl, _clean_author(author_str))
+            csl["title"] = title.strip()
+            return csl
+
+    # Fallback: stem as title
+    csl["title"] = stem.replace("_", " ")
+    return csl
+
+
+def _clean_author(author_str: str) -> str:
+    """Clean author string from filename, removing 'et al.' suffix.
+
+    Args:
+        author_str: Raw author string from filename.
+
+    Returns:
+        Cleaned author family name.
+    """
+    cleaned = re.sub(r'\s+et\s+al\.?\s*$', '', author_str, flags=re.IGNORECASE)
+    return cleaned.strip()
+
+
+def _set_author(csl: dict[str, Any], family_name: str) -> None:
+    """Set author in CSL-JSON format.
+
+    Args:
+        csl: CSL-JSON dict to modify.
+        family_name: Author family name.
+    """
+    if family_name:
+        csl["author"] = [{"family": family_name}]
+
+
+def _set_year(csl: dict[str, Any], year: int) -> None:
+    """Set issued year in CSL-JSON format.
+
+    Args:
+        csl: CSL-JSON dict to modify.
+        year: Publication year.
+    """
+    csl["issued"] = {"date-parts": [[year]]}
+
+
 class MetadataHandler:
     """Validates CSL-JSON metadata and extracts indexed fields.
 

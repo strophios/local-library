@@ -1,12 +1,13 @@
 """Unit tests for metadata processing."""
 
+from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
 from local_library.core.errors import ErrorCode, MetadataError
 from local_library.core.models import MetadataResult
-from local_library.ingestion.metadata import MetadataHandler
+from local_library.ingestion.metadata import MetadataHandler, parse_filename_metadata
 
 
 class TestMetadataHandlerValidation:
@@ -759,3 +760,119 @@ class TestIndexedFieldExtraction:
         result = handler.process(csl_json)
 
         assert result.title is None
+
+
+class TestFilenameMetadataParser:
+    """Tests for parse_filename_metadata() heuristic filename parser."""
+
+    # --- Pattern: Author - Year - Title ---
+
+    def test_author_dash_year_dash_title(self, tmp_path: Path) -> None:
+        """Should parse 'Author - Year - Title.pdf' pattern."""
+        result = parse_filename_metadata(tmp_path / "Smith - 2020 - Attention Mechanisms.pdf")
+
+        assert result["title"] == "Attention Mechanisms"
+        assert result["author"][0]["family"] == "Smith"
+        assert result["issued"]["date-parts"] == [[2020]]
+        assert result["_metadata_source"] == "FILENAME"
+
+    def test_author_endash_year_endash_title(self, tmp_path: Path) -> None:
+        """Should handle en-dash separators."""
+        result = parse_filename_metadata(tmp_path / "Jones \u2013 2019 \u2013 Deep Learning.pdf")
+
+        assert result["title"] == "Deep Learning"
+        assert result["author"][0]["family"] == "Jones"
+        assert result["issued"]["date-parts"] == [[2019]]
+
+    def test_author_et_al_dash_year_dash_title(self, tmp_path: Path) -> None:
+        """Should handle 'et al.' in author field."""
+        result = parse_filename_metadata(
+            tmp_path / "Smith et al. - 2021 - Neural Networks.pdf"
+        )
+
+        assert result["author"][0]["family"] == "Smith"
+        assert result["title"] == "Neural Networks"
+
+    # --- Pattern: Author_Year_Title ---
+
+    def test_author_underscore_year_underscore_title(self, tmp_path: Path) -> None:
+        """Should parse 'Author_Year_Title.pdf' pattern."""
+        result = parse_filename_metadata(tmp_path / "Weber_1921_Economy_Society.pdf")
+
+        assert result["author"][0]["family"] == "Weber"
+        assert result["issued"]["date-parts"] == [[1921]]
+        assert "Economy" in result["title"]
+
+    # --- Pattern: AuthorYear ---
+
+    def test_author_year_concatenated(self, tmp_path: Path) -> None:
+        """Should parse 'AuthorYear.pdf' pattern."""
+        result = parse_filename_metadata(tmp_path / "Smith2020.pdf")
+
+        assert result["author"][0]["family"] == "Smith"
+        assert result["issued"]["date-parts"] == [[2020]]
+
+    def test_author_year_with_title(self, tmp_path: Path) -> None:
+        """Should parse 'AuthorYear_Title.pdf' pattern."""
+        result = parse_filename_metadata(tmp_path / "Smith2020_Attention.pdf")
+
+        assert result["author"][0]["family"] == "Smith"
+        assert result["issued"]["date-parts"] == [[2020]]
+
+    # --- Pattern: Author - Title (no year) ---
+
+    def test_author_dash_title_no_year(self, tmp_path: Path) -> None:
+        """Should parse 'Author - Title.pdf' when no year present."""
+        result = parse_filename_metadata(tmp_path / "Foucault - Discipline and Punish.pdf")
+
+        assert result["author"][0]["family"] == "Foucault"
+        assert result["title"] == "Discipline and Punish"
+        assert "issued" not in result
+
+    # --- Fallback: stem as title ---
+
+    def test_fallback_to_stem_as_title(self, tmp_path: Path) -> None:
+        """Should fall back to filename stem as title for unparseable names."""
+        result = parse_filename_metadata(tmp_path / "some random filename.pdf")
+
+        assert result["title"] == "some random filename"
+        assert result["type"] == "document"
+        assert result["_metadata_source"] == "FILENAME"
+
+    def test_fallback_preserves_underscores_as_spaces(self, tmp_path: Path) -> None:
+        """Fallback should convert underscores to spaces in title."""
+        result = parse_filename_metadata(tmp_path / "some_random_filename.pdf")
+
+        assert result["title"] == "some random filename"
+
+    # --- Type and metadata_source ---
+
+    def test_always_returns_document_type(self, tmp_path: Path) -> None:
+        """All results should have type 'document'."""
+        result = parse_filename_metadata(tmp_path / "Smith - 2020 - Title.pdf")
+        assert result["type"] == "document"
+
+    def test_always_includes_metadata_source(self, tmp_path: Path) -> None:
+        """All results should include _metadata_source: FILENAME."""
+        result = parse_filename_metadata(tmp_path / "anything.pdf")
+        assert result["_metadata_source"] == "FILENAME"
+
+    # --- Input type safety ---
+
+    def test_accepts_path_object(self, tmp_path: Path) -> None:
+        """Function should accept Path objects."""
+        result = parse_filename_metadata(Path("/any/path/Smith2020.pdf"))
+        assert result is not None
+
+    # --- Edge cases ---
+
+    def test_multiword_author(self, tmp_path: Path) -> None:
+        """Should handle multi-word author names."""
+        result = parse_filename_metadata(tmp_path / "Van der Berg - 2020 - Title.pdf")
+
+        assert result["author"][0]["family"] == "Van der Berg"
+
+    def test_numeric_only_filename(self, tmp_path: Path) -> None:
+        """Should handle numeric-only filenames as title."""
+        result = parse_filename_metadata(tmp_path / "12345.pdf")
+        assert result["title"] == "12345"
