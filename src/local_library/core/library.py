@@ -627,6 +627,20 @@ class Library:
                 extracted_path=str(extracted_path),
             )
 
+            # Check for pdftext fallback -- degraded extraction needs review
+            if result.metadata.get("extraction_method") == "pdftext_fallback":
+                marker_reason = result.metadata.get("marker_failure_reason", "unknown")
+                doc = update_document_status(
+                    self._conn,
+                    doc.id,
+                    DocumentStatus.NEEDS_REVIEW,
+                    error_message=(
+                        f"pdftext fallback used (Marker failed: {marker_reason}). "
+                        "Text quality is degraded. Run reextract to try Marker again."
+                    ),
+                    error_code=ErrorCode.EXTRACTION_FALLBACK.value,
+                )
+
             # Process metadata
             if metadata:
                 # Explicit metadata provided
@@ -911,13 +925,27 @@ class Library:
         extracted_path.parent.mkdir(parents=True, exist_ok=True)
         extracted_path.write_text(cleaned_text, encoding="utf-8")
 
-        # Update record status and extracted_path
-        update_document_status(
-            self._conn,
-            doc.id,
-            DocumentStatus.READY,
-            extracted_path=str(extracted_path),
-        )
+        # Determine status based on extraction method
+        if result.metadata.get("extraction_method") == "pdftext_fallback":
+            marker_reason = result.metadata.get("marker_failure_reason", "unknown")
+            update_document_status(
+                self._conn,
+                doc.id,
+                DocumentStatus.NEEDS_REVIEW,
+                extracted_path=str(extracted_path),
+                error_message=(
+                    f"pdftext fallback used (Marker failed: {marker_reason}). "
+                    "Text quality is degraded. Run reextract to try Marker again."
+                ),
+                error_code=ErrorCode.EXTRACTION_FALLBACK.value,
+            )
+        else:
+            update_document_status(
+                self._conn,
+                doc.id,
+                DocumentStatus.READY,
+                extracted_path=str(extracted_path),
+            )
 
         # Mark embeddings stale so they get re-embedded
         self._mark_embeddings_stale(doc.id)

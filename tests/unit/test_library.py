@@ -9,7 +9,7 @@ import pytest
 
 from local_library.core.errors import AcquisitionError, ErrorCode, ExtractionError, LookupError
 from local_library.core.library import Library
-from local_library.core.models import DocumentStatus
+from local_library.core.models import DocumentStatus, ExtractionResult
 from local_library.core.vec_extension import is_vec_available
 from local_library.ingestion.file import FileAcquirer
 from local_library.ingestion.pdf import PdfExtractor
@@ -599,6 +599,154 @@ class TestLibraryReextract:
             library.reextract("nonexistent-id")
 
         assert exc_info.value.code == ErrorCode.NOT_FOUND
+
+
+class TestLibraryFallbackStatus:
+    """Tests for Library handling of pdftext fallback documents."""
+
+    @pytest.fixture
+    def library(self, temp_dir: Path) -> Library:
+        """Provide an initialized Library for testing."""
+        return Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=False,
+        )
+
+    @pytest.fixture
+    def sample_pdf(self, temp_dir: Path) -> Path:
+        """Create a sample PDF file for testing."""
+        pdf_path = temp_dir / "sample.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 test content for extraction")
+        return pdf_path
+
+    def test_add_fallback_document_gets_needs_review(
+        self, library: Library, sample_pdf: Path
+    ) -> None:
+        """add() should set NEEDS_REVIEW for pdftext fallback documents."""
+        fallback_result = ExtractionResult.from_text(
+            text="Fallback extracted text content. " * 20,
+            metadata={
+                "extraction_method": "pdftext_fallback",
+                "marker_failure_reason": "timed out after 900s",
+                "precheck_page_count": 10,
+                "precheck_has_text": True,
+            },
+        )
+
+        with patch.object(
+            library._extractors[0], "extract_and_validate", return_value=fallback_result
+        ):
+            result = library.add(str(sample_pdf))
+
+        assert result.document.status == DocumentStatus.NEEDS_REVIEW
+        assert result.document.error_code == "EXTRACTION_FALLBACK"
+        assert "pdftext fallback" in result.document.error_message
+
+    def test_add_normal_extraction_stays_ready(
+        self, library: Library, sample_pdf: Path
+    ) -> None:
+        """add() should keep READY status for normal Marker extraction."""
+        normal_result = ExtractionResult.from_text(
+            text="Normal Marker extracted text content. " * 20,
+            metadata={"page_stats": []},
+        )
+
+        with patch.object(
+            library._extractors[0], "extract_and_validate", return_value=normal_result
+        ):
+            result = library.add(str(sample_pdf))
+
+        assert result.document.status == DocumentStatus.READY
+        assert result.document.error_code is None
+
+    def test_add_fallback_document_still_embeds(
+        self, library: Library, sample_pdf: Path
+    ) -> None:
+        """add() should still attempt embedding for fallback documents."""
+        fallback_result = ExtractionResult.from_text(
+            text="Fallback text for embedding test. " * 20,
+            metadata={
+                "extraction_method": "pdftext_fallback",
+                "marker_failure_reason": "crashed",
+            },
+        )
+
+        with patch.object(
+            library._extractors[0], "extract_and_validate", return_value=fallback_result
+        ):
+            with patch.object(library, "embed") as mock_embed:
+                library.add(str(sample_pdf))
+
+        # Embed should still be called (if embed_on_add is True)
+        if library._embed_on_add:
+            mock_embed.assert_called_once()
+
+
+class TestLibraryReextractFallback:
+    """Tests for reextract handling of pdftext fallback results."""
+
+    @pytest.fixture
+    def library_with_doc(self, temp_dir: Path) -> tuple[Library, str]:
+        """Provide a Library with one added document."""
+        library = Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=False,
+        )
+        pdf_path = temp_dir / "sample.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 test content for extraction")
+
+        initial_result = ExtractionResult.from_text(
+            text="Initial extracted text. " * 20,
+            metadata={"page_stats": []},
+        )
+        with patch.object(
+            library._extractors[0], "extract_and_validate", return_value=initial_result
+        ):
+            add_result = library.add(str(pdf_path))
+
+        return library, str(add_result.document.id)
+
+    def test_reextract_fallback_sets_needs_review(
+        self, library_with_doc: tuple[Library, str]
+    ) -> None:
+        """reextract() should set NEEDS_REVIEW for pdftext fallback results."""
+        library, doc_id = library_with_doc
+
+        fallback_result = ExtractionResult.from_text(
+            text="Fallback reextracted text. " * 20,
+            metadata={
+                "extraction_method": "pdftext_fallback",
+                "marker_failure_reason": "timed out",
+            },
+        )
+        with patch.object(
+            library._extractors[0], "extract_and_validate", return_value=fallback_result
+        ):
+            updated = library.reextract(doc_id)
+
+        assert updated.status == DocumentStatus.NEEDS_REVIEW
+        assert updated.error_code == "EXTRACTION_FALLBACK"
+
+    def test_reextract_normal_sets_ready(
+        self, library_with_doc: tuple[Library, str]
+    ) -> None:
+        """reextract() should set READY for normal Marker extraction results."""
+        library, doc_id = library_with_doc
+
+        normal_result = ExtractionResult.from_text(
+            text="Normal reextracted text. " * 20,
+            metadata={"page_stats": []},
+        )
+        with patch.object(
+            library._extractors[0], "extract_and_validate", return_value=normal_result
+        ):
+            updated = library.reextract(doc_id)
+
+        assert updated.status == DocumentStatus.READY
 
 
 class TestLibraryPdfLLMConfiguration:
