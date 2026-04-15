@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 import sqlite3
 import tempfile
@@ -11,6 +12,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from local_library.core.models import RAGResponse
@@ -33,7 +36,7 @@ from local_library.core.errors import (
     MetadataError,
     QualityError,
 )
-from local_library.core.models import AddResult, Document, DocumentStatus, EmbeddingStatus
+from local_library.core.models import AddResult, Document, DocumentStatus, EmbeddingStatus, MetadataSource
 from local_library.core.storage import (
     create_document,
     delete_document,
@@ -517,12 +520,65 @@ class Library:
 
     # --- Add Pipeline ---
 
+    def _persist_preliminary_metadata(
+        self,
+        doc: Document,
+        source_path: str,
+        metadata: dict[str, Any] | None = None,
+        citekey: str | None = None,
+        metadata_source: MetadataSource | None = None,
+    ) -> Document:
+        """Persist best-effort metadata before extraction.
+
+        Ensures every document has a citekey and basic metadata regardless
+        of extraction outcome. Metadata source determines whether text
+        extraction should later attempt an upgrade.
+
+        Args:
+            doc: The PENDING document to update.
+            source_path: Original source path (used for filename parsing fallback).
+            metadata: Explicit CSL-JSON metadata if provided.
+            citekey: Explicit citekey if provided (e.g., from Zotero).
+            metadata_source: MetadataSource value for provenance tracking.
+
+        Returns:
+            Updated Document with metadata fields populated.
+        """
+        if metadata:
+            # Tag with provenance
+            tagged = {**metadata, "_metadata_source": metadata_source or "EXPLICIT"}
+            return self._process_metadata(doc, tagged, citekey=citekey)
+        else:
+            # Parse filename for best-effort metadata
+            from local_library.ingestion.metadata import parse_filename_metadata
+
+            filename_csl = parse_filename_metadata(Path(source_path))
+            try:
+                # Tag with FILENAME source
+                filename_csl["_metadata_source"] = MetadataSource.FILENAME.value
+                return self._process_metadata(doc, filename_csl)
+            except MetadataError:
+                # Filename parsing produced invalid metadata -- continue without it
+                logger.debug(
+                    "filename metadata parsing failed for %s, continuing without",
+                    source_path,
+                )
+                return doc
+
+    def _attempt_metadata_upgrade(self, doc: Document, text: str) -> Document:
+        """Stub for conditional metadata upgrade.
+
+        Will be implemented in Task 3. For now, just return the document unchanged.
+        """
+        return doc
+
     def add(
         self,
         source: str,
         force: bool = False,
         metadata: dict[str, Any] | None = None,
         citekey: str | None = None,
+        metadata_source: MetadataSource | None = None,
     ) -> AddResult:
         """Add a document to the library.
 
@@ -534,10 +590,11 @@ class Library:
         5. Check for duplicate by content hash
         6. Move to content-addressable storage
         7. Create database record
-        8. Extract text content
-        9. Process metadata (if provided)
-        10. Update record status
-        11. Embed document (if embed_on_add=True and sqlite-vec available)
+        8. Persist preliminary metadata (before extraction)
+        9. Extract text content
+        10. Conditional metadata upgrade (if FILENAME source and text extraction enabled)
+        11. Update record status
+        12. Embed document (if embed_on_add=True and sqlite-vec available)
 
         Args:
             source: Path to the source file
@@ -545,6 +602,8 @@ class Library:
             metadata: Optional CSL-JSON metadata dict
             citekey: Optional citekey to use (bypasses generation from metadata).
                     Useful when importing from external systems like Zotero.
+            metadata_source: Provenance of metadata (ZOTERO, EXPLICIT, FILENAME, TEXT_EXTRACTED).
+                           If None, defaults to FILENAME for bare paths or EXPLICIT for explicit metadata.
 
         Returns:
             AddResult containing the document and duplicate status
@@ -610,6 +669,11 @@ class Library:
                 storage_path=str(storage_path),
             )
 
+            # Persist preliminary metadata before extraction
+            doc = self._persist_preliminary_metadata(
+                doc, resolved_source, metadata, citekey, metadata_source
+            )
+
         # Extract text content
         try:
             extractor = self._find_extractor(storage_path)
@@ -650,13 +714,11 @@ class Library:
                     error_code=ErrorCode.EXTRACTION_FALLBACK.value,
                 )
 
-            # Process metadata
-            if metadata:
-                # Explicit metadata provided
-                doc = self._process_metadata(doc, metadata, citekey=citekey)
-            elif self._text_extractor:
-                # Extract metadata from text
-                doc = self._process_text_extraction(doc, cleaned_text)
+            # Conditional metadata upgrade
+            current_source = (doc.csl_json or {}).get("_metadata_source")
+            if current_source == MetadataSource.FILENAME.value and self._text_extractor:
+                doc = self._attempt_metadata_upgrade(doc, cleaned_text)
+            # ZOTERO/EXPLICIT: authoritative, no upgrade
 
         except (ExtractionError, QualityError) as e:
             # Update record to failed

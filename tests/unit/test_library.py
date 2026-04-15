@@ -7,9 +7,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from local_library.core.errors import AcquisitionError, ErrorCode, ExtractionError, LookupError
+from local_library.core.errors import AcquisitionError, ErrorCode, ExtractionError, LookupError, MetadataError
 from local_library.core.library import Library
-from local_library.core.models import DocumentStatus, ExtractionResult
+from local_library.core.models import DocumentStatus, ExtractionResult, MetadataSource
 from local_library.core.vec_extension import is_vec_available
 from local_library.ingestion.file import FileAcquirer
 from local_library.ingestion.pdf import PdfExtractor
@@ -1126,3 +1126,145 @@ class TestLibraryProgressCallback:
         )
         # Custom extractors are used as-is
         assert library._extractors[0]._progress_callback is None
+
+
+class TestPreliminaryMetadata:
+    """Tests for preliminary metadata persistence before extraction."""
+
+    @pytest.fixture
+    def library(self, temp_dir: Path) -> Library:
+        """Provide a Library with text extraction disabled."""
+        return Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=False,
+        )
+
+    @pytest.fixture
+    def sample_pdf(self, temp_dir: Path) -> Path:
+        """Create a sample PDF file."""
+        pdf_path = temp_dir / "Smith - 2020 - Attention.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 test content")
+        return pdf_path
+
+    def test_explicit_metadata_persisted_before_extraction(
+        self, library: Library, sample_pdf: Path
+    ) -> None:
+        """add() with explicit metadata should persist it before extraction."""
+        metadata = {"type": "article-journal", "title": "Test Article"}
+
+        with patch.object(
+            library._extractors[0],
+            "extract_and_validate",
+            return_value=ExtractionResult.from_text("content " * 20),
+        ):
+            result = library.add(
+                str(sample_pdf),
+                metadata=metadata,
+                metadata_source=MetadataSource.EXPLICIT,
+            )
+
+        assert result.document.citekey is not None
+        assert result.document.csl_json is not None
+        assert result.document.csl_json.get("_metadata_source") == "EXPLICIT"
+
+    def test_zotero_metadata_tagged_correctly(
+        self, library: Library, sample_pdf: Path
+    ) -> None:
+        """add() from Zotero should tag metadata source as ZOTERO."""
+        metadata = {
+            "type": "article-journal",
+            "title": "Zotero Article",
+            "author": [{"family": "Smith", "given": "John"}],
+            "issued": {"date-parts": [[2020]]},
+        }
+
+        with patch.object(
+            library._extractors[0],
+            "extract_and_validate",
+            return_value=ExtractionResult.from_text("content " * 20),
+        ):
+            result = library.add(
+                str(sample_pdf),
+                metadata=metadata,
+                citekey="Smith2020",
+                metadata_source=MetadataSource.ZOTERO,
+            )
+
+        assert result.document.csl_json.get("_metadata_source") == "ZOTERO"
+        assert result.document.citekey == "Smith2020"
+
+    def test_bare_path_gets_filename_metadata(
+        self, library: Library, sample_pdf: Path
+    ) -> None:
+        """add() without metadata should parse filename for preliminary metadata."""
+        with patch.object(
+            library._extractors[0],
+            "extract_and_validate",
+            return_value=ExtractionResult.from_text("content " * 20),
+        ):
+            result = library.add(str(sample_pdf))
+
+        assert result.document.citekey is not None
+        assert result.document.csl_json is not None
+        assert result.document.csl_json.get("_metadata_source") == "FILENAME"
+        # Should have parsed author and year from "Smith - 2020 - Attention.pdf"
+        assert result.document.title is not None
+
+    def test_failed_extraction_keeps_explicit_metadata(
+        self, library: Library, sample_pdf: Path
+    ) -> None:
+        """add() should preserve explicit metadata even when extraction fails."""
+        metadata = {
+            "type": "article-journal",
+            "title": "Will Survive Failure",
+            "author": [{"family": "Author"}],
+        }
+
+        with patch.object(
+            library._extractors[0],
+            "extract_and_validate",
+            side_effect=ExtractionError("failed", ErrorCode.EXTRACTION_TIMEOUT),
+        ):
+            with pytest.raises(ExtractionError):
+                library.add(
+                    str(sample_pdf),
+                    metadata=metadata,
+                    metadata_source=MetadataSource.EXPLICIT,
+                )
+
+        # Verify document was created with metadata despite extraction failure
+        # (use same library instance -- connection is still open after caught exception)
+        docs = library.list()
+        assert len(docs) == 1
+        doc = docs[0]
+        assert doc.status == DocumentStatus.FAILED
+        assert doc.citekey is not None
+        assert doc.title == "Will Survive Failure"
+
+    def test_failed_extraction_keeps_filename_metadata(
+        self, library: Library, sample_pdf: Path
+    ) -> None:
+        """add() should preserve filename-derived metadata when extraction fails.
+
+        This is the core design requirement: FAILED documents retain a citekey
+        and basic metadata from filename parsing. parse_filename_metadata() returns
+        {"type": "document", ...} which passes MetadataHandler validation (type
+        "document" is valid, missing fields produce warnings not errors).
+        """
+        with patch.object(
+            library._extractors[0],
+            "extract_and_validate",
+            side_effect=ExtractionError("timeout", ErrorCode.EXTRACTION_TIMEOUT),
+        ):
+            with pytest.raises(ExtractionError):
+                library.add(str(sample_pdf))  # No explicit metadata -- uses filename
+
+        docs = library.list()
+        assert len(docs) == 1
+        doc = docs[0]
+        assert doc.status == DocumentStatus.FAILED
+        assert doc.citekey is not None  # Generated from filename parsing
+        assert doc.csl_json is not None
+        assert doc.csl_json.get("_metadata_source") == "FILENAME"
