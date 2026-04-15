@@ -552,7 +552,8 @@ class Library:
         """
         if metadata:
             # Tag with provenance
-            tagged = {**metadata, "_metadata_source": metadata_source or "EXPLICIT"}
+            source_value = (metadata_source or MetadataSource.EXPLICIT).value
+            tagged = {**metadata, "_metadata_source": source_value}
             return self._process_metadata(doc, tagged, citekey=citekey)
         else:
             # Parse filename for best-effort metadata
@@ -901,75 +902,6 @@ class Library:
             authors=result.authors,
             issued_date=result.issued_date,
         )
-
-    def _process_text_extraction(self, doc: Document, text: str) -> Document:
-        """Extract and process metadata from document text.
-
-        Args:
-            doc: The document to update
-            text: Extracted text content
-
-        Returns:
-            Updated document with extracted metadata
-        """
-        # Extract metadata from text
-        extraction = self._text_extractor.extract(text)
-
-        # Convert to CSL-JSON
-        csl_json = build_csl_json(extraction)
-
-        # Only process if we have enough metadata
-        if "title" not in csl_json and "author" not in csl_json:
-            # Nothing useful extracted - update status to NEEDS_REVIEW
-            return update_document_status(
-                self._conn,
-                doc.id,
-                DocumentStatus.NEEDS_REVIEW,
-                error_message="No metadata could be extracted from document text",
-            )
-
-        try:
-            # Process through MetadataHandler for validation and citekey
-            result = self._metadata_handler.process(csl_json)
-
-            # Get unique citekey
-            unique_citekey = get_unique_citekey(self._conn, result.citekey)
-
-            # Determine final status
-            final_status = (
-                DocumentStatus.NEEDS_REVIEW if extraction.needs_review else DocumentStatus.READY
-            )
-
-            # Update document
-            doc = update_document_metadata(
-                self._conn,
-                doc.id,
-                citekey=unique_citekey,
-                csl_json=result.csl_json,
-                title=result.title,
-                authors=result.authors,
-                issued_date=result.issued_date,
-            )
-
-            # Update status if needed
-            if final_status == DocumentStatus.NEEDS_REVIEW:
-                doc = update_document_status(
-                    self._conn,
-                    doc.id,
-                    DocumentStatus.NEEDS_REVIEW,
-                    error_message="; ".join(extraction.review_reasons),
-                )
-
-            return doc
-
-        except MetadataError:
-            # Extracted metadata failed validation - still set what we can
-            return update_document_status(
-                self._conn,
-                doc.id,
-                DocumentStatus.NEEDS_REVIEW,
-                error_message="Extracted metadata failed validation",
-            )
 
     # --- Query Operations ---
 

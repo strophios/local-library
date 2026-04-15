@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from local_library.core.errors import AcquisitionError, ErrorCode, ExtractionError, LookupError, MetadataError
+from local_library.core.errors import AcquisitionError, ErrorCode, ExtractionError, LookupError
 from local_library.core.library import Library
 from local_library.core.models import (
     DocumentStatus,
@@ -1175,9 +1175,7 @@ class TestPreliminaryMetadata:
         assert result.document.csl_json is not None
         assert result.document.csl_json.get("_metadata_source") == "EXPLICIT"
 
-    def test_zotero_metadata_tagged_correctly(
-        self, library: Library, sample_pdf: Path
-    ) -> None:
+    def test_zotero_metadata_tagged_correctly(self, library: Library, sample_pdf: Path) -> None:
         """add() from Zotero should tag metadata source as ZOTERO."""
         metadata = {
             "type": "article-journal",
@@ -1201,9 +1199,7 @@ class TestPreliminaryMetadata:
         assert result.document.csl_json.get("_metadata_source") == "ZOTERO"
         assert result.document.citekey == "Smith2020"
 
-    def test_bare_path_gets_filename_metadata(
-        self, library: Library, sample_pdf: Path
-    ) -> None:
+    def test_bare_path_gets_filename_metadata(self, library: Library, sample_pdf: Path) -> None:
         """add() without metadata should parse filename for preliminary metadata."""
         with patch.object(
             library._extractors[0],
@@ -1413,15 +1409,13 @@ class TestMetadataUpgrade:
             "extract_and_validate",
             return_value=ExtractionResult.from_text("content " * 20),
         ):
-            with patch.object(
-                lib._text_extractor, "extract", return_value=mock_extraction
-            ):
+            with patch.object(lib._text_extractor, "extract", return_value=mock_extraction):
                 result = lib.add(str(sample_pdf))
 
         # Original citekey from filename should be preserved
         # Document should be flagged if citekey would change
-        if result.document.status == DocumentStatus.NEEDS_REVIEW:
-            assert "citekey" in (result.document.error_message or "").lower()
+        assert result.document.status == DocumentStatus.NEEDS_REVIEW
+        assert "citekey" in (result.document.error_message or "").lower()
 
 
 class TestReextractFailedDocuments:
