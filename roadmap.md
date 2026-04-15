@@ -34,7 +34,7 @@ Development beyond Phase 1 is organized into five feature areas. Each area has i
 | Area | Status | Priority | Path |
 |---|---|---|---|
 | [Neovim Citation Workflow](docs/feature-areas/neovim-citation-workflow/README.md) | Exploring | Headline | `docs/feature-areas/neovim-citation-workflow/` |
-| Claude Code Integration (MCP server) | Exploring | High (validates daemon API surface) | Backlog → promoted; see notes below |
+| [Claude Code Integration](docs/feature-areas/claude-code-integration/README.md) | Exploring | High (validates daemon API surface) | `docs/feature-areas/claude-code-integration/` |
 | [Web Content Ingestion](docs/feature-areas/web-content-ingestion/README.md) | Exploring | High (good value/effort) | `docs/feature-areas/web-content-ingestion/` |
 | [Note Management](docs/feature-areas/note-management/README.md) | Exploring | Medium | `docs/feature-areas/note-management/` |
 | [Automated Content Analysis](docs/feature-areas/automated-content-analysis/README.md) | Exploring | Lower (needs prerequisites) | `docs/feature-areas/automated-content-analysis/` |
