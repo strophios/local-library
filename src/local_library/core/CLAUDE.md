@@ -1,6 +1,6 @@
 # Core Domain
 
-Last verified: 2026-03-06
+Last verified: 2026-04-15
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 
 ## Contracts
 
-- **Exposes**: Document, DocumentStatus (PENDING, READY, FAILED, NEEDS_REVIEW), EmbeddingStatus (PENDING, CURRENT, STALE), RAGResponse, AddResult, FieldExtraction, TextExtractionResult, ErrorCode hierarchy (including MetadataError, ZoteroError, EmbeddingError, LLMError, RAGError), Library class (with get_by_citekey, get_all_citekeys, update_metadata, embed, embed_all, get_retriever, query, query_stream; reranking enabled by default), storage functions, vec_extension module
+- **Exposes**: Document, DocumentStatus (PENDING, READY, FAILED, NEEDS_REVIEW), EmbeddingStatus (PENDING, CURRENT, STALE), MetadataSource (ZOTERO, EXPLICIT, FILENAME, TEXT_EXTRACTED), RAGResponse, AddResult, FieldExtraction, TextExtractionResult, ErrorCode hierarchy (including EXTRACTION_FALLBACK, MetadataError, ZoteroError, EmbeddingError, LLMError, RAGError), Library class (with get_by_citekey, get_all_citekeys, update_metadata, embed, embed_all, get_retriever, query, query_stream; reranking enabled by default), storage functions, vec_extension module
 - **Guarantees**:
   - Document.id is UUID, globally unique
   - Document.content_hash is SHA-256, content-addressable
@@ -17,9 +17,16 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
   - Library dispatches to appropriate handler via `can_handle()` protocol
   - Library.add() accepts optional CSL-JSON metadata; validates and stores with collision-free citekeys
   - Library.add() accepts optional citekey parameter to preserve external citekeys (e.g., from Zotero); bypasses citekey generation when provided
-  - Library.add() extracts metadata from text when no explicit metadata provided (if text_extraction_enabled)
+  - Library.add() accepts optional metadata_source parameter (MetadataSource enum) for provenance tracking
+  - Library.add() persists preliminary metadata BEFORE extraction — FAILED documents retain citekey and basic metadata
+  - Library.add() uses parse_filename_metadata() for bare paths (no explicit metadata) to generate best-effort CSL-JSON
+  - Library.add() conditionally upgrades FILENAME-sourced metadata after extraction via text extraction pipeline
+  - ZOTERO/EXPLICIT metadata is authoritative and never upgraded by text extraction
+  - Metadata upgrades that would change the citekey flag NEEDS_REVIEW instead of auto-applying (citekey stability)
   - Documents with low-confidence extraction are set to NEEDS_REVIEW status
+  - Documents using pdftext fallback are set to NEEDS_REVIEW with EXTRACTION_FALLBACK error code
   - Library accepts `pdf_llm_enabled` parameter to enable Marker LLM-enhanced extraction for PDFs
+  - Library accepts `progress_callback` parameter, forwarded to default PdfExtractor for extraction progress events
   - EmbeddingStatus tracks embedding lifecycle (PENDING → CURRENT, CURRENT → STALE on re-extraction, STALE → CURRENT on re-embed)
   - sqlite-vec extension loaded conditionally; library functions without it for document storage (graceful degradation)
   - Library.embed() computes and stores embeddings, updates status to CURRENT
@@ -51,7 +58,9 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 - **Lazy Library import**: `core.__init__` uses `__getattr__` to defer Library import until first access. Breaks circular dependency: `core.__init__` -> `core.library` -> `ingestion.pdf` -> `core.errors`. Eager imports for models/errors remain since they don't cause cycles.
 - **Citekey collision handling**: `get_unique_citekey()` appends suffixes (a, b, c...) to ensure uniqueness
 - **Citekey preservation**: Library.add() accepts optional `citekey` parameter that bypasses generation. Used when importing from external systems (Zotero) to preserve existing citekeys for deduplication
-- **Text extraction integration**: Library._process_text_extraction() handles metadata extraction from document text, sets NEEDS_REVIEW when confidence is low
+- **Metadata pipeline reordering**: Library.add() persists preliminary metadata before extraction via `_persist_preliminary_metadata()`. For bare paths, uses `parse_filename_metadata()`. After extraction, `_attempt_metadata_upgrade()` conditionally upgrades FILENAME-sourced metadata via text extraction. ZOTERO/EXPLICIT metadata is authoritative — never upgraded.
+- **MetadataSource tracking**: `_metadata_source` field in CSL-JSON tracks provenance (ZOTERO, EXPLICIT, FILENAME, TEXT_EXTRACTED). Determines whether text extraction should attempt metadata upgrade.
+- **Citekey stability**: If metadata upgrade would change an existing citekey, the document is flagged NEEDS_REVIEW instead of auto-applying the change. Preserves referential stability.
 - **Two-stage cleanup in add()**: Library.add() applies `clean_artifacts()` then `cleanup_markdown()` between Marker extraction and disk write. Artifact removal first (content quality), formatting second (markdown structure). Cleaned text is used for both the stored markdown file and metadata extraction
 - **Citekey lookup**: Library.get_by_citekey() returns Document or None; Library.get_all_citekeys() returns all non-null citekeys
 - **Metadata updates**: Library.update_metadata() allows updating status, citekey, and csl_json with automatic indexed field extraction
@@ -77,10 +86,10 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 
 ## Key Files
 
-- `models.py` - Document, AcquisitionResult, ExtractionResult, AddResult, FieldExtraction, TextExtractionResult, RAGResponse, EmbeddingStatus
-- `errors.py` - ErrorCode enum, exception hierarchy (includes ACQUISITION_*, EXTRACTION_*, METADATA_*, ZOTERO_*, EMBEDDING_*, RAG_*, LLM_* codes; LLMError, RAGError exceptions)
+- `models.py` - Document, AcquisitionResult, ExtractionResult, AddResult, FieldExtraction, TextExtractionResult, RAGResponse, EmbeddingStatus, MetadataSource
+- `errors.py` - ErrorCode enum, exception hierarchy (includes ACQUISITION_*, EXTRACTION_* (incl. EXTRACTION_FALLBACK), METADATA_*, ZOTERO_*, EMBEDDING_*, RAG_*, LLM_* codes; LLMError, RAGError exceptions)
 - `storage.py` - SQLite CRUD (get_connection, init_schema, create/get/update/delete), schema v3 with chunks and FTS5
-- `library.py` - Library orchestrator (add, get, get_by_citekey, get_all_citekeys, list, delete, embed, embed_all, update_metadata, get_retriever, query, query_stream) with handler dispatch, text extraction integration, lazy RAG initialization, and lazy cross-encoder reranking
+- `library.py` - Library orchestrator (add, get, get_by_citekey, get_all_citekeys, list, delete, embed, embed_all, update_metadata, get_retriever, query, query_stream) with handler dispatch, preliminary metadata persistence, conditional metadata upgrade, lazy RAG initialization, and lazy cross-encoder reranking
 - `vec_extension.py` - sqlite-vec extension loading, vec0 table creation, availability checking
 
 ## Gotchas
@@ -92,7 +101,9 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 - No matching acquirer raises ACQUISITION_UNSUPPORTED_SOURCE; no matching extractor raises EXTRACTION_UNSUPPORTED_FORMAT
 - `from local_library.core import Library` works but is lazy-loaded; `from local_library.core.library import Library` is direct but may trigger circular import issues if called at module level
 - Library constructor accepts text_extraction_* parameters to configure automatic metadata extraction behavior; LLMClient created at Library level and injected into TextMetadataExtractor
-- When no explicit metadata is provided and text extraction is enabled, Library.add() attempts to extract metadata from the document text
+- Library.add() persists preliminary metadata before extraction; bare paths parsed via parse_filename_metadata(). FAILED documents retain citekey and metadata.
+- Library.add() accepts metadata_source parameter: ZOTERO/EXPLICIT are authoritative (never upgraded), FILENAME triggers conditional upgrade after extraction
+- `_attempt_metadata_upgrade()` replaces the former `_process_text_extraction()` — only upgrades FILENAME-sourced metadata, checks citekey stability
 - Library.query() and query_stream() raise RAGError on LLM generation failure and EmbeddingError if sqlite-vec unavailable
 - RAGInterface lazy init means LiteLLM import only happens when RAG queries are actually used
 - `pdf_llm_enabled` only affects the default PdfExtractor; custom extractors must configure LLM mode themselves

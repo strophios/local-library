@@ -1,6 +1,6 @@
 # CLI Domain
 
-Last verified: 2026-04-03
+Last verified: 2026-04-15
 
 ## Purpose
 
@@ -35,7 +35,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 
 ## Dependencies
 
-- **Uses**: `core.Library`, `core.models` (Document, DocumentStatus, RAGResponse), `core.errors` (LookupError, EmbeddingError, FTSQueryError, LLMError, RAGError), `core.storage` (get_connection, get_unique_citekey), `core.vec_extension` (is_vec_available), `ingestion.metadata` (MetadataHandler), `embeddings.base` (SearchResult)
+- **Uses**: `core.Library`, `core.models` (Document, DocumentStatus, MetadataSource, RAGResponse), `core.errors` (LookupError, EmbeddingError, FTSQueryError, LLMError, RAGError), `core.storage` (get_connection, get_unique_citekey), `core.vec_extension` (is_vec_available), `ingestion.metadata` (MetadataHandler), `embeddings.base` (SearchResult)
 - **Used by**: Entry point (`local-library` command)
 - **Boundary**: CLI MUST NOT be imported by core or ingestion
 
@@ -50,6 +50,8 @@ Command-line interface for the local-library system. Provides user-facing comman
 - **Zotero import as command group**: `zotero` subcommand groups Zotero-related operations; `import` subcommand handles batch import with progress tracking, `collections` lists available collections
 - **Citekey-based skip logic**: Batch import skips items whose citekey already exists in local-library (fast check); hash-based deduplication catches any that slip through
 - **Zotero citekey preservation**: Import passes Zotero's citekey to Library.add() to preserve BetterBibTeX citekeys; enables accurate deduplication on subsequent imports
+- **Metadata source tagging**: add command passes MetadataSource.EXPLICIT when --metadata provided; zotero import passes MetadataSource.ZOTERO. Bare paths default to FILENAME (handled by Library).
+- **Progress callback in zotero import**: `_make_console_progress_callback()` factory creates Rich Console callback for extraction events (pre-check, heartbeat, completion, fallback). Wired into `_import_items_rich()`. JSON mode uses logger fallback.
 - **Batched Library recreation**: Import recreates Library every EXTRACTION_BATCH_SIZE (50) extractions to release Marker's native resources (PyTorch, multiprocessing). Defensive measure for very large imports
 - **Zotero directory detection**: Uses ZOTERO_DIR env var or platform-specific defaults (~/Zotero)
 - **Embed command modes**: Three orthogonal modes (single doc, --pending, --all) with mutual exclusivity validation; --force re-embeds existing; --dry-run non-destructive
@@ -87,7 +89,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 - `embed.py` - Embed command with --pending, --all, --force, --dry-run options
 - `reextract.py` - Reextract command with single-doc and --all modes, progress tracking, continue-on-error
 - `search.py` - Search command with --limit, --mode, --doc, --json, --no-rerank options
-- `zotero.py` - Zotero command group with `import` (batch import with progress) and `collections` (list collections)
+- `zotero.py` - Zotero command group with `import` (batch import with progress, progress callback), `collections` (list collections), `_make_console_progress_callback()` factory
 
 ## Gotchas
 

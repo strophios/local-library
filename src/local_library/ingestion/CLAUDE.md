@@ -1,6 +1,6 @@
 # Ingestion Domain
 
-Last verified: 2026-04-08
+Last verified: 2026-04-15
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Handles content acquisition (getting files into the system), extraction (convert
 
 ## Contracts
 
-- **Exposes**: ContentAcquirer protocol, ContentExtractor protocol, FileAcquirer, PdfExtractor, TextMetadataExtractor, cleanup_markdown, clean_artifacts, BOILERPLATE_RULES, BoilerplateRule, ZoteroReader (with ZoteroLibrary, ZoteroCollection, ZoteroItem, ZoteroAttachment dataclasses)
+- **Exposes**: ContentAcquirer protocol, ContentExtractor protocol, FileAcquirer, PdfExtractor (with PreCheckResult, ProgressCallback), TextMetadataExtractor, MetadataHandler, parse_filename_metadata, cleanup_markdown, clean_artifacts, BOILERPLATE_RULES, BoilerplateRule, ZoteroReader (with ZoteroLibrary, ZoteroCollection, ZoteroItem, ZoteroAttachment dataclasses)
 - **Guarantees**:
   - `can_handle()` returns True only for sources/files the handler can process
   - Acquirers copy to temp location (never modify source)
@@ -43,6 +43,11 @@ Handles content acquisition (getting files into the system), extraction (convert
 - **Lazy Marker loading**: PdfExtractor defers model load until first extraction (saves startup time)
 - **Marker metadata passthrough**: `ExtractionResult.metadata` contains Marker's `page_stats` with per-page `text_extraction_method` (`"pdftext"` for embedded text, `"surya"` for OCR). Enables post-import analysis of extraction source. Note: `text_from_rendered()` returns `"md"` as its second value, not metadata — use `rendered.metadata` directly.
 - **PdfExtractor LLM mode**: When `llm_enabled=True` and GEMINI_API_KEY is set, configures Marker with `use_llm`, `redo_inline_math`, and `disable_image_extraction` (images become text descriptions). Falls back silently to standard extraction without API key.
+- **PDF pre-check**: `_precheck_pdf()` uses pymupdf to analyze PDFs before Marker extraction — counts pages, samples text from first/middle/last pages. Returns PreCheckResult with page count, text extractability flag, and computed timeout. Takes milliseconds.
+- **Dynamic timeout**: `_compute_dynamic_timeout()` scales extraction timeout based on document characteristics: text PDFs get 5s/page (min 900s), image-only PDFs get 45s/page (min 1800s), capped at max_extraction_timeout (default 4h). Pure function.
+- **pdftext fallback**: When Marker fails (timeout or crash) and pre-check captured extractable text, PdfExtractor returns the pymupdf get_text() output as a degraded ExtractionResult with extraction_method="pdftext_fallback". Image-only PDFs still fail. Fallback text goes through same quality validation as Marker output.
+- **Progress callback protocol**: PdfExtractor accepts optional ProgressCallback (Callable[[str, float, dict[str, Any]], None]). Emits events: precheck_complete, extraction_progress (every 30s), extraction_complete, extraction_fallback. Falls back to logger.info when no callback provided.
+- **Filename metadata parsing**: `parse_filename_metadata()` parses academic PDF naming conventions into best-effort CSL-JSON: "Author - Year - Title", "Author_Year_Title", "AuthorYear", "Author - Title". Falls back to filename stem as title. Always returns type="document" and _metadata_source="FILENAME".
 - **Quality validation**: ExtractionResult.validate() checks min length and printable ratio
 - **compute_storage_path**: Git-style `ab/cd/hash.ext` layout for content-addressable storage
 - **MetadataHandler**: Stateless CSL-JSON validation with citekey generation (internal, used by Library)
@@ -67,8 +72,8 @@ Handles content acquisition (getting files into the system), extraction (convert
 
 - `base.py` - ContentAcquirer, ContentExtractor protocols; compute_storage_path utility
 - `file.py` - FileAcquirer (any local file), compute_file_hash, dynamic MIME detection
-- `pdf.py` - PdfExtractor (Marker wrapper with quality validation)
-- `metadata.py` - MetadataHandler (CSL-JSON validation, citekey generation, field extraction)
+- `pdf.py` - PdfExtractor (Marker wrapper with pre-check, dynamic timeout, pdftext fallback, progress callbacks), PreCheckResult, ProgressCallback
+- `metadata.py` - MetadataHandler (CSL-JSON validation, citekey generation, field extraction), parse_filename_metadata (heuristic filename parser)
 - `text_extraction.py` - TextMetadataExtractor, LLMExtractor, field extractors (extract_title, extract_authors, extract_date, extract_doc_type), build_csl_json converter
 - `artifact_cleanup.py` - clean_artifacts (four-pass content artifact removal: non-Latin script filtering, image description reformatting, watermark removal, publisher boilerplate stripping), BoilerplateRule dataclass, BOILERPLATE_RULES catalog
 - `markdown_cleanup.py` - cleanup_markdown (three-pass post-processing: HTML coercion, dehyphenation, paragraph reflow)
@@ -87,5 +92,9 @@ Handles content acquisition (getting files into the system), extraction (convert
 - Field extractors return FieldExtraction with value=None when extraction fails (not exceptions)
 - The `nameparser` library is used for robust author name parsing
 - PdfExtractor with `llm_enabled=True` passes `gemini_api_key` directly via Marker's config dict (avoids environment variable mutation)
+- PdfExtractor constructor accepts `max_extraction_timeout` (default 14400s/4h) and `progress_callback` parameters
+- pymupdf is a runtime dependency (used for pre-check analysis); imported lazily inside `_precheck_pdf()`
+- Fallback text that fails quality validation (min_length, printable_ratio) is treated as no fallback — the document goes to FAILED as before
+- `parse_filename_metadata()` accepts Path objects (not str) to prevent accidental URL parsing. The file does not need to exist — only the filename is examined.
 - ZoteroReader methods that accept `library_id=None` operate across all libraries when None; pass specific library_id to filter
 - ZoteroCollection.library_id links to Zotero's `libraries` table; personal library is typically libraryID=1 with type='user'
