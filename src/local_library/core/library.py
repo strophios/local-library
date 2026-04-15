@@ -13,8 +13,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-logger = logging.getLogger(__name__)
-
 if TYPE_CHECKING:
     from local_library.core.models import RAGResponse
     from local_library.embeddings.base import Retriever
@@ -70,6 +68,8 @@ from local_library.ingestion.text_extraction import (
     TextMetadataExtractor,
     build_csl_json,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _cleanup_empty_parents(path: Path, stop_at: Path) -> None:
