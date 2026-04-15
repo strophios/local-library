@@ -24,6 +24,7 @@ from local_library.core.models import (
     DocumentStatus,
     EmbeddingStatus,
     ExtractionResult,
+    MetadataSource,
 )
 from local_library.core.storage import (
     create_document,
@@ -62,6 +63,7 @@ __all__ = [
     # Models
     "DocumentStatus",
     "EmbeddingStatus",
+    "MetadataSource",
     "Document",
     "AcquisitionResult",
     "ExtractionResult",

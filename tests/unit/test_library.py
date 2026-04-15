@@ -9,7 +9,13 @@ import pytest
 
 from local_library.core.errors import AcquisitionError, ErrorCode, ExtractionError, LookupError
 from local_library.core.library import Library
-from local_library.core.models import DocumentStatus
+from local_library.core.models import (
+    DocumentStatus,
+    ExtractionResult,
+    FieldExtraction,
+    MetadataSource,
+    TextExtractionResult,
+)
 from local_library.core.vec_extension import is_vec_available
 from local_library.ingestion.file import FileAcquirer
 from local_library.ingestion.pdf import PdfExtractor
@@ -531,9 +537,7 @@ class TestLibraryReextract:
 
         return library, str(result.document.id)
 
-    def test_reextract_updates_markdown(
-        self, library_with_doc: tuple[Library, str]
-    ) -> None:
+    def test_reextract_updates_markdown(self, library_with_doc: tuple[Library, str]) -> None:
         """reextract() should overwrite the extracted markdown with new text."""
         library, doc_id = library_with_doc
         doc = library.get(doc_id)
@@ -547,9 +551,7 @@ class TestLibraryReextract:
         assert new_text != old_text
         assert "Improved" in new_text
 
-    def test_reextract_marks_embeddings_stale(
-        self, library_with_doc: tuple[Library, str]
-    ) -> None:
+    def test_reextract_marks_embeddings_stale(self, library_with_doc: tuple[Library, str]) -> None:
         """reextract() should mark embeddings as STALE."""
         library, doc_id = library_with_doc
 
@@ -561,9 +563,7 @@ class TestLibraryReextract:
 
         assert updated.embedding_status == EmbeddingStatus.STALE
 
-    def test_reextract_preserves_metadata(
-        self, library_with_doc: tuple[Library, str]
-    ) -> None:
+    def test_reextract_preserves_metadata(self, library_with_doc: tuple[Library, str]) -> None:
         """reextract() should not modify existing metadata."""
         library, doc_id = library_with_doc
         doc = library.get(doc_id)
@@ -577,9 +577,7 @@ class TestLibraryReextract:
         assert updated.citekey == original_citekey
         assert updated.csl_json == original_csl
 
-    def test_reextract_returns_ready_document(
-        self, library_with_doc: tuple[Library, str]
-    ) -> None:
+    def test_reextract_returns_ready_document(self, library_with_doc: tuple[Library, str]) -> None:
         """reextract() should return document with READY status."""
         library, doc_id = library_with_doc
 
@@ -589,9 +587,7 @@ class TestLibraryReextract:
 
         assert updated.status == DocumentStatus.READY
 
-    def test_reextract_not_found_raises(
-        self, library_with_doc: tuple[Library, str]
-    ) -> None:
+    def test_reextract_not_found_raises(self, library_with_doc: tuple[Library, str]) -> None:
         """reextract() should raise LookupError for nonexistent ID."""
         library, _ = library_with_doc
 
@@ -599,6 +595,148 @@ class TestLibraryReextract:
             library.reextract("nonexistent-id")
 
         assert exc_info.value.code == ErrorCode.NOT_FOUND
+
+
+class TestLibraryFallbackStatus:
+    """Tests for Library handling of pdftext fallback documents."""
+
+    @pytest.fixture
+    def library(self, temp_dir: Path) -> Library:
+        """Provide an initialized Library for testing."""
+        return Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=False,
+        )
+
+    @pytest.fixture
+    def sample_pdf(self, temp_dir: Path) -> Path:
+        """Create a sample PDF file for testing."""
+        pdf_path = temp_dir / "sample.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 test content for extraction")
+        return pdf_path
+
+    def test_add_fallback_document_gets_needs_review(
+        self, library: Library, sample_pdf: Path
+    ) -> None:
+        """add() should set NEEDS_REVIEW for pdftext fallback documents."""
+        fallback_result = ExtractionResult.from_text(
+            text="Fallback extracted text content. " * 20,
+            metadata={
+                "extraction_method": "pdftext_fallback",
+                "marker_failure_reason": "timed out after 900s",
+                "precheck_page_count": 10,
+                "precheck_has_text": True,
+            },
+        )
+
+        with patch.object(
+            library._extractors[0], "extract_and_validate", return_value=fallback_result
+        ):
+            result = library.add(str(sample_pdf))
+
+        assert result.document.status == DocumentStatus.NEEDS_REVIEW
+        assert result.document.error_code == "EXTRACTION_FALLBACK"
+        assert "pdftext fallback" in result.document.error_message
+
+    def test_add_normal_extraction_stays_ready(self, library: Library, sample_pdf: Path) -> None:
+        """add() should keep READY status for normal Marker extraction."""
+        normal_result = ExtractionResult.from_text(
+            text="Normal Marker extracted text content. " * 20,
+            metadata={"page_stats": []},
+        )
+
+        with patch.object(
+            library._extractors[0], "extract_and_validate", return_value=normal_result
+        ):
+            result = library.add(str(sample_pdf))
+
+        assert result.document.status == DocumentStatus.READY
+        assert result.document.error_code is None
+
+    def test_add_fallback_document_still_embeds(self, library: Library, sample_pdf: Path) -> None:
+        """add() should still attempt embedding for fallback documents."""
+        fallback_result = ExtractionResult.from_text(
+            text="Fallback text for embedding test. " * 20,
+            metadata={
+                "extraction_method": "pdftext_fallback",
+                "marker_failure_reason": "crashed",
+            },
+        )
+
+        with patch.object(
+            library._extractors[0], "extract_and_validate", return_value=fallback_result
+        ):
+            with patch.object(library, "embed") as mock_embed:
+                library.add(str(sample_pdf))
+
+        # Embed should still be called (if embed_on_add is True)
+        if library._embed_on_add:
+            mock_embed.assert_called_once()
+
+
+class TestLibraryReextractFallback:
+    """Tests for reextract handling of pdftext fallback results."""
+
+    @pytest.fixture
+    def library_with_doc(self, temp_dir: Path) -> tuple[Library, str]:
+        """Provide a Library with one added document."""
+        library = Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=False,
+        )
+        pdf_path = temp_dir / "sample.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 test content for extraction")
+
+        initial_result = ExtractionResult.from_text(
+            text="Initial extracted text. " * 20,
+            metadata={"page_stats": []},
+        )
+        with patch.object(
+            library._extractors[0], "extract_and_validate", return_value=initial_result
+        ):
+            add_result = library.add(str(pdf_path))
+
+        return library, str(add_result.document.id)
+
+    def test_reextract_fallback_sets_needs_review(
+        self, library_with_doc: tuple[Library, str]
+    ) -> None:
+        """reextract() should set NEEDS_REVIEW for pdftext fallback results."""
+        library, doc_id = library_with_doc
+
+        fallback_result = ExtractionResult.from_text(
+            text="Fallback reextracted text. " * 20,
+            metadata={
+                "extraction_method": "pdftext_fallback",
+                "marker_failure_reason": "timed out",
+            },
+        )
+        with patch.object(
+            library._extractors[0], "extract_and_validate", return_value=fallback_result
+        ):
+            updated = library.reextract(doc_id)
+
+        assert updated.status == DocumentStatus.NEEDS_REVIEW
+        assert updated.error_code == "EXTRACTION_FALLBACK"
+
+    def test_reextract_normal_sets_ready(self, library_with_doc: tuple[Library, str]) -> None:
+        """reextract() should set READY for normal Marker extraction results."""
+        library, doc_id = library_with_doc
+
+        normal_result = ExtractionResult.from_text(
+            text="Normal reextracted text. " * 20,
+            metadata={"page_stats": []},
+        )
+        with patch.object(
+            library._extractors[0], "extract_and_validate", return_value=normal_result
+        ):
+            updated = library.reextract(doc_id)
+
+        assert updated.status == DocumentStatus.READY
 
 
 class TestLibraryPdfLLMConfiguration:
@@ -955,3 +1093,392 @@ class TestGetRetrieverReranking:
                 mock_rag_inst.query_stream.return_value = MagicMock()
                 lib.query_stream("test question", rerank=False)
                 mock_get.assert_called_once_with(mode="hybrid", rerank=False)
+
+
+class TestLibraryProgressCallback:
+    """Tests for Library progress callback forwarding."""
+
+    def test_callback_forwarded_to_pdf_extractor(self, temp_dir: Path) -> None:
+        """Library should forward progress_callback to default PdfExtractor."""
+        callback = MagicMock()
+        library = Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            progress_callback=callback,
+        )
+        # The default extractor should have the callback
+        assert library._extractors[0]._progress_callback is callback
+
+    def test_no_callback_default(self, temp_dir: Path) -> None:
+        """Library without progress_callback should leave extractor callback as None."""
+        library = Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+        )
+        assert library._extractors[0]._progress_callback is None
+
+    def test_custom_extractors_not_affected(self, temp_dir: Path) -> None:
+        """Custom extractors should not receive Library's progress_callback."""
+        custom = PdfExtractor(lazy_load=True)
+        callback = MagicMock()
+        library = Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            extractors=[custom],
+            progress_callback=callback,
+        )
+        # Custom extractors are used as-is
+        assert library._extractors[0]._progress_callback is None
+
+
+class TestPreliminaryMetadata:
+    """Tests for preliminary metadata persistence before extraction."""
+
+    @pytest.fixture
+    def library(self, temp_dir: Path) -> Library:
+        """Provide a Library with text extraction disabled."""
+        return Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=False,
+        )
+
+    @pytest.fixture
+    def sample_pdf(self, temp_dir: Path) -> Path:
+        """Create a sample PDF file."""
+        pdf_path = temp_dir / "Smith - 2020 - Attention.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 test content")
+        return pdf_path
+
+    def test_explicit_metadata_persisted_before_extraction(
+        self, library: Library, sample_pdf: Path
+    ) -> None:
+        """add() with explicit metadata should persist it before extraction."""
+        metadata = {"type": "article-journal", "title": "Test Article"}
+
+        with patch.object(
+            library._extractors[0],
+            "extract_and_validate",
+            return_value=ExtractionResult.from_text("content " * 20),
+        ):
+            result = library.add(
+                str(sample_pdf),
+                metadata=metadata,
+                metadata_source=MetadataSource.EXPLICIT,
+            )
+
+        assert result.document.citekey is not None
+        assert result.document.csl_json is not None
+        assert result.document.csl_json.get("_metadata_source") == "EXPLICIT"
+
+    def test_zotero_metadata_tagged_correctly(self, library: Library, sample_pdf: Path) -> None:
+        """add() from Zotero should tag metadata source as ZOTERO."""
+        metadata = {
+            "type": "article-journal",
+            "title": "Zotero Article",
+            "author": [{"family": "Smith", "given": "John"}],
+            "issued": {"date-parts": [[2020]]},
+        }
+
+        with patch.object(
+            library._extractors[0],
+            "extract_and_validate",
+            return_value=ExtractionResult.from_text("content " * 20),
+        ):
+            result = library.add(
+                str(sample_pdf),
+                metadata=metadata,
+                citekey="Smith2020",
+                metadata_source=MetadataSource.ZOTERO,
+            )
+
+        assert result.document.csl_json.get("_metadata_source") == "ZOTERO"
+        assert result.document.citekey == "Smith2020"
+
+    def test_bare_path_gets_filename_metadata(self, library: Library, sample_pdf: Path) -> None:
+        """add() without metadata should parse filename for preliminary metadata."""
+        with patch.object(
+            library._extractors[0],
+            "extract_and_validate",
+            return_value=ExtractionResult.from_text("content " * 20),
+        ):
+            result = library.add(str(sample_pdf))
+
+        assert result.document.citekey is not None
+        assert result.document.csl_json is not None
+        assert result.document.csl_json.get("_metadata_source") == "FILENAME"
+        # Should have parsed author and year from "Smith - 2020 - Attention.pdf"
+        assert result.document.title is not None
+
+    def test_failed_extraction_keeps_explicit_metadata(
+        self, library: Library, sample_pdf: Path
+    ) -> None:
+        """add() should preserve explicit metadata even when extraction fails."""
+        metadata = {
+            "type": "article-journal",
+            "title": "Will Survive Failure",
+            "author": [{"family": "Author"}],
+        }
+
+        with patch.object(
+            library._extractors[0],
+            "extract_and_validate",
+            side_effect=ExtractionError("failed", ErrorCode.EXTRACTION_TIMEOUT),
+        ):
+            with pytest.raises(ExtractionError):
+                library.add(
+                    str(sample_pdf),
+                    metadata=metadata,
+                    metadata_source=MetadataSource.EXPLICIT,
+                )
+
+        # Verify document was created with metadata despite extraction failure
+        # (use same library instance -- connection is still open after caught exception)
+        docs = library.list()
+        assert len(docs) == 1
+        doc = docs[0]
+        assert doc.status == DocumentStatus.FAILED
+        assert doc.citekey is not None
+        assert doc.title == "Will Survive Failure"
+
+    def test_failed_extraction_keeps_filename_metadata(
+        self, library: Library, sample_pdf: Path
+    ) -> None:
+        """add() should preserve filename-derived metadata when extraction fails.
+
+        This is the core design requirement: FAILED documents retain a citekey
+        and basic metadata from filename parsing. parse_filename_metadata() returns
+        {"type": "document", ...} which passes MetadataHandler validation (type
+        "document" is valid, missing fields produce warnings not errors).
+        """
+        with patch.object(
+            library._extractors[0],
+            "extract_and_validate",
+            side_effect=ExtractionError("timeout", ErrorCode.EXTRACTION_TIMEOUT),
+        ):
+            with pytest.raises(ExtractionError):
+                library.add(str(sample_pdf))  # No explicit metadata -- uses filename
+
+        docs = library.list()
+        assert len(docs) == 1
+        doc = docs[0]
+        assert doc.status == DocumentStatus.FAILED
+        assert doc.citekey is not None  # Generated from filename parsing
+        assert doc.csl_json is not None
+        assert doc.csl_json.get("_metadata_source") == "FILENAME"
+
+
+class TestMetadataUpgrade:
+    """Tests for conditional metadata upgrade after extraction."""
+
+    @pytest.fixture
+    def library_with_text_extraction(self, temp_dir: Path) -> Library:
+        """Provide a Library with text extraction enabled."""
+        return Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=True,
+        )
+
+    @pytest.fixture
+    def sample_pdf(self, temp_dir: Path) -> Path:
+        """Create a sample PDF file."""
+        pdf_path = temp_dir / "Smith2020.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 test content")
+        return pdf_path
+
+    def test_filename_metadata_upgraded_after_extraction(
+        self, library_with_text_extraction: Library, sample_pdf: Path
+    ) -> None:
+        """FILENAME metadata should be upgraded when text extraction succeeds."""
+        lib = library_with_text_extraction
+        extracted_text = "A Study of Neural Networks by J. Smith, 2020. " * 20
+
+        with patch.object(
+            lib._extractors[0],
+            "extract_and_validate",
+            return_value=ExtractionResult.from_text(extracted_text),
+        ):
+            result = lib.add(str(sample_pdf))
+
+        # Should have attempted upgrade
+        assert result.document.csl_json is not None
+        source = result.document.csl_json.get("_metadata_source")
+        assert source in ("FILENAME", "TEXT_EXTRACTED")
+
+    def test_zotero_metadata_not_upgraded(
+        self, library_with_text_extraction: Library, sample_pdf: Path
+    ) -> None:
+        """ZOTERO metadata should never be upgraded by text extraction."""
+        lib = library_with_text_extraction
+        zotero_metadata = {
+            "type": "article-journal",
+            "title": "Original Zotero Title",
+            "author": [{"family": "Smith", "given": "John"}],
+            "issued": {"date-parts": [[2020]]},
+        }
+
+        with patch.object(
+            lib._extractors[0],
+            "extract_and_validate",
+            return_value=ExtractionResult.from_text("Different text " * 20),
+        ):
+            result = lib.add(
+                str(sample_pdf),
+                metadata=zotero_metadata,
+                citekey="Smith2020",
+                metadata_source=MetadataSource.ZOTERO,
+            )
+
+        assert result.document.title == "Original Zotero Title"
+        assert result.document.csl_json.get("_metadata_source") == "ZOTERO"
+
+    def test_explicit_metadata_not_upgraded(
+        self, library_with_text_extraction: Library, sample_pdf: Path
+    ) -> None:
+        """EXPLICIT metadata should never be upgraded by text extraction."""
+        lib = library_with_text_extraction
+        explicit_metadata = {
+            "type": "article-journal",
+            "title": "Explicit Title",
+        }
+
+        with patch.object(
+            lib._extractors[0],
+            "extract_and_validate",
+            return_value=ExtractionResult.from_text("Different text " * 20),
+        ):
+            result = lib.add(
+                str(sample_pdf),
+                metadata=explicit_metadata,
+                metadata_source=MetadataSource.EXPLICIT,
+            )
+
+        assert result.document.title == "Explicit Title"
+        assert result.document.csl_json.get("_metadata_source") == "EXPLICIT"
+
+    def test_citekey_change_flags_needs_review(
+        self, library_with_text_extraction: Library, sample_pdf: Path
+    ) -> None:
+        """Upgrade that would change citekey should flag NEEDS_REVIEW."""
+        lib = library_with_text_extraction
+
+        mock_extraction = TextExtractionResult(
+            title=FieldExtraction(
+                value="Completely Different Title",
+                confidence=0.9,
+                source="heuristic",
+                alternatives=(),
+                reasoning="test",
+            ),
+            authors=(
+                FieldExtraction(
+                    value="DifferentAuthor, A.",
+                    confidence=0.9,
+                    source="heuristic",
+                    alternatives=(),
+                    reasoning="test",
+                ),
+            ),
+            date=FieldExtraction(
+                value="2021",
+                confidence=0.9,
+                source="heuristic",
+                alternatives=(),
+                reasoning="test",
+            ),
+            doc_type=FieldExtraction(
+                value="article-journal",
+                confidence=0.9,
+                source="heuristic",
+                alternatives=(),
+                reasoning="test",
+            ),
+            overall_confidence=0.9,
+            needs_review=False,
+            review_reasons=(),
+        )
+
+        with patch.object(
+            lib._extractors[0],
+            "extract_and_validate",
+            return_value=ExtractionResult.from_text("content " * 20),
+        ):
+            with patch.object(lib._text_extractor, "extract", return_value=mock_extraction):
+                result = lib.add(str(sample_pdf))
+
+        # Original citekey from filename should be preserved
+        # Document should be flagged if citekey would change
+        assert result.document.status == DocumentStatus.NEEDS_REVIEW
+        assert "citekey" in (result.document.error_message or "").lower()
+
+
+class TestReextractFailedDocuments:
+    """Tests for reextract on FAILED documents with preliminary metadata."""
+
+    @pytest.fixture
+    def library_with_failed_doc(self, temp_dir: Path) -> tuple[Library, str]:
+        """Create a library with a FAILED document that has preliminary metadata."""
+        library = Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=False,
+        )
+
+        pdf_path = temp_dir / "Smith - 2020 - Test Article.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 test content")
+
+        with patch.object(
+            library._extractors[0],
+            "extract_and_validate",
+            side_effect=ExtractionError("timeout", ErrorCode.EXTRACTION_TIMEOUT),
+        ):
+            try:
+                library.add(str(pdf_path))
+            except ExtractionError:
+                pass
+
+        docs = library.list()
+        assert len(docs) == 1
+        assert docs[0].status == DocumentStatus.FAILED
+        assert docs[0].citekey is not None  # Has preliminary metadata
+
+        return library, str(docs[0].id)
+
+    def test_reextract_failed_document_succeeds(
+        self, library_with_failed_doc: tuple[Library, str]
+    ) -> None:
+        """reextract() should work on FAILED documents with preliminary metadata."""
+        library, doc_id = library_with_failed_doc
+
+        successful_result = ExtractionResult.from_text(
+            text="Successfully reextracted content. " * 20,
+        )
+        with patch.object(
+            library._extractors[0],
+            "extract_and_validate",
+            return_value=successful_result,
+        ):
+            updated = library.reextract(doc_id)
+
+        assert updated.status == DocumentStatus.READY
+        assert updated.extracted_path is not None
+        assert updated.citekey is not None
+
+    def test_failed_document_retains_citekey(
+        self, library_with_failed_doc: tuple[Library, str]
+    ) -> None:
+        """FAILED documents should have citekey from preliminary metadata."""
+        library, doc_id = library_with_failed_doc
+        doc = library.get(doc_id)
+
+        assert doc.status == DocumentStatus.FAILED
+        assert doc.citekey is not None
+        assert doc.csl_json is not None
+        assert doc.csl_json.get("_metadata_source") == "FILENAME"

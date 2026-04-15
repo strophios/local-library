@@ -15,6 +15,7 @@ from local_library.core import (
     ExtractionError,
     Library,
     MetadataError,
+    MetadataSource,
     QualityError,
 )
 
@@ -143,7 +144,13 @@ def add(
             pdf_llm_enabled=effective_llm_extract,
             embed_on_add=not skip_embed,
         ) as lib:
-            result = lib.add(str(path), force=force, metadata=metadata)
+            metadata_source = MetadataSource.EXPLICIT if metadata else None
+            result = lib.add(
+                str(path),
+                force=force,
+                metadata=metadata,
+                metadata_source=metadata_source,
+            )
     except AcquisitionError as e:
         if json_output:
             err_console.print(json.dumps({"error": e.message, "code": e.code.value}))

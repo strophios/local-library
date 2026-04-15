@@ -4,8 +4,9 @@
 
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
@@ -24,6 +25,7 @@ from local_library.core import (
     ExtractionError,
     Library,
     MetadataError,
+    MetadataSource,
     QualityError,
 )
 from local_library.core.errors import ZoteroError
@@ -45,6 +47,49 @@ err_console = Console(stderr=True)
 # closed and recreated to release resources. Set conservatively high since
 # the primary crash issue (Rich + Marker conflict) is handled separately.
 EXTRACTION_BATCH_SIZE = 50
+
+
+def _make_console_progress_callback(
+    target_console: Console,
+) -> Callable[[str, float, dict[str, Any]], None]:
+    """Create a progress callback that prints to a Rich console.
+
+    Used when the Rich progress bar is stopped during extraction.
+    Prints pre-check, heartbeat, completion, and fallback events.
+
+    Args:
+        target_console: Rich Console instance for output.
+
+    Returns:
+        Progress callback function.
+    """
+
+    def callback(message: str, elapsed: float, context: dict[str, Any]) -> None:
+        event = context.get("event", "")
+        file_name = context.get("file_name", "")
+
+        if event == "precheck_complete":
+            pages = context.get("page_count", "?")
+            has_text = context.get("has_text", False)
+            timeout = context.get("timeout", "?")
+            text_flag = "text" if has_text else "image-only"
+            target_console.print(
+                f"  [dim]pre-check: {pages} pages, {text_flag}, timeout {timeout}s[/dim]"
+            )
+        elif event == "extraction_progress":
+            device = context.get("device", "?")
+            mins, secs = divmod(int(elapsed), 60)
+            target_console.print(
+                f"  [dim]extracting {file_name} on {device}... {mins}m {secs:02d}s elapsed[/dim]"
+            )
+        elif event == "extraction_complete":
+            duration = context.get("duration", elapsed)
+            mins, secs = divmod(int(duration), 60)
+            target_console.print(f"  [dim]extracted in {mins}m {secs:02d}s[/dim]")
+        elif event == "extraction_fallback":
+            target_console.print(f"  [yellow]using pdftext fallback for {file_name}[/yellow]")
+
+    return callback
 
 
 def get_default_zotero_dir() -> Path | None:
@@ -529,7 +574,12 @@ def _import_items_rich(
                 if lib is None or items_since_restart >= EXTRACTION_BATCH_SIZE:
                     if lib is not None:
                         lib.close()
-                    lib = Library(pdf_llm_enabled=llm_extract, embed_on_add=not skip_embed)
+                    progress_cb = _make_console_progress_callback(console)
+                    lib = Library(
+                        pdf_llm_enabled=llm_extract,
+                        embed_on_add=not skip_embed,
+                        progress_callback=progress_cb,
+                    )
                     items_since_restart = 0
 
                 # Check if this item will need extraction (not a skip)
@@ -665,7 +715,12 @@ def _process_single_item(
 
     # Import the PDF with metadata, preserving Zotero's citekey
     try:
-        result = lib.add(str(pdf.path), metadata=item.csl_json, citekey=citekey)
+        result = lib.add(
+            str(pdf.path),
+            metadata=item.csl_json,
+            citekey=citekey,
+            metadata_source=MetadataSource.ZOTERO,
+        )
 
         if result.is_duplicate:
             stats["skipped_duplicate"] += 1

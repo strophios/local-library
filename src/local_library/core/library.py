@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import logging
 import shutil
 import sqlite3
 import tempfile
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
     from local_library.core.models import RAGResponse
     from local_library.embeddings.base import Retriever
     from local_library.embeddings.reranking import CrossEncoderReranker
+    from local_library.ingestion.pdf import ProgressCallback
     from local_library.rag.interface import RAGInterface, RAGStream
 
 from local_library.config import (
@@ -32,7 +34,13 @@ from local_library.core.errors import (
     MetadataError,
     QualityError,
 )
-from local_library.core.models import AddResult, Document, DocumentStatus, EmbeddingStatus
+from local_library.core.models import (
+    AddResult,
+    Document,
+    DocumentStatus,
+    EmbeddingStatus,
+    MetadataSource,
+)
 from local_library.core.storage import (
     create_document,
     delete_document,
@@ -60,6 +68,8 @@ from local_library.ingestion.text_extraction import (
     TextMetadataExtractor,
     build_csl_json,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _cleanup_empty_parents(path: Path, stop_at: Path) -> None:
@@ -113,6 +123,7 @@ class Library:
         embed_on_add: bool = True,
         embedding_batch_size: int = 32,
         rag_model: str = "gemini/gemini-2.0-flash",
+        progress_callback: ProgressCallback | None = None,
     ) -> None:
         """Initialize the library.
 
@@ -131,6 +142,7 @@ class Library:
             embed_on_add: Whether to embed documents during add() (default: True).
             embedding_batch_size: Batch size for embedding computation (default: 32).
             rag_model: LLM model identifier for RAG queries (default: "gemini/gemini-2.0-flash").
+            progress_callback: Optional callback for extraction progress events.
         """
         # Use defaults from config if not specified
         self._db_path = db_path or get_database_path()
@@ -144,7 +156,13 @@ class Library:
         self._extractors: list[ContentExtractor] = (
             extractors
             if extractors is not None
-            else [PdfExtractor(lazy_load=True, llm_enabled=pdf_llm_enabled)]
+            else [
+                PdfExtractor(
+                    lazy_load=True,
+                    llm_enabled=pdf_llm_enabled,
+                    progress_callback=progress_callback,
+                )
+            ]
         )
 
         # Initialize metadata handler
@@ -508,12 +526,129 @@ class Library:
 
     # --- Add Pipeline ---
 
+    def _persist_preliminary_metadata(
+        self,
+        doc: Document,
+        source_path: str,
+        metadata: dict[str, Any] | None = None,
+        citekey: str | None = None,
+        metadata_source: MetadataSource | None = None,
+    ) -> Document:
+        """Persist best-effort metadata before extraction.
+
+        Ensures every document has a citekey and basic metadata regardless
+        of extraction outcome. Metadata source determines whether text
+        extraction should later attempt an upgrade.
+
+        Args:
+            doc: The PENDING document to update.
+            source_path: Original source path (used for filename parsing fallback).
+            metadata: Explicit CSL-JSON metadata if provided.
+            citekey: Explicit citekey if provided (e.g., from Zotero).
+            metadata_source: MetadataSource value for provenance tracking.
+
+        Returns:
+            Updated Document with metadata fields populated.
+        """
+        if metadata:
+            # Tag with provenance
+            source_value = (metadata_source or MetadataSource.EXPLICIT).value
+            tagged = {**metadata, "_metadata_source": source_value}
+            return self._process_metadata(doc, tagged, citekey=citekey)
+        else:
+            # Parse filename for best-effort metadata
+            from local_library.ingestion.metadata import parse_filename_metadata
+
+            filename_csl = parse_filename_metadata(Path(source_path))
+            try:
+                # Tag with FILENAME source
+                filename_csl["_metadata_source"] = MetadataSource.FILENAME.value
+                return self._process_metadata(doc, filename_csl)
+            except MetadataError:
+                # Filename parsing produced invalid metadata -- continue without it
+                logger.debug(
+                    "filename metadata parsing failed for %s, continuing without",
+                    source_path,
+                )
+                return doc
+
+    def _attempt_metadata_upgrade(self, doc: Document, text: str) -> Document:
+        """Attempt to upgrade filename-derived metadata with text extraction.
+
+        Only called when _metadata_source is FILENAME. If text extraction
+        produces useful metadata, upgrades the document. If the upgrade would
+        change the existing citekey, flags NEEDS_REVIEW instead of auto-applying.
+
+        Args:
+            doc: Document with FILENAME-sourced metadata.
+            text: Extracted text content for metadata extraction.
+
+        Returns:
+            Updated Document (possibly with upgraded metadata or NEEDS_REVIEW status).
+        """
+        extraction = self._text_extractor.extract(text)
+        csl_json = build_csl_json(extraction)
+
+        if "title" not in csl_json and "author" not in csl_json:
+            # Nothing useful extracted -- keep filename metadata
+            return doc
+
+        # Tag as text-extracted
+        csl_json["_metadata_source"] = MetadataSource.TEXT_EXTRACTED.value
+
+        # Check citekey stability
+        try:
+            result = self._metadata_handler.process(csl_json)
+        except MetadataError:
+            # Invalid metadata -- keep filename version
+            return doc
+
+        candidate_citekey = result.citekey
+
+        if doc.citekey and candidate_citekey != doc.citekey:
+            # Upgrade would change citekey -- flag for review, don't auto-apply
+            return update_document_status(
+                self._conn,
+                doc.id,
+                DocumentStatus.NEEDS_REVIEW,
+                error_message=(
+                    f"Text extraction suggests different metadata (citekey would change "
+                    f"from @{doc.citekey} to @{candidate_citekey}). "
+                    "Use `local-library review` to accept or reject the upgrade."
+                ),
+            )
+
+        # Same citekey (or no existing citekey) -- apply upgrade
+        unique_citekey = get_unique_citekey(self._conn, candidate_citekey)
+
+        doc = update_document_metadata(
+            self._conn,
+            doc.id,
+            citekey=unique_citekey,
+            csl_json=result.csl_json,
+            title=result.title,
+            authors=result.authors,
+            issued_date=result.issued_date,
+        )
+
+        # Set NEEDS_REVIEW if extraction confidence is low
+        if extraction.needs_review:
+            doc = update_document_status(
+                self._conn,
+                doc.id,
+                DocumentStatus.NEEDS_REVIEW,
+                error_message="; ".join(extraction.review_reasons),
+            )
+
+        return doc
+
     def add(
         self,
         source: str,
         force: bool = False,
         metadata: dict[str, Any] | None = None,
         citekey: str | None = None,
+        metadata_source: MetadataSource | None = None,
     ) -> AddResult:
         """Add a document to the library.
 
@@ -525,10 +660,11 @@ class Library:
         5. Check for duplicate by content hash
         6. Move to content-addressable storage
         7. Create database record
-        8. Extract text content
-        9. Process metadata (if provided)
-        10. Update record status
-        11. Embed document (if embed_on_add=True and sqlite-vec available)
+        8. Persist preliminary metadata (before extraction)
+        9. Extract text content
+        10. Conditional metadata upgrade (if FILENAME source and text extraction enabled)
+        11. Update record status
+        12. Embed document (if embed_on_add=True and sqlite-vec available)
 
         Args:
             source: Path to the source file
@@ -536,6 +672,9 @@ class Library:
             metadata: Optional CSL-JSON metadata dict
             citekey: Optional citekey to use (bypasses generation from metadata).
                     Useful when importing from external systems like Zotero.
+            metadata_source: Provenance of metadata (ZOTERO, EXPLICIT, FILENAME,
+                           TEXT_EXTRACTED). If None, defaults to FILENAME for bare
+                           paths or EXPLICIT for explicit metadata.
 
         Returns:
             AddResult containing the document and duplicate status
@@ -601,6 +740,11 @@ class Library:
                 storage_path=str(storage_path),
             )
 
+            # Persist preliminary metadata before extraction
+            doc = self._persist_preliminary_metadata(
+                doc, resolved_source, metadata, citekey, metadata_source
+            )
+
         # Extract text content
         try:
             extractor = self._find_extractor(storage_path)
@@ -627,13 +771,25 @@ class Library:
                 extracted_path=str(extracted_path),
             )
 
-            # Process metadata
-            if metadata:
-                # Explicit metadata provided
-                doc = self._process_metadata(doc, metadata, citekey=citekey)
-            elif self._text_extractor:
-                # Extract metadata from text
-                doc = self._process_text_extraction(doc, cleaned_text)
+            # Check for pdftext fallback -- degraded extraction needs review
+            if result.metadata.get("extraction_method") == "pdftext_fallback":
+                marker_reason = result.metadata.get("marker_failure_reason", "unknown")
+                doc = update_document_status(
+                    self._conn,
+                    doc.id,
+                    DocumentStatus.NEEDS_REVIEW,
+                    error_message=(
+                        f"pdftext fallback used (Marker failed: {marker_reason}). "
+                        "Text quality is degraded. Run reextract to try Marker again."
+                    ),
+                    error_code=ErrorCode.EXTRACTION_FALLBACK.value,
+                )
+
+            # Conditional metadata upgrade
+            current_source = (doc.csl_json or {}).get("_metadata_source")
+            if current_source == MetadataSource.FILENAME.value and self._text_extractor:
+                doc = self._attempt_metadata_upgrade(doc, cleaned_text)
+            # ZOTERO/EXPLICIT: authoritative, no upgrade
 
         except (ExtractionError, QualityError) as e:
             # Update record to failed
@@ -747,75 +903,6 @@ class Library:
             issued_date=result.issued_date,
         )
 
-    def _process_text_extraction(self, doc: Document, text: str) -> Document:
-        """Extract and process metadata from document text.
-
-        Args:
-            doc: The document to update
-            text: Extracted text content
-
-        Returns:
-            Updated document with extracted metadata
-        """
-        # Extract metadata from text
-        extraction = self._text_extractor.extract(text)
-
-        # Convert to CSL-JSON
-        csl_json = build_csl_json(extraction)
-
-        # Only process if we have enough metadata
-        if "title" not in csl_json and "author" not in csl_json:
-            # Nothing useful extracted - update status to NEEDS_REVIEW
-            return update_document_status(
-                self._conn,
-                doc.id,
-                DocumentStatus.NEEDS_REVIEW,
-                error_message="No metadata could be extracted from document text",
-            )
-
-        try:
-            # Process through MetadataHandler for validation and citekey
-            result = self._metadata_handler.process(csl_json)
-
-            # Get unique citekey
-            unique_citekey = get_unique_citekey(self._conn, result.citekey)
-
-            # Determine final status
-            final_status = (
-                DocumentStatus.NEEDS_REVIEW if extraction.needs_review else DocumentStatus.READY
-            )
-
-            # Update document
-            doc = update_document_metadata(
-                self._conn,
-                doc.id,
-                citekey=unique_citekey,
-                csl_json=result.csl_json,
-                title=result.title,
-                authors=result.authors,
-                issued_date=result.issued_date,
-            )
-
-            # Update status if needed
-            if final_status == DocumentStatus.NEEDS_REVIEW:
-                doc = update_document_status(
-                    self._conn,
-                    doc.id,
-                    DocumentStatus.NEEDS_REVIEW,
-                    error_message="; ".join(extraction.review_reasons),
-                )
-
-            return doc
-
-        except MetadataError:
-            # Extracted metadata failed validation - still set what we can
-            return update_document_status(
-                self._conn,
-                doc.id,
-                DocumentStatus.NEEDS_REVIEW,
-                error_message="Extracted metadata failed validation",
-            )
-
     # --- Query Operations ---
 
     def get(self, doc_id: str) -> Document:
@@ -911,13 +998,27 @@ class Library:
         extracted_path.parent.mkdir(parents=True, exist_ok=True)
         extracted_path.write_text(cleaned_text, encoding="utf-8")
 
-        # Update record status and extracted_path
-        update_document_status(
-            self._conn,
-            doc.id,
-            DocumentStatus.READY,
-            extracted_path=str(extracted_path),
-        )
+        # Determine status based on extraction method
+        if result.metadata.get("extraction_method") == "pdftext_fallback":
+            marker_reason = result.metadata.get("marker_failure_reason", "unknown")
+            update_document_status(
+                self._conn,
+                doc.id,
+                DocumentStatus.NEEDS_REVIEW,
+                extracted_path=str(extracted_path),
+                error_message=(
+                    f"pdftext fallback used (Marker failed: {marker_reason}). "
+                    "Text quality is degraded. Run reextract to try Marker again."
+                ),
+                error_code=ErrorCode.EXTRACTION_FALLBACK.value,
+            )
+        else:
+            update_document_status(
+                self._conn,
+                doc.id,
+                DocumentStatus.READY,
+                extracted_path=str(extracted_path),
+            )
 
         # Mark embeddings stale so they get re-embedded
         self._mark_embeddings_stale(doc.id)
