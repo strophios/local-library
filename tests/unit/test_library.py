@@ -1087,3 +1087,42 @@ class TestGetRetrieverReranking:
                 mock_rag_inst.query_stream.return_value = MagicMock()
                 lib.query_stream("test question", rerank=False)
                 mock_get.assert_called_once_with(mode="hybrid", rerank=False)
+
+
+class TestLibraryProgressCallback:
+    """Tests for Library progress callback forwarding."""
+
+    def test_callback_forwarded_to_pdf_extractor(self, temp_dir: Path) -> None:
+        """Library should forward progress_callback to default PdfExtractor."""
+        callback = MagicMock()
+        library = Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            progress_callback=callback,
+        )
+        # The default extractor should have the callback
+        assert library._extractors[0]._progress_callback is callback
+
+    def test_no_callback_default(self, temp_dir: Path) -> None:
+        """Library without progress_callback should leave extractor callback as None."""
+        library = Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+        )
+        assert library._extractors[0]._progress_callback is None
+
+    def test_custom_extractors_not_affected(self, temp_dir: Path) -> None:
+        """Custom extractors should not receive Library's progress_callback."""
+        custom = PdfExtractor(lazy_load=True)
+        callback = MagicMock()
+        library = Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            extractors=[custom],
+            progress_callback=callback,
+        )
+        # Custom extractors are used as-is
+        assert library._extractors[0]._progress_callback is None

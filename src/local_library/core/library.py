@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from local_library.core.models import RAGResponse
     from local_library.embeddings.base import Retriever
     from local_library.embeddings.reranking import CrossEncoderReranker
+    from local_library.ingestion.pdf import ProgressCallback
     from local_library.rag.interface import RAGInterface, RAGStream
 
 from local_library.config import (
@@ -113,6 +114,7 @@ class Library:
         embed_on_add: bool = True,
         embedding_batch_size: int = 32,
         rag_model: str = "gemini/gemini-2.0-flash",
+        progress_callback: ProgressCallback | None = None,
     ) -> None:
         """Initialize the library.
 
@@ -131,6 +133,7 @@ class Library:
             embed_on_add: Whether to embed documents during add() (default: True).
             embedding_batch_size: Batch size for embedding computation (default: 32).
             rag_model: LLM model identifier for RAG queries (default: "gemini/gemini-2.0-flash").
+            progress_callback: Optional callback for extraction progress events.
         """
         # Use defaults from config if not specified
         self._db_path = db_path or get_database_path()
@@ -144,7 +147,13 @@ class Library:
         self._extractors: list[ContentExtractor] = (
             extractors
             if extractors is not None
-            else [PdfExtractor(lazy_load=True, llm_enabled=pdf_llm_enabled)]
+            else [
+                PdfExtractor(
+                    lazy_load=True,
+                    llm_enabled=pdf_llm_enabled,
+                    progress_callback=progress_callback,
+                )
+            ]
         )
 
         # Initialize metadata handler
