@@ -14,6 +14,7 @@ from local_library.core.models import (
     ExtractionResult,
     FieldExtraction,
     MetadataResult,
+    MetadataSource,
     TextExtractionResult,
 )
 
@@ -26,6 +27,31 @@ class TestDocumentStatus:
         assert DocumentStatus.PENDING.value == "pending"
         assert DocumentStatus.READY.value == "ready"
         assert DocumentStatus.FAILED.value == "failed"
+
+
+class TestMetadataSource:
+    """Tests for MetadataSource enum."""
+
+    def test_zotero_value(self) -> None:
+        """ZOTERO should be a string enum with uppercase value."""
+        assert MetadataSource.ZOTERO == "ZOTERO"
+        assert MetadataSource.ZOTERO.value == "ZOTERO"
+
+    def test_explicit_value(self) -> None:
+        assert MetadataSource.EXPLICIT == "EXPLICIT"
+
+    def test_filename_value(self) -> None:
+        assert MetadataSource.FILENAME == "FILENAME"
+
+    def test_text_extracted_value(self) -> None:
+        assert MetadataSource.TEXT_EXTRACTED == "TEXT_EXTRACTED"
+
+    def test_is_authoritative(self) -> None:
+        """ZOTERO and EXPLICIT should be identifiable as authoritative."""
+        authoritative = {MetadataSource.ZOTERO, MetadataSource.EXPLICIT}
+        assert MetadataSource.ZOTERO in authoritative
+        assert MetadataSource.EXPLICIT in authoritative
+        assert MetadataSource.FILENAME not in authoritative
 
 
 class TestDocument:

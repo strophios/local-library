@@ -30,6 +30,19 @@ class EmbeddingStatus(str, Enum):
     STALE = "stale"  # Extracted text changed; embeddings need refresh
 
 
+class MetadataSource(str, Enum):
+    """Provenance of a document's metadata.
+
+    Controls whether text extraction should attempt to upgrade metadata
+    after successful extraction. Stored as _metadata_source in CSL-JSON blob.
+    """
+
+    ZOTERO = "ZOTERO"  # From Zotero import. Authoritative. Never upgrade.
+    EXPLICIT = "EXPLICIT"  # From --metadata flag. Authoritative. Never upgrade.
+    FILENAME = "FILENAME"  # Heuristic parse of input path. Low confidence. Upgrade.
+    TEXT_EXTRACTED = "TEXT_EXTRACTED"  # From text extraction pipeline. Don't re-upgrade.
+
+
 @dataclass(frozen=True)
 class Document:
     """A document record in the library.
