@@ -663,6 +663,225 @@ class TestExtractWithPreCheck:
         assert result.metadata.get("precheck_has_text") is True
 
 
+class TestPdftextFallback:
+    """Tests for pdftext fallback when Marker fails."""
+
+    @pytest.fixture
+    def extractor(self) -> PdfExtractor:
+        """Provide a PdfExtractor with lazy loading."""
+        return PdfExtractor(lazy_load=True)
+
+    @pytest.fixture
+    def sample_pdf(self, temp_dir: Path) -> Path:
+        """Create a sample PDF file for testing."""
+        pdf_path = temp_dir / "sample.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 test content")
+        return pdf_path
+
+    def test_fallback_on_marker_timeout(
+        self, extractor: PdfExtractor, sample_pdf: Path
+    ) -> None:
+        """extract() should return fallback text when Marker times out."""
+        fallback_text = "This is sufficient fallback text content. " * 10
+        precheck = PreCheckResult(
+            page_count=5,
+            has_extractable_text=True,
+            computed_timeout=900,
+            fallback_text=fallback_text,
+        )
+
+        with patch("local_library.ingestion.pdf._precheck_pdf", return_value=precheck):
+            with patch.object(extractor, "_ensure_worker_running"):
+                with patch.object(
+                    extractor,
+                    "_send_request",
+                    side_effect=ExtractionError(
+                        "timed out", ErrorCode.EXTRACTION_TIMEOUT
+                    ),
+                ):
+                    result = extractor.extract(sample_pdf)
+
+        assert result.metadata["extraction_method"] == "pdftext_fallback"
+        assert "timed out" in result.metadata["marker_failure_reason"]
+        assert result.text == fallback_text
+
+    def test_fallback_on_marker_crash(
+        self, extractor: PdfExtractor, sample_pdf: Path
+    ) -> None:
+        """extract() should return fallback text when Marker crashes on both devices."""
+        fallback_text = "Recovered text from pymupdf get_text(). " * 10
+        precheck = PreCheckResult(
+            page_count=3,
+            has_extractable_text=True,
+            computed_timeout=900,
+            fallback_text=fallback_text,
+        )
+
+        with patch("local_library.ingestion.pdf._precheck_pdf", return_value=precheck):
+            with patch.object(extractor, "_ensure_worker_running"):
+                with patch.object(
+                    extractor,
+                    "_send_request",
+                    side_effect=_WorkerCrashed(-11, str(sample_pdf)),
+                ):
+                    result = extractor.extract(sample_pdf)
+
+        assert result.metadata["extraction_method"] == "pdftext_fallback"
+        assert result.text == fallback_text
+
+    def test_no_fallback_for_image_only_raises(
+        self, extractor: PdfExtractor, sample_pdf: Path
+    ) -> None:
+        """extract() should raise when Marker fails and no fallback text available."""
+        precheck = PreCheckResult(
+            page_count=5,
+            has_extractable_text=False,
+            computed_timeout=1800,
+            fallback_text=None,
+        )
+
+        with patch("local_library.ingestion.pdf._precheck_pdf", return_value=precheck):
+            with patch.object(extractor, "_ensure_worker_running"):
+                with patch.object(
+                    extractor,
+                    "_send_request",
+                    side_effect=ExtractionError(
+                        "timed out", ErrorCode.EXTRACTION_TIMEOUT
+                    ),
+                ):
+                    with pytest.raises(ExtractionError):
+                        extractor.extract(sample_pdf)
+
+    def test_no_fallback_when_precheck_failed_raises(
+        self, extractor: PdfExtractor, sample_pdf: Path
+    ) -> None:
+        """extract() should raise when Marker fails and pre-check also failed."""
+        with patch(
+            "local_library.ingestion.pdf._precheck_pdf",
+            side_effect=Exception("corrupt"),
+        ):
+            with patch.object(extractor, "_ensure_worker_running"):
+                with patch.object(
+                    extractor,
+                    "_send_request",
+                    side_effect=ExtractionError(
+                        "timed out", ErrorCode.EXTRACTION_TIMEOUT
+                    ),
+                ):
+                    with pytest.raises(ExtractionError):
+                        extractor.extract(sample_pdf)
+
+    def test_fallback_includes_precheck_metadata(
+        self, extractor: PdfExtractor, sample_pdf: Path
+    ) -> None:
+        """Fallback result should include pre-check page count and text flag."""
+        fallback_text = "Enough text for the fallback to be usable here. " * 5
+        precheck = PreCheckResult(
+            page_count=42,
+            has_extractable_text=True,
+            computed_timeout=900,
+            fallback_text=fallback_text,
+        )
+
+        with patch("local_library.ingestion.pdf._precheck_pdf", return_value=precheck):
+            with patch.object(extractor, "_ensure_worker_running"):
+                with patch.object(
+                    extractor,
+                    "_send_request",
+                    side_effect=ExtractionError(
+                        "crashed", ErrorCode.EXTRACTION_MARKER_CRASH
+                    ),
+                ):
+                    result = extractor.extract(sample_pdf)
+
+        assert result.metadata["precheck_page_count"] == 42
+        assert result.metadata["precheck_has_text"] is True
+
+    def test_marker_success_ignores_fallback(
+        self, extractor: PdfExtractor, sample_pdf: Path
+    ) -> None:
+        """extract() should use Marker result when it succeeds, even if fallback available."""
+        precheck = PreCheckResult(
+            page_count=3,
+            has_extractable_text=True,
+            computed_timeout=900,
+            fallback_text="Fallback text that should NOT be used",
+        )
+        worker_response = {
+            "status": "ok",
+            "text": "Marker extracted markdown",
+            "metadata": {},
+        }
+
+        with patch("local_library.ingestion.pdf._precheck_pdf", return_value=precheck):
+            with patch.object(extractor, "_ensure_worker_running"):
+                with patch.object(
+                    extractor, "_send_request", return_value=worker_response
+                ):
+                    result = extractor.extract(sample_pdf)
+
+        assert "Marker extracted markdown" in result.text
+        assert result.metadata.get("extraction_method") != "pdftext_fallback"
+
+    def test_fallback_quality_checked_by_extract_and_validate(
+        self, extractor: PdfExtractor, sample_pdf: Path
+    ) -> None:
+        """extract_and_validate() should reject short fallback text with QualityError.
+
+        Design requirement: 'Fallback text that fails quality validation
+        (min_length, printable_ratio) is treated as no fallback -- the document
+        goes to FAILED as before.' This is enforced by extract_and_validate()
+        running quality checks on the fallback ExtractionResult returned by extract().
+        """
+        short_fallback = "Too short"  # Below min_length=100 threshold
+        precheck = PreCheckResult(
+            page_count=1,
+            has_extractable_text=True,
+            computed_timeout=900,
+            fallback_text=short_fallback,
+        )
+
+        with patch("local_library.ingestion.pdf._precheck_pdf", return_value=precheck):
+            with patch.object(extractor, "_ensure_worker_running"):
+                with patch.object(
+                    extractor,
+                    "_send_request",
+                    side_effect=ExtractionError(
+                        "timed out", ErrorCode.EXTRACTION_TIMEOUT
+                    ),
+                ):
+                    with pytest.raises(QualityError) as exc_info:
+                        extractor.extract_and_validate(sample_pdf)
+
+                    assert exc_info.value.code == ErrorCode.QUALITY_TOO_SHORT
+
+    def test_fallback_with_garbled_text_rejected(
+        self, extractor: PdfExtractor, sample_pdf: Path
+    ) -> None:
+        """extract_and_validate() should reject fallback with low printable ratio."""
+        garbled_fallback = "Hello" + "\x00" * 200  # Low printable ratio
+        precheck = PreCheckResult(
+            page_count=1,
+            has_extractable_text=True,
+            computed_timeout=900,
+            fallback_text=garbled_fallback,
+        )
+
+        with patch("local_library.ingestion.pdf._precheck_pdf", return_value=precheck):
+            with patch.object(extractor, "_ensure_worker_running"):
+                with patch.object(
+                    extractor,
+                    "_send_request",
+                    side_effect=ExtractionError(
+                        "crashed", ErrorCode.EXTRACTION_MARKER_CRASH
+                    ),
+                ):
+                    with pytest.raises(QualityError) as exc_info:
+                        extractor.extract_and_validate(sample_pdf)
+
+                    assert exc_info.value.code == ErrorCode.QUALITY_LOW_PRINTABLE
+
+
 class TestSendRequestTimeout:
     """Tests for _send_request timeout parameter."""
 

@@ -457,7 +457,6 @@ class PdfExtractor:
             )
 
         file_path_str = str(file_path.resolve())
-        was_fallback = False
 
         # Pre-check: analyze PDF for timeout scaling
         precheck: PreCheckResult | None = None
@@ -483,45 +482,68 @@ class PdfExtractor:
                 timeout,
             )
 
-        # Try with current device (MPS/auto)
         try:
-            self._ensure_worker_running()
-            response = self._send_request(file_path_str, timeout=timeout)
-        except _WorkerCrashed as e:
-            logger.warning(
-                "extraction worker crashed (exit=%d) on %s, retrying on CPU",
-                e.exit_code,
-                file_path.name,
-            )
-            was_fallback = True
-            response = self._extract_with_cpu_fallback(file_path_str, timeout=timeout)
+            # Try Marker extraction (MPS, then CPU fallback on crash)
+            was_cpu_fallback = False
+            try:
+                self._ensure_worker_running()
+                response = self._send_request(file_path_str, timeout=timeout)
+            except _WorkerCrashed as e:
+                logger.warning(
+                    "extraction worker crashed (exit=%d) on %s, retrying on CPU",
+                    e.exit_code,
+                    file_path.name,
+                )
+                was_cpu_fallback = True
+                response = self._extract_with_cpu_fallback(file_path_str, timeout=timeout)
 
-        result = self._handle_response(response, file_path_str)
+            result = self._handle_response(response, file_path_str)
 
-        # Merge extraction run info into result metadata
-        extraction_info: dict = {}
-        if self._last_extraction_info:
-            extraction_info = {**self._last_extraction_info}
-            if was_fallback:
-                extraction_info["extraction_device"] = "cpu (fallback)"
-                extraction_info["extraction_fallback"] = True
+            # Merge extraction run info into result metadata
+            extraction_info: dict = {}
+            if self._last_extraction_info:
+                extraction_info = {**self._last_extraction_info}
+                if was_cpu_fallback:
+                    extraction_info["extraction_device"] = "cpu (fallback)"
+                    extraction_info["extraction_fallback"] = True
 
-        # Include pre-check results in metadata
-        if precheck is not None:
-            extraction_info["precheck_page_count"] = precheck.page_count
-            extraction_info["precheck_has_text"] = precheck.has_extractable_text
+            # Include pre-check results in metadata
+            if precheck is not None:
+                extraction_info["precheck_page_count"] = precheck.page_count
+                extraction_info["precheck_has_text"] = precheck.has_extractable_text
 
-        if extraction_info:
-            result = ExtractionResult(
-                text=result.text,
-                metadata={**result.metadata, **extraction_info},
-                images=result.images,
-                page_count=result.page_count,
-                character_count=result.character_count,
-                printable_ratio=result.printable_ratio,
-            )
+            if extraction_info:
+                result = ExtractionResult(
+                    text=result.text,
+                    metadata={**result.metadata, **extraction_info},
+                    images=result.images,
+                    page_count=result.page_count,
+                    character_count=result.character_count,
+                    printable_ratio=result.printable_ratio,
+                )
 
-        return result
+            return result
+
+        except ExtractionError as marker_error:
+            # Marker failed -- try pdftext fallback if text was available
+            if precheck is not None and precheck.fallback_text is not None:
+                logger.warning(
+                    "Marker failed for %s (%s), using pdftext fallback",
+                    file_path.name,
+                    marker_error.code.value,
+                )
+                return ExtractionResult.from_text(
+                    text=precheck.fallback_text,
+                    metadata={
+                        "extraction_method": "pdftext_fallback",
+                        "marker_failure_reason": str(marker_error),
+                        "precheck_page_count": precheck.page_count,
+                        "precheck_has_text": precheck.has_extractable_text,
+                    },
+                )
+
+            # No fallback available -- re-raise original error
+            raise
 
     def _extract_with_cpu_fallback(self, file_path: str, timeout: int | None = None) -> dict:
         """Retry extraction on CPU after an MPS crash.
