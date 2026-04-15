@@ -44,12 +44,14 @@ class PreCheckResult:
     """Result of pre-extraction PDF analysis.
 
     Captures page count and text extractability from a fast pymupdf scan.
-    Used to set document-appropriate extraction timeouts.
+    Used to set document-appropriate extraction timeouts and hold fallback
+    text when Marker fails.
     """
 
     page_count: int
     has_extractable_text: bool
     computed_timeout: int
+    fallback_text: str | None = None
 
 
 def _compute_dynamic_timeout(
@@ -127,6 +129,16 @@ def _precheck_pdf(
                 total_text_len += len(page_text.strip())
 
             has_text = total_text_len > 100
+
+        # Capture full text as fallback if document has extractable text
+        fallback_text: str | None = None
+        if has_text:
+            pages_text = []
+            for page_idx in range(page_count):
+                page_text = doc[page_idx].get_text()
+                if page_text.strip():
+                    pages_text.append(page_text.strip())
+            fallback_text = "\n\n".join(pages_text) if pages_text else None
     finally:
         doc.close()
 
@@ -136,6 +148,7 @@ def _precheck_pdf(
         page_count=page_count,
         has_extractable_text=has_text,
         computed_timeout=timeout,
+        fallback_text=fallback_text,
     )
 
 

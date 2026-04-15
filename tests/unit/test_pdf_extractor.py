@@ -462,6 +462,21 @@ class TestPreCheckResult:
         with pytest.raises(AttributeError):
             result.page_count = 20  # type: ignore[misc]
 
+    def test_fallback_text_default_none(self) -> None:
+        """PreCheckResult fallback_text should default to None."""
+        result = PreCheckResult(page_count=5, has_extractable_text=False, computed_timeout=1800)
+        assert result.fallback_text is None
+
+    def test_fallback_text_set(self) -> None:
+        """PreCheckResult should accept fallback_text."""
+        result = PreCheckResult(
+            page_count=3,
+            has_extractable_text=True,
+            computed_timeout=900,
+            fallback_text="page text here",
+        )
+        assert result.fallback_text == "page text here"
+
 
 class TestPreCheckPdf:
     """Tests for _precheck_pdf() function using real pymupdf PDFs."""
@@ -535,6 +550,29 @@ class TestPreCheckPdf:
         result = _precheck_pdf(text_pdf, base_timeout=3600, max_timeout=7200)
 
         assert result.computed_timeout == 3600  # base > type minimum
+
+    def test_fallback_text_captured_for_text_pdf(self, text_pdf: Path) -> None:
+        """Pre-check should capture full text as fallback for text-extractable PDFs."""
+        result = _precheck_pdf(text_pdf)
+
+        assert result.fallback_text is not None
+        assert len(result.fallback_text) > 100
+        # Should contain text from all 3 pages
+        assert "Page 1" in result.fallback_text
+        assert "Page 2" in result.fallback_text
+        assert "Page 3" in result.fallback_text
+
+    def test_fallback_text_none_for_image_only_pdf(self, image_only_pdf: Path) -> None:
+        """Pre-check should not capture fallback text for image-only PDFs."""
+        result = _precheck_pdf(image_only_pdf)
+
+        assert result.fallback_text is None
+
+    def test_fallback_text_none_when_below_threshold(self, minimal_text_pdf: Path) -> None:
+        """Pre-check should not capture fallback text when text is below threshold."""
+        result = _precheck_pdf(minimal_text_pdf)
+
+        assert result.fallback_text is None
 
 
 class TestExtractWithPreCheck:
