@@ -99,16 +99,20 @@ class TestSchemaMigrationV3ToV4:
     """Tests for the v3 → v4 migration adding issued_year column."""
 
     def _create_v3_database(self, db_path: Path) -> sqlite3.Connection:
-        """Create a database at schema v3 with representative issued_date values."""
+        """Hand-build a v3-shaped database for migration testing.
+
+        Constructs the documents table with the exact v3 column set (no
+        issued_year) and sets schema_version to 3. Does NOT call
+        migrate_schema() here — migration is the code under test.
+        """
         conn = get_connection(db_path)
-        # Create v1 schema, then migrate forward to v3 so we exercise the real
-        # migration chain (avoids duplicating v3 DDL here).
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS schema_version (
                 version INTEGER PRIMARY KEY
             );
-            INSERT OR IGNORE INTO schema_version (version) VALUES (1);
+            DELETE FROM schema_version;
+            INSERT INTO schema_version (version) VALUES (3);
 
             CREATE TABLE IF NOT EXISTS documents (
                 id TEXT PRIMARY KEY,
@@ -119,15 +123,20 @@ class TestSchemaMigrationV3ToV4:
                 status TEXT NOT NULL DEFAULT 'pending',
                 citekey TEXT,
                 csl_json TEXT,
+                title TEXT,
+                authors TEXT,
+                issued_date TEXT,
                 error_message TEXT,
                 error_code TEXT,
+                embedding_status TEXT DEFAULT 'pending',
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL
             );
+            CREATE INDEX IF NOT EXISTS idx_documents_title ON documents(title);
+            CREATE INDEX IF NOT EXISTS idx_documents_issued_date ON documents(issued_date);
             """
         )
-        # Run migrations up to v3 (exercises v1→v2 and v2→v3 real code)
-        migrate_schema(conn, target_version=3)
+        conn.commit()
         return conn
 
     def _insert_doc(
@@ -227,9 +236,48 @@ class TestSchemaMigrationV3ToV4:
         assert version == SCHEMA_VERSION  # 4 after this task
 ```
 
-Note the test imports. If `temp_dir` isn't already imported via conftest auto-discovery, no import is needed — pytest picks it up from `tests/conftest.py`.
+Note the test imports. `temp_dir` is auto-discovered from `tests/conftest.py` — no explicit import needed.
 
-**Note:** If `migrate_schema()` doesn't currently accept a `target_version` parameter, the test that runs migrations up to v3 will need adjustment. Check the current signature at `storage.py:180` and pass-through appropriately. If the signature is `migrate_schema(conn)` only (no target), remove the `target_version=3` argument from the test helper and have the helper just call `migrate_schema(conn)` which will go to whatever the current version is — then hand-insert documents AFTER confirming we're at v3 (i.e., keep `SCHEMA_VERSION` at 3 in the fixture setup). A cleaner alternative: the fixture manually inserts the v3 state into the documents table (all columns v3 has) and sets `schema_version = 3` explicitly, skipping the migration chain. Pick whichever approach matches the existing `migrate_schema` signature.
+**Confirmed**: `migrate_schema(conn)` in the current codebase takes only the connection (no `target_version` parameter) and updates `schema_version` to `SCHEMA_VERSION` once at the end of the dispatch chain. The fixture above hand-builds the v3 state and sets `schema_version = 3` directly, so the test can observe "starting at v3" and then invoke the migration under test.
+
+Add a test verifying existing data survives the migration unchanged:
+
+```python
+def test_migration_preserves_existing_data(self, temp_dir: Path) -> None:
+    """Migration does not modify title, authors, citekey, or status."""
+    conn = self._create_v3_database(temp_dir / "test.db")
+    conn.execute(
+        """
+        INSERT INTO documents (
+            id, original_path, content_hash, storage_path,
+            status, citekey, title, authors, issued_date,
+            created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "docX", "/tmp/x.pdf", "hashX", "ab/cd/x.pdf",
+            "ready", "X2023", "Original Title", "Original Author",
+            "2023-06-15",
+            "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z",
+        ),
+    )
+    conn.commit()
+
+    migrate_schema(conn)
+
+    row = conn.execute(
+        """
+        SELECT status, citekey, title, authors, issued_date, issued_year
+        FROM documents WHERE id = 'docX'
+        """
+    ).fetchone()
+    assert row["status"] == "ready"
+    assert row["citekey"] == "X2023"
+    assert row["title"] == "Original Title"
+    assert row["authors"] == "Original Author"
+    assert row["issued_date"] == "2023-06-15"
+    assert row["issued_year"] == 2023  # Backfilled
+```
 
 **Step 3: Run test to verify it fails**
 
@@ -306,24 +354,22 @@ Ensure the `StorageError` and `ErrorCode` imports at the top of `storage.py` alr
 
 **Step 6: Register the migration in `migrate_schema()`**
 
-In `src/local_library/core/storage.py`, locate `migrate_schema()` (around line 180). Find the existing chain that dispatches to `_migrate_v1_to_v2()` and `_migrate_v2_to_v3()`. Add a third branch:
+The existing `migrate_schema()` pattern (storage.py:180-201) dispatches to each `_migrate_vN_to_vN+1()` in sequence and updates `schema_version` **once** at the end to `SCHEMA_VERSION`. Follow this pattern — do NOT add per-step `UPDATE schema_version` calls.
+
+In `src/local_library/core/storage.py`, locate `migrate_schema()` (line 180). After the `if current_version < 3:` branch (line 196-197), add a fourth branch:
 
 ```python
-# (after the v2→v3 branch)
 if current_version < 4:
-    logger.info("migrating database from schema v3 to v4...")
     _migrate_v3_to_v4(conn)
-    conn.execute("UPDATE schema_version SET version = 4;")
-    conn.commit()
-    logger.info("database migration complete (now at schema v4)")
-    current_version = 4
 ```
 
-Pattern-match on the existing v1→v2 / v2→v3 branches — adopt their exact logging, version-update, and commit style. If those branches already include the `logger.info(...)` calls, this one should too; if they don't, add them here and leave the others alone (we only need user-facing visibility for the current migration).
+The existing `UPDATE schema_version SET version = ?` at line 200 uses `SCHEMA_VERSION` (which is now 4), so no additional version-update code is needed.
 
-**Step 7: Enhance migration start/success/failure logging if not already present**
+**Step 7: Add informational migration logging**
 
-Around the top of `migrate_schema()`, add an informational log line that fires when migrations are actually needed:
+Currently `migrate_schema()` does not log when it runs. Add user-visible log lines so a user running the library after an upgrade understands any startup delay.
+
+At the top of `migrate_schema()`, right after computing `current_version`, add:
 
 ```python
 if current_version < SCHEMA_VERSION:
@@ -334,19 +380,26 @@ if current_version < SCHEMA_VERSION:
     )
 ```
 
-If the existing code already logs this, leave it alone. The goal: users running the library after an upgrade see a clear message explaining any startup delay.
+Immediately before the final `conn.commit()` at the end of the function, add:
+
+```python
+if current_version < SCHEMA_VERSION:
+    logger.info("database migration complete (now at schema v%d)", SCHEMA_VERSION)
+```
+
+Ensure `logger` is already imported / defined at module level in storage.py (check with `grep -n "^logger\|^import logging" src/local_library/core/storage.py`). If it isn't, add `logger = logging.getLogger(__name__)` near the top of the file.
 
 **Step 8: Run tests to verify they pass**
 
 Run: `uv run pytest tests/unit/test_storage.py::TestSchemaMigrationV3ToV4 -v`
 
-Expected: All 8 tests pass.
+Expected: All 9 tests pass (8 listed above + the added `test_migration_preserves_existing_data`).
 
 **Step 9: Run full unit suite to confirm no regressions**
 
 Run: `uv run pytest tests/unit/ --tb=short -q`
 
-Expected: 1173 tests pass (baseline) + 8 new = 1181 pass.
+Expected: 1173 tests pass (baseline) + 9 new = 1182 pass.
 
 **Step 10: Lint**
 
@@ -754,11 +807,11 @@ EOF
 - `src/local_library/core/storage.py:590-671` — `update_document_metadata()` signature and SQL
 - `src/local_library/core/storage.py` — search for the helper that converts rows to Document (likely `_row_to_document()` or similar); every SELECT must include `issued_year` and the conversion must handle it
 
-**Step 1: Find the row-to-Document conversion helper**
+**Step 1: Locate the row conversion helper (`_row_to_document`)**
 
-Run: `grep -n "Document(\|def _row_to\|def _to_document\|def get_document_by" src/local_library/core/storage.py | head -20`
+The conversion helper is `_row_to_document(row: sqlite3.Row) -> Document` at `src/local_library/core/storage.py:265`. It uses column-name access (e.g., `row["csl_json"]`). All `SELECT` statements in the module use `SELECT * FROM documents`, which means adding `issued_year` to the `CREATE TABLE` (done in Task 1) automatically makes `row["issued_year"]` available — **no individual SELECT column lists need editing**. The only change in the storage module is inside `_row_to_document` and inside the `UPDATE documents` statement in `update_document_metadata`.
 
-Identify the function(s) that unpack rows into Document instances, and which SELECT statements would need `issued_year` added to the column list.
+Read `_row_to_document` to see the Document constructor call pattern. Note the field order used (kwargs or positional) so the update is consistent.
 
 **Step 2: Write failing test**
 
@@ -873,15 +926,11 @@ WHERE id = ?
 
 Add `issued_year` to the parameter tuple passed to `conn.execute(...)` in the matching position. Serialize `csl_json` via `json.dumps(...)` (the existing pattern). For `issued_year`, pass it directly as an int (SQLite handles INTEGER natively).
 
-**Step 6: Update row-to-Document helper**
+**Step 6: Update `_row_to_document` to pass `issued_year`**
 
-Wherever rows are converted to Document instances (found in Step 1), add `issued_year` to:
-- The SELECT column list (every SELECT that produces a full Document)
-- The Document constructor call (positional or keyword)
+In `src/local_library/core/storage.py:265+`, locate `_row_to_document`. Add `issued_year=row["issued_year"]` to the Document constructor call (or assign via the existing pattern — if it uses positional args based on field order, insert after `issued_date`). Because all SELECTs are `SELECT *`, `row["issued_year"]` will be populated automatically after the schema change in Task 1.
 
-If the helper uses a dict-style construction (e.g., `Document(**row_dict)`), ensure the row_factory includes `issued_year`. If it's positional, update both the SELECT and the Document call consistently.
-
-Common locations to check with `grep -n "SELECT .* FROM documents" src/local_library/core/storage.py` — every match needs `issued_year` added to its column list to keep Document construction consistent.
+No other SELECT statements need changes. If a `grep -n "SELECT .* FROM documents" src/local_library/core/storage.py` reveals any non-`SELECT *` query, that one would need the column added — but at present there are none.
 
 **Step 7: Run tests to verify they pass**
 
@@ -1253,14 +1302,23 @@ class TestListDocumentsFilters:
         results = list_documents(seeded_conn)
         assert len(results) == 6
 
-    def test_empty_string_filter_returns_all(
+    def test_empty_string_filter_treated_as_no_filter(
         self, seeded_conn: sqlite3.Connection
     ) -> None:
-        """Empty string for *_contains filter is treated as no filter."""
+        """Empty string for *_contains / citekey_prefix is a no-op.
+
+        This is an intentional behavior decision: an empty substring
+        would match everything under LIKE semantics, which is surprising
+        and not useful. We treat empty strings as "no filter provided"
+        so that users passing an accidentally-empty flag value (e.g.,
+        from shell variable expansion) don't get unexpected behavior.
+        This is documented in Library.list() and list_documents()
+        docstrings.
+        """
         from local_library.core.storage import list_documents
-        results = list_documents(seeded_conn, author_contains="")
-        # Empty string is falsy — treated as no filter
-        assert len(results) == 6
+        assert len(list_documents(seeded_conn, author_contains="")) == 6
+        assert len(list_documents(seeded_conn, title_contains="")) == 6
+        assert len(list_documents(seeded_conn, citekey_prefix="")) == 6
 ```
 
 **Step 2: Run tests to verify they fail**
@@ -1309,8 +1367,12 @@ def list_documents(
         year_missing: If True, filter to issued_year IS NULL. Mutually
             exclusive with year.
         author_contains: Case-insensitive substring match on authors column.
+            Empty string is treated as "no filter" (deliberate; prevents
+            accidental match-everything from unexpanded shell variables).
         title_contains: Case-insensitive substring match on title column.
+            Empty string behaves like `author_contains` (no-op).
         citekey_prefix: Case-insensitive prefix match on citekey column.
+            Empty string behaves like `author_contains` (no-op).
 
     Returns:
         List of Document objects ordered by created_at DESC.
@@ -1349,17 +1411,13 @@ def list_documents(
         params.append(f"{_escape_like(citekey_prefix.lower())}%")
 
     where = f" WHERE {' AND '.join(predicates)}" if predicates else ""
-    # Keep column order consistent with existing SELECT in this module
-    # (executor: copy the existing column list from the original function body)
-    query = f"SELECT <existing-columns> FROM documents{where} ORDER BY created_at DESC"
+    query = f"SELECT * FROM documents{where} ORDER BY created_at DESC"
 
     rows = conn.execute(query, params).fetchall()
-    return [<row_to_document>(row) for row in rows]
+    return [_row_to_document(row) for row in rows]
 ```
 
-**Executor note:** The `<existing-columns>` and `<row_to_document>` placeholders must be replaced with the actual SELECT column list and row-conversion helper from the original `list_documents()` body. Read the original (lines 494-514) carefully and preserve everything except the WHERE construction.
-
-Ensure `Any` is imported (`from typing import Any` — check existing imports).
+The existing `list_documents()` uses `SELECT *` and `_row_to_document`, so the new implementation follows the same pattern — only the WHERE construction changes. Ensure `Any` is imported (`from typing import Any`); check existing imports at the top of `storage.py`.
 
 **Step 4: Run tests to verify they pass**
 
@@ -1624,10 +1682,8 @@ class TestCliListFilters:
         self, mock_library_for_list
     ) -> None:
         result = runner.invoke(app, ["list", "--year", "2023", "--year-missing"])
-        assert result.exit_code != 0
-        assert "mutually exclusive" in result.output.lower() or (
-            "cannot" in result.output.lower() and "both" in result.output.lower()
-        )
+        assert result.exit_code == 2
+        assert "--year and --year-missing are mutually exclusive" in result.output
 
     def test_author_contains_flag(self, mock_library_for_list) -> None:
         result = runner.invoke(app, ["list", "--author-contains", "Zippel"])
@@ -2058,6 +2114,6 @@ EOF
 - `Library.list()` accepts five new filter parameters; `list_documents()` builds dynamic WHERE with LIKE escaping
 - CLI `list` command exposes all filter flags with help text
 - MCP `list_documents` tool exposes all filter parameters with updated tool description
-- Migration, filter, and integration tests pass (~35-40 new tests)
+- Migration, filter, and integration tests pass (~55 new tests across test_storage.py, test_metadata.py, test_library.py, test_cli_list.py, test_mcp_server.py)
 - Full unit suite passes (baseline 1173 + new tests, no regressions)
 - CLAUDE.md files updated with freshness date 2026-04-16
