@@ -66,6 +66,7 @@ class Document:
     title: str | None = None  # Extracted title for search
     authors: str | None = None  # Formatted author string for search
     issued_date: str | None = None  # ISO date or year for search
+    issued_year: int | None = None  # Extracted year for filtering
 
     # Error tracking for failed documents
     error_message: str | None = None
@@ -185,6 +186,7 @@ class MetadataResult:
     title: str | None = None  # Extracted title for indexing
     authors: str | None = None  # Formatted author string for indexing
     issued_date: str | None = None  # ISO date or year for indexing
+    issued_year: int | None = None  # Extracted year as integer for filtering
     validation_warnings: tuple[str, ...] = ()  # Non-fatal validation issues
 
     # Structured data for future use (e.g., normalized authors table)
@@ -198,6 +200,7 @@ class MetadataResult:
         title: str | None = None,
         authors: str | None = None,
         issued_date: str | None = None,
+        issued_year: int | None = None,
         validation_warnings: list[str] | None = None,
         author_list: list[str] | None = None,
     ) -> "MetadataResult":
@@ -208,6 +211,7 @@ class MetadataResult:
             title=title,
             authors=authors,
             issued_date=issued_date,
+            issued_year=issued_year,
             validation_warnings=tuple(validation_warnings or []),
             author_list=tuple(author_list or []),
         )

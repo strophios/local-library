@@ -154,7 +154,14 @@ class TestListCommand:
         result = runner.invoke(app, ["list", "--status", "ready"])
 
         assert result.exit_code == 0
-        mock_library.list.assert_called_once_with(status=DocumentStatus.READY)
+        mock_library.list.assert_called_once_with(
+            status=DocumentStatus.READY,
+            year=None,
+            year_missing=False,
+            author_contains=None,
+            title_contains=None,
+            citekey_prefix=None,
+        )
 
     def test_list_invalid_status(self, mock_library: MagicMock) -> None:
         """list command should reject invalid status."""
@@ -316,7 +323,14 @@ class TestListCommandEnhanced:
         result = runner.invoke(app, ["list", "--status", "needs_review"])
 
         assert result.exit_code == 0
-        mock_library.list.assert_called_once_with(status=DocumentStatus.NEEDS_REVIEW)
+        mock_library.list.assert_called_once_with(
+            status=DocumentStatus.NEEDS_REVIEW,
+            year=None,
+            year_missing=False,
+            author_contains=None,
+            title_contains=None,
+            citekey_prefix=None,
+        )
 
 
 class TestListCommandPagination:

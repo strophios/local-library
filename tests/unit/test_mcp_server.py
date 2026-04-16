@@ -268,7 +268,49 @@ class TestListDocuments:
         """Status filter forwarded to Library.list()."""
         self.mock_library.list.return_value = []
         list_documents(status="ready")
-        self.mock_library.list.assert_called_with(status=DocumentStatus.READY)
+        _, kwargs = self.mock_library.list.call_args
+        assert kwargs.get("status") == DocumentStatus.READY
+
+    def test_year_parameter_forwarded(self) -> None:
+        """year parameter is forwarded to Library.list()."""
+        self.mock_library.list.return_value = []
+        list_documents(year=2023)
+        _, kwargs = self.mock_library.list.call_args
+        assert kwargs.get("year") == 2023
+
+    def test_year_missing_parameter_forwarded(self) -> None:
+        """year_missing parameter is forwarded to Library.list()."""
+        self.mock_library.list.return_value = []
+        list_documents(year_missing=True)
+        _, kwargs = self.mock_library.list.call_args
+        assert kwargs.get("year_missing") is True
+
+    def test_author_contains_forwarded(self) -> None:
+        self.mock_library.list.return_value = []
+        list_documents(author_contains="Zippel")
+        _, kwargs = self.mock_library.list.call_args
+        assert kwargs.get("author_contains") == "Zippel"
+
+    def test_title_contains_forwarded(self) -> None:
+        self.mock_library.list.return_value = []
+        list_documents(title_contains="Methods")
+        _, kwargs = self.mock_library.list.call_args
+        assert kwargs.get("title_contains") == "Methods"
+
+    def test_citekey_prefix_forwarded(self) -> None:
+        self.mock_library.list.return_value = []
+        list_documents(citekey_prefix="Bourdieu")
+        _, kwargs = self.mock_library.list.call_args
+        assert kwargs.get("citekey_prefix") == "Bourdieu"
+
+    def test_year_and_year_missing_returns_tool_error(self) -> None:
+        """Mutual exclusion surfaces as a tool-level error to Claude."""
+        self.mock_library.list.side_effect = ValueError(
+            "year and year_missing are mutually exclusive"
+        )
+        result = list_documents(year=2023, year_missing=True)
+        assert result.startswith("Error: ")
+        assert "mutually exclusive" in result.lower()
 
 
 class TestGetDocumentText:

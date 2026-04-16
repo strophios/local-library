@@ -1,6 +1,6 @@
 # CLI Domain
 
-Last verified: 2026-04-15
+Last verified: 2026-04-16
 
 ## Purpose
 
@@ -31,6 +31,10 @@ Command-line interface for the local-library system. Provides user-facing comman
   - reextract command re-runs extraction pipeline on stored PDFs; overwrites extracted markdown and marks embeddings STALE
   - reextract supports single document (UUID/@citekey) or --all for bulk re-extraction
   - reextract --all targets READY and NEEDS_REVIEW documents; continues on per-document errors
+  - list command accepts --year (integer), --year-missing (flag), --author-contains (string), --title-contains (string), --citekey-prefix (string) filters that combine with AND semantics
+  - list --year and --year-missing are mutually exclusive; passing both raises error
+  - list substring filters (--author-contains, --title-contains) are case-insensitive; wildcard characters (%, _) are matched literally rather than as patterns
+  - list --citekey-prefix is case-insensitive prefix match
 - **Expects**: Library context manager for database access; editor available for update/review/open commands
 
 ## Dependencies

@@ -62,7 +62,7 @@ from local_library.ingestion.artifact_cleanup import clean_artifacts
 from local_library.ingestion.base import ContentAcquirer, ContentExtractor, compute_storage_path
 from local_library.ingestion.file import FileAcquirer
 from local_library.ingestion.markdown_cleanup import cleanup_markdown
-from local_library.ingestion.metadata import MetadataHandler
+from local_library.ingestion.metadata import MetadataHandler, extract_year_from_csl
 from local_library.ingestion.pdf import PdfExtractor
 from local_library.ingestion.text_extraction import (
     TextMetadataExtractor,
@@ -629,6 +629,7 @@ class Library:
             title=result.title,
             authors=result.authors,
             issued_date=result.issued_date,
+            issued_year=result.issued_year,
         )
 
         # Set NEEDS_REVIEW if extraction confidence is low
@@ -901,6 +902,7 @@ class Library:
             title=result.title,
             authors=result.authors,
             issued_date=result.issued_date,
+            issued_year=result.issued_year,
         )
 
     # --- Query Operations ---
@@ -1098,6 +1100,7 @@ class Library:
         title = None
         authors = None
         issued_date = None
+        issued_year = None
 
         if csl_json:
             title = csl_json.get("title")
@@ -1120,6 +1123,8 @@ class Library:
                     if date_parts:
                         issued_date = str(date_parts[0])  # Year
 
+            issued_year = extract_year_from_csl(csl_json)
+
         # Update status if provided
         if status is not None:
             update_document_status(self._conn, doc_id, status)
@@ -1133,18 +1138,45 @@ class Library:
             title=title,
             authors=authors,
             issued_date=issued_date,
+            issued_year=issued_year,
         )
 
-    def list(self, status: DocumentStatus | None = None) -> list[Document]:
-        """List all documents, optionally filtered by status.
+    def list(
+        self,
+        status: DocumentStatus | None = None,
+        year: int | None = None,
+        year_missing: bool = False,
+        author_contains: str | None = None,
+        title_contains: str | None = None,
+        citekey_prefix: str | None = None,
+    ) -> list[Document]:
+        """List documents with optional filtering.
+
+        All filters are optional and combine with AND semantics.
 
         Args:
-            status: Filter by status if provided
+            status: Exact status match (DocumentStatus enum).
+            year: Exact match against issued_year. Mutually exclusive with year_missing.
+            year_missing: If True, return only documents with no extractable year.
+            author_contains: Case-insensitive substring match on authors.
+            title_contains: Case-insensitive substring match on title.
+            citekey_prefix: Case-insensitive prefix match on citekey.
 
         Returns:
-            List of documents, ordered by created_at descending
+            List of Document objects ordered by created_at DESC.
+
+        Raises:
+            ValueError: If year and year_missing are both provided.
         """
-        return list_documents(self._conn, status=status)
+        return list_documents(
+            self._conn,
+            status=status,
+            year=year,
+            year_missing=year_missing,
+            author_contains=author_contains,
+            title_contains=title_contains,
+            citekey_prefix=citekey_prefix,
+        )
 
     def delete(self, doc_id: str, delete_files: bool = True) -> bool:
         """Delete a document and optionally its files.

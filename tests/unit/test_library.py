@@ -431,6 +431,59 @@ class TestLibraryList:
         assert failed_docs[0].status == DocumentStatus.FAILED
 
 
+class TestLibraryListFilters:
+    """Tests that Library.list() passes filters through to storage layer."""
+
+    def test_year_filter_forwarded(self, temp_dir: Path) -> None:
+        with Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            embed_on_add=False,
+        ) as library:
+            with patch("local_library.core.library.list_documents") as mock_list:
+                mock_list.return_value = []
+                library.list(year=2023)
+                mock_list.assert_called_once_with(
+                    library._conn,
+                    status=None,
+                    year=2023,
+                    year_missing=False,
+                    author_contains=None,
+                    title_contains=None,
+                    citekey_prefix=None,
+                )
+
+    def test_mutual_exclusion_raises_value_error(self, temp_dir: Path) -> None:
+        with Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            embed_on_add=False,
+        ) as library:
+            with pytest.raises(ValueError, match="mutually exclusive"):
+                library.list(year=2023, year_missing=True)
+
+    def test_multiple_filters_combined(self, temp_dir: Path) -> None:
+        with Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            embed_on_add=False,
+        ) as library:
+            with patch("local_library.core.library.list_documents") as mock_list:
+                mock_list.return_value = []
+                library.list(
+                    status=DocumentStatus.READY,
+                    year=2023,
+                    author_contains="Zippel",
+                )
+                args, kwargs = mock_list.call_args
+                assert kwargs["status"] == DocumentStatus.READY
+                assert kwargs["year"] == 2023
+                assert kwargs["author_contains"] == "Zippel"
+
+
 class TestLibraryDelete:
     """Tests for Library.delete() method."""
 
@@ -1569,5 +1622,71 @@ class TestLibraryChunkAccess:
                 chunks = library.get_chunks(result.document.id)  # Pass UUID directly
 
             assert chunks == []
+        finally:
+            library.close()
+
+
+class TestLibraryIssuedYearWritePaths:
+    """Tests that issued_year is persisted through all three Library write paths."""
+
+    def test_add_with_explicit_metadata_persists_issued_year(self, temp_dir: Path) -> None:
+        """Library.add() with explicit CSL-JSON metadata populates issued_year."""
+        library = Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=False,
+            embed_on_add=False,
+        )
+
+        try:
+            pdf_path = temp_dir / "test.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4 test content")
+
+            metadata = {
+                "type": "article-journal",
+                "title": "Test Paper",
+                "author": [{"family": "Smith", "given": "J"}],
+                "issued": {"date-parts": [[2023, 6, 15]]},
+            }
+
+            with patch.object(library._extractors[0], "extract_and_validate") as mock_ext:
+                mock_ext.return_value = MagicMock(text="content " * 20)
+                result = library.add(str(pdf_path), metadata=metadata)
+
+            doc = library.get(str(result.document.id))
+            assert doc.issued_year == 2023
+        finally:
+            library.close()
+
+    def test_update_metadata_persists_issued_year(self, temp_dir: Path) -> None:
+        """Library.update_metadata() populates issued_year from inline extraction."""
+        library = Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=False,
+            embed_on_add=False,
+        )
+
+        try:
+            pdf_path = temp_dir / "test.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4 test content")
+
+            with patch.object(library._extractors[0], "extract_and_validate") as mock_ext:
+                mock_ext.return_value = MagicMock(text="content " * 20)
+                result = library.add(str(pdf_path))
+
+            # Update metadata with a new CSL-JSON that has an issued year
+            new_csl = {
+                "type": "article-journal",
+                "title": "Updated Title",
+                "author": [{"family": "Smith"}],
+                "issued": {"date-parts": [[1984]]},
+            }
+            library.update_metadata(result.document.id, csl_json=new_csl)
+
+            doc = library.get(str(result.document.id))
+            assert doc.issued_year == 1984
         finally:
             library.close()

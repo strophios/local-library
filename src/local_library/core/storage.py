@@ -3,6 +3,7 @@
 # pattern: Imperative Shell
 
 import json
+import logging
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -15,8 +16,10 @@ from local_library.core.errors import ErrorCode, LookupError, StorageError
 from local_library.core.models import Document, DocumentStatus, EmbeddingStatus
 from local_library.core.vec_extension import create_vec0_table, load_vec_extension
 
+logger = logging.getLogger(__name__)
+
 # Schema version for migrations
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA_TABLES = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -35,6 +38,7 @@ CREATE TABLE IF NOT EXISTS documents (
     title TEXT,
     authors TEXT,
     issued_date TEXT,
+    issued_year INTEGER,
     error_message TEXT,
     error_code TEXT,
     embedding_status TEXT DEFAULT 'pending',
@@ -62,6 +66,7 @@ CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
 CREATE INDEX IF NOT EXISTS idx_documents_citekey ON documents(citekey);
 CREATE INDEX IF NOT EXISTS idx_documents_title ON documents(title);
 CREATE INDEX IF NOT EXISTS idx_documents_issued_date ON documents(issued_date);
+CREATE INDEX IF NOT EXISTS idx_documents_issued_year ON documents(issued_year);
 CREATE INDEX IF NOT EXISTS idx_chunks_doc_id ON chunks(doc_id);
 """
 
@@ -189,6 +194,13 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
     row = cursor.fetchone()
     current_version = row["version"] if row else 0
 
+    if current_version < SCHEMA_VERSION:
+        logger.info(
+            "migrating database from schema v%d to v%d...",
+            current_version,
+            SCHEMA_VERSION,
+        )
+
     if current_version < 2:
         # Migration to v2: Add indexed metadata columns
         _migrate_v1_to_v2(conn)
@@ -196,8 +208,15 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
     if current_version < 3:
         _migrate_v2_to_v3(conn)
 
+    if current_version < 4:
+        _migrate_v3_to_v4(conn)
+
     # Update schema version
     conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
+
+    if current_version < SCHEMA_VERSION:
+        logger.info("database migration complete (now at schema v%d)", SCHEMA_VERSION)
+
     conn.commit()
 
 
@@ -262,6 +281,41 @@ def _migrate_v2_to_v3(conn: sqlite3.Connection) -> None:
         create_vec0_table(conn, "chunk_vectors", dimensions=768, distance_metric="cosine")
 
 
+def _migrate_v3_to_v4(conn: sqlite3.Connection) -> None:
+    """Migrate schema from v3 to v4.
+
+    Adds a derived `issued_year INTEGER` column to `documents` for
+    efficient year-based filtering. Backfills from the existing
+    `issued_date` text column using SQLite's SUBSTR + CAST with a
+    GLOB guard to skip malformed values.
+
+    Args:
+        conn: SQLite connection in a transaction.
+
+    Raises:
+        StorageError: If the migration steps fail.
+    """
+    try:
+        conn.execute("ALTER TABLE documents ADD COLUMN issued_year INTEGER;")
+        conn.execute(
+            """
+            UPDATE documents
+            SET issued_year = CAST(SUBSTR(issued_date, 1, 4) AS INTEGER)
+            WHERE issued_date IS NOT NULL
+              AND issued_date GLOB '[0-9][0-9][0-9][0-9]*';
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_documents_issued_year ON documents(issued_year);"
+        )
+    except sqlite3.Error as e:
+        raise StorageError(
+            f"failed to migrate schema from v3 to v4: {e}",
+            ErrorCode.STORAGE_MIGRATION_FAILED,
+            details={"from_version": 3, "to_version": 4},
+        ) from e
+
+
 def _row_to_document(row: sqlite3.Row) -> Document:
     """Convert a database row to a Document object."""
     csl_json = None
@@ -280,6 +334,7 @@ def _row_to_document(row: sqlite3.Row) -> Document:
         title=row["title"],
         authors=row["authors"],
         issued_date=row["issued_date"],
+        issued_year=row["issued_year"],
         error_message=row["error_message"],
         error_code=row["error_code"],
         embedding_status=(
@@ -491,27 +546,87 @@ def get_documents_by_partial_id(conn: sqlite3.Connection, partial_id: str) -> li
     return [_row_to_document(row) for row in cursor.fetchall()]
 
 
+def _escape_like(value: str) -> str:
+    """Escape special LIKE characters (%, _, \\) for literal matching.
+
+    Args:
+        value: Raw user input.
+
+    Returns:
+        Value with SQL LIKE metacharacters escaped.
+    """
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def list_documents(
     conn: sqlite3.Connection,
     status: DocumentStatus | None = None,
+    year: int | None = None,
+    year_missing: bool = False,
+    author_contains: str | None = None,
+    title_contains: str | None = None,
+    citekey_prefix: str | None = None,
 ) -> list[Document]:
-    """List all documents, optionally filtered by status.
+    """List documents with optional filtering.
+
+    Filters combine with AND semantics. Substring filters
+    (author_contains, title_contains) use case-insensitive LIKE with
+    metacharacter escaping to prevent accidental wildcard injection.
+    citekey_prefix uses case-insensitive prefix match.
 
     Args:
-        conn: Database connection
-        status: Filter by status if provided
+        conn: Database connection.
+        status: Exact status match (DocumentStatus enum).
+        year: Exact year match against issued_year column.
+        year_missing: If True, filter to issued_year IS NULL. Mutually
+            exclusive with year.
+        author_contains: Case-insensitive substring match on authors column.
+            Empty string is treated as "no filter" (deliberate; prevents
+            accidental match-everything from unexpanded shell variables).
+        title_contains: Case-insensitive substring match on title column.
+            Empty string behaves like `author_contains` (no-op).
+        citekey_prefix: Case-insensitive prefix match on citekey column.
+            Empty string behaves like `author_contains` (no-op).
 
     Returns:
-        List of documents, ordered by created_at descending
+        List of Document objects ordered by created_at DESC.
+
+    Raises:
+        ValueError: If both year and year_missing are provided.
     """
+    if year is not None and year_missing:
+        raise ValueError("year and year_missing are mutually exclusive filters")
+
+    predicates: list[str] = []
+    params: list[Any] = []
+
     if status is not None:
-        cursor = conn.execute(
-            "SELECT * FROM documents WHERE status = ? ORDER BY created_at DESC",
-            (status.value,),
-        )
-    else:
-        cursor = conn.execute("SELECT * FROM documents ORDER BY created_at DESC")
-    return [_row_to_document(row) for row in cursor.fetchall()]
+        predicates.append("status = ?")
+        params.append(status.value)
+
+    if year_missing:
+        predicates.append("issued_year IS NULL")
+    elif year is not None:
+        predicates.append("issued_year = ?")
+        params.append(year)
+
+    if author_contains:
+        predicates.append("LOWER(authors) LIKE ? ESCAPE '\\'")
+        params.append(f"%{_escape_like(author_contains.lower())}%")
+
+    if title_contains:
+        predicates.append("LOWER(title) LIKE ? ESCAPE '\\'")
+        params.append(f"%{_escape_like(title_contains.lower())}%")
+
+    if citekey_prefix:
+        predicates.append("LOWER(citekey) LIKE ? ESCAPE '\\'")
+        params.append(f"{_escape_like(citekey_prefix.lower())}%")
+
+    where = f" WHERE {' AND '.join(predicates)}" if predicates else ""
+    query = f"SELECT * FROM documents{where} ORDER BY created_at DESC"
+
+    rows = conn.execute(query, params).fetchall()
+    return [_row_to_document(row) for row in rows]
 
 
 def update_document_status(
@@ -595,6 +710,7 @@ def update_document_metadata(
     title: str | None = None,
     authors: str | None = None,
     issued_date: str | None = None,
+    issued_year: int | None = None,
 ) -> Document:
     """Update a document's metadata fields.
 
@@ -609,6 +725,7 @@ def update_document_metadata(
         title: Extracted title
         authors: Formatted author string
         issued_date: ISO date or year
+        issued_year: Extracted year for filtering
 
     Returns:
         Updated Document
@@ -633,6 +750,7 @@ def update_document_metadata(
                 title = COALESCE(?, title),
                 authors = COALESCE(?, authors),
                 issued_date = COALESCE(?, issued_date),
+                issued_year = COALESCE(?, issued_year),
                 updated_at = ?
             WHERE id = ?
             """,
@@ -642,6 +760,7 @@ def update_document_metadata(
                 title,
                 authors,
                 issued_date,
+                issued_year,
                 now.isoformat(),
                 str(doc_id),
             ),

@@ -9,6 +9,7 @@ import pytest
 from local_library.core.errors import ErrorCode, LookupError
 from local_library.core.models import DocumentStatus
 from local_library.core.storage import (
+    SCHEMA_VERSION,
     create_document,
     delete_document,
     get_all_citekeys,
@@ -21,6 +22,7 @@ from local_library.core.storage import (
     get_unique_citekey,
     init_schema,
     list_documents,
+    migrate_schema,
     transaction,
     update_document_metadata,
     update_document_status,
@@ -557,3 +559,339 @@ class TestGetAllCitekeys:
         citekeys = get_all_citekeys(db_conn)
 
         assert citekeys == []
+
+
+class TestSchemaMigrationV3ToV4:
+    """Tests for the v3 → v4 migration adding issued_year column."""
+
+    def _create_v3_database(self, db_path: Path) -> sqlite3.Connection:
+        """Hand-build a v3-shaped database for migration testing.
+
+        Constructs the documents table with the exact v3 column set (no
+        issued_year) and sets schema_version to 3. Does NOT call
+        migrate_schema() here — migration is the code under test.
+        """
+        conn = get_connection(db_path)
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS schema_version (
+                version INTEGER PRIMARY KEY
+            );
+            DELETE FROM schema_version;
+            INSERT INTO schema_version (version) VALUES (3);
+
+            CREATE TABLE IF NOT EXISTS documents (
+                id TEXT PRIMARY KEY,
+                original_path TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                storage_path TEXT NOT NULL,
+                extracted_path TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                citekey TEXT,
+                csl_json TEXT,
+                title TEXT,
+                authors TEXT,
+                issued_date TEXT,
+                error_message TEXT,
+                error_code TEXT,
+                embedding_status TEXT DEFAULT 'pending',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_documents_title ON documents(title);
+            CREATE INDEX IF NOT EXISTS idx_documents_issued_date ON documents(issued_date);
+            """
+        )
+        conn.commit()
+        return conn
+
+    def _insert_doc(
+        self,
+        conn: sqlite3.Connection,
+        doc_id: str,
+        issued_date: str | None,
+    ) -> None:
+        """Insert a minimal document row with a given issued_date."""
+        conn.execute(
+            """
+            INSERT INTO documents (
+                id, original_path, content_hash, storage_path,
+                status, issued_date, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, 'ready', ?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+            """,
+            (doc_id, f"/tmp/{doc_id}.pdf", doc_id, f"ab/cd/{doc_id}.pdf", issued_date),
+        )
+        conn.commit()
+
+    def test_migration_adds_issued_year_column(self, temp_dir: Path) -> None:
+        """After migration, documents table has an issued_year INTEGER column."""
+        conn = self._create_v3_database(temp_dir / "test.db")
+
+        # Verify v3 state: no issued_year column
+        cols_v3 = {row[1] for row in conn.execute("PRAGMA table_info(documents)")}
+        assert "issued_year" not in cols_v3
+
+        # Run migration to current version (should be 4 after this task)
+        migrate_schema(conn)
+
+        cols_v4 = {row[1] for row in conn.execute("PRAGMA table_info(documents)")}
+        assert "issued_year" in cols_v4
+
+    def test_migration_creates_issued_year_index(self, temp_dir: Path) -> None:
+        """Migration creates idx_documents_issued_year index."""
+        conn = self._create_v3_database(temp_dir / "test.db")
+        migrate_schema(conn)
+        indexes = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='documents'"
+            )
+        }
+        assert "idx_documents_issued_year" in indexes
+
+    def test_migration_bumps_schema_version_to_4(self, temp_dir: Path) -> None:
+        """After migration, schema_version row is 4."""
+        conn = self._create_v3_database(temp_dir / "test.db")
+        migrate_schema(conn)
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
+        assert version == 4
+
+    def test_migration_backfills_iso_date(self, temp_dir: Path) -> None:
+        """Migration extracts year from ISO-format issued_date."""
+        conn = self._create_v3_database(temp_dir / "test.db")
+        self._insert_doc(conn, "doc1", "2023-06-15")
+        migrate_schema(conn)
+        year = conn.execute("SELECT issued_year FROM documents WHERE id = 'doc1'").fetchone()[0]
+        assert year == 2023
+
+    def test_migration_backfills_year_only(self, temp_dir: Path) -> None:
+        """Migration extracts year from year-only issued_date."""
+        conn = self._create_v3_database(temp_dir / "test.db")
+        self._insert_doc(conn, "doc1", "1984")
+        migrate_schema(conn)
+        year = conn.execute("SELECT issued_year FROM documents WHERE id = 'doc1'").fetchone()[0]
+        assert year == 1984
+
+    def test_migration_nulls_year_for_missing_date(self, temp_dir: Path) -> None:
+        """Documents with NULL issued_date get NULL issued_year."""
+        conn = self._create_v3_database(temp_dir / "test.db")
+        self._insert_doc(conn, "doc1", None)
+        migrate_schema(conn)
+        year = conn.execute("SELECT issued_year FROM documents WHERE id = 'doc1'").fetchone()[0]
+        assert year is None
+
+    def test_migration_nulls_year_for_malformed_date(self, temp_dir: Path) -> None:
+        """Non-numeric issued_date values yield NULL issued_year."""
+        conn = self._create_v3_database(temp_dir / "test.db")
+        self._insert_doc(conn, "doc1", "Spring 2023")
+        self._insert_doc(conn, "doc2", "XXXX")
+        migrate_schema(conn)
+        rows = {row[0]: row[1] for row in conn.execute("SELECT id, issued_year FROM documents")}
+        assert rows["doc1"] is None
+        assert rows["doc2"] is None
+
+    def test_init_schema_auto_migrates_v3_to_v4(self, temp_dir: Path) -> None:
+        """init_schema() auto-runs the v3→v4 migration."""
+        conn = self._create_v3_database(temp_dir / "test.db")
+        # Explicitly verify v3 starting state
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
+        assert version == 3
+        # Call init_schema (fresh invocation) which should auto-migrate
+        init_schema(conn)
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
+        assert version == SCHEMA_VERSION  # 4 after this task
+
+    def test_migration_preserves_existing_data(self, temp_dir: Path) -> None:
+        """Migration does not modify title, authors, citekey, or status."""
+        conn = self._create_v3_database(temp_dir / "test.db")
+        conn.execute(
+            """
+            INSERT INTO documents (
+                id, original_path, content_hash, storage_path,
+                status, citekey, title, authors, issued_date,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "docX",
+                "/tmp/x.pdf",
+                "hashX",
+                "ab/cd/x.pdf",
+                "ready",
+                "X2023",
+                "Original Title",
+                "Original Author",
+                "2023-06-15",
+                "2026-01-01T00:00:00Z",
+                "2026-01-01T00:00:00Z",
+            ),
+        )
+        conn.commit()
+
+        migrate_schema(conn)
+
+        row = conn.execute(
+            """
+            SELECT status, citekey, title, authors, issued_date, issued_year
+            FROM documents WHERE id = 'docX'
+            """
+        ).fetchone()
+        assert row["status"] == "ready"
+        assert row["citekey"] == "X2023"
+        assert row["title"] == "Original Title"
+        assert row["authors"] == "Original Author"
+        assert row["issued_date"] == "2023-06-15"
+        assert row["issued_year"] == 2023  # Backfilled
+
+
+class TestUpdateDocumentMetadataIssuedYear:
+    """Tests for writing issued_year through update_document_metadata."""
+
+    def test_update_persists_issued_year(self, temp_dir: Path) -> None:
+        """update_document_metadata writes issued_year to the database."""
+        conn = get_connection(temp_dir / "test.db")
+        init_schema(conn)
+        created_doc = create_document(
+            conn,
+            original_path="/tmp/test.pdf",
+            content_hash="abc123",
+            storage_path="ab/cd/abc123.pdf",
+        )
+
+        update_document_metadata(
+            conn,
+            created_doc.id,
+            issued_date="2023",
+            issued_year=2023,
+        )
+
+        doc = get_document_by_id(conn, created_doc.id)
+        assert doc is not None
+        assert doc.issued_year == 2023
+
+    def test_update_preserves_issued_year_on_none(self, temp_dir: Path) -> None:
+        """Passing issued_year=None does not overwrite an existing value (COALESCE)."""
+        conn = get_connection(temp_dir / "test.db")
+        init_schema(conn)
+        created_doc = create_document(
+            conn,
+            original_path="/tmp/test.pdf",
+            content_hash="abc123",
+            storage_path="ab/cd/abc123.pdf",
+        )
+        update_document_metadata(
+            conn,
+            created_doc.id,
+            issued_date="2023",
+            issued_year=2023,
+        )
+        # Second update with issued_year=None should NOT clear the year
+        update_document_metadata(conn, created_doc.id, title="New Title")
+        doc = get_document_by_id(conn, created_doc.id)
+        assert doc is not None
+        assert doc.issued_year == 2023
+
+
+class TestListDocumentsFilters:
+    """Tests for list_documents() with new filter parameters."""
+
+    @pytest.fixture
+    def seeded_conn(self, temp_dir: Path) -> sqlite3.Connection:
+        """Create a connection with a few documents varying in year/author/title/citekey."""
+        conn = get_connection(temp_dir / "test.db")
+        init_schema(conn)
+
+        docs = [
+            # (citekey, title, authors, issued_year)
+            ("Zippel2023", "Analytical Methods", "Adam Zippel; Jane Doe", 2023),
+            ("Zippel2019", "Computational Approaches", "Adam Zippel", 2019),
+            ("Smith2023", "Machine Learning", "John Smith", 2023),
+            ("Jones2020", "Statistical Theory", "Mary Jones", 2020),
+            ("Noyear", "Untitled Work", "Anonymous", None),
+            ("BourdieuPasseron1970", "Reproduction", "Pierre Bourdieu; Jean-Claude Passeron", 1970),
+        ]
+        for citekey, title, authors, year in docs:
+            doc = create_document(
+                conn,
+                original_path=f"/tmp/{citekey}.pdf",
+                content_hash=citekey,
+                storage_path=f"ab/cd/{citekey}.pdf",
+            )
+            update_document_metadata(
+                conn,
+                doc.id,
+                citekey=citekey,
+                title=title,
+                authors=authors,
+                issued_year=year,
+            )
+        return conn
+
+    def test_filter_by_year(self, seeded_conn: sqlite3.Connection) -> None:
+        results = list_documents(seeded_conn, year=2023)
+        assert {d.citekey for d in results} == {"Zippel2023", "Smith2023"}
+
+    def test_filter_year_missing(self, seeded_conn: sqlite3.Connection) -> None:
+        results = list_documents(seeded_conn, year_missing=True)
+        assert [d.citekey for d in results] == ["Noyear"]
+
+    def test_filter_year_and_year_missing_mutually_exclusive(
+        self, seeded_conn: sqlite3.Connection
+    ) -> None:
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            list_documents(seeded_conn, year=2023, year_missing=True)
+
+    def test_filter_author_contains_case_insensitive(self, seeded_conn: sqlite3.Connection) -> None:
+        results = list_documents(seeded_conn, author_contains="zippel")
+        assert {d.citekey for d in results} == {"Zippel2023", "Zippel2019"}
+
+    def test_filter_author_contains_partial(self, seeded_conn: sqlite3.Connection) -> None:
+        results = list_documents(seeded_conn, author_contains="Jane")
+        assert {d.citekey for d in results} == {"Zippel2023"}
+
+    def test_filter_title_contains(self, seeded_conn: sqlite3.Connection) -> None:
+        results = list_documents(seeded_conn, title_contains="Method")
+        # "Analytical Methods" contains "Method" (case-insensitive)
+        assert {d.citekey for d in results} == {"Zippel2023"}
+
+    def test_filter_citekey_prefix(self, seeded_conn: sqlite3.Connection) -> None:
+        results = list_documents(seeded_conn, citekey_prefix="Bourdieu")
+        assert {d.citekey for d in results} == {"BourdieuPasseron1970"}
+
+    def test_filter_citekey_prefix_case_insensitive(self, seeded_conn: sqlite3.Connection) -> None:
+        results = list_documents(seeded_conn, citekey_prefix="zippel")
+        assert {d.citekey for d in results} == {"Zippel2023", "Zippel2019"}
+
+    def test_filters_combine_with_and(self, seeded_conn: sqlite3.Connection) -> None:
+        results = list_documents(seeded_conn, year=2023, author_contains="Zippel")
+        assert {d.citekey for d in results} == {"Zippel2023"}
+
+    def test_like_wildcard_in_input_is_escaped(self, seeded_conn: sqlite3.Connection) -> None:
+        """Percent signs in user input don't act as wildcards."""
+        # '%' shouldn't match everything
+        results = list_documents(seeded_conn, author_contains="%")
+        assert results == []
+        # '_' shouldn't act as single-char wildcard
+        results = list_documents(seeded_conn, author_contains="_")
+        assert results == []
+
+    def test_no_filters_returns_all(self, seeded_conn: sqlite3.Connection) -> None:
+        results = list_documents(seeded_conn)
+        assert len(results) == 6
+
+    def test_empty_string_filter_treated_as_no_filter(
+        self, seeded_conn: sqlite3.Connection
+    ) -> None:
+        """Empty string for *_contains / citekey_prefix is a no-op.
+
+        This is an intentional behavior decision: an empty substring
+        would match everything under LIKE semantics, which is surprising
+        and not useful. We treat empty strings as "no filter provided"
+        so that users passing an accidentally-empty flag value (e.g.,
+        from shell variable expansion) don't get unexpected behavior.
+        This is documented in Library.list() and list_documents()
+        docstrings.
+        """
+        assert len(list_documents(seeded_conn, author_contains="")) == 6
+        assert len(list_documents(seeded_conn, title_contains="")) == 6
+        assert len(list_documents(seeded_conn, citekey_prefix="")) == 6

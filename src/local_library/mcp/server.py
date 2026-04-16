@@ -149,21 +149,38 @@ def show_document(doc_id: str) -> str:
 
 @mcp.tool(
     description=(
-        "List documents in the library. Returns a markdown table with "
-        "citekey, title, authors, status, and embedding status. "
-        "Errors prefixed with 'USER-FACING ERROR' should be reported to "
-        "the user rather than worked around."
+        "List documents in the library with optional filtering. Returns a "
+        "markdown table with citekey, title, authors, status, and embedding "
+        "status. Filters combine with AND semantics. Filter options: "
+        "status (ready/failed/needs_review/pending), year (e.g., 2023), "
+        "year_missing (documents with no extractable year), author_contains "
+        "(case-insensitive substring match on authors), title_contains "
+        "(case-insensitive substring match on titles), citekey_prefix "
+        "(case-insensitive prefix match on citekeys). "
+        "Errors prefixed with 'USER-FACING ERROR' should be reported to the "
+        "user rather than worked around."
     )
 )
 def list_documents(
     status: str | None = None,
+    year: int | None = None,
+    year_missing: bool = False,
+    author_contains: str | None = None,
+    title_contains: str | None = None,
+    citekey_prefix: str | None = None,
     limit: int = 20,
 ) -> str:
-    """List documents in the library.
+    """List documents in the library with optional filters.
 
     Args:
-        status: Optional filter — "ready", "failed", "needs_review", or "pending"
-        limit: Maximum results to return (1-100, default 20)
+        status: One of "ready", "failed", "needs_review", "pending".
+        year: Filter to documents issued in the given year.
+        year_missing: Filter to documents with no extractable year
+            (mutually exclusive with year).
+        author_contains: Case-insensitive substring match on authors.
+        title_contains: Case-insensitive substring match on titles.
+        citekey_prefix: Case-insensitive prefix match on citekeys.
+        limit: Maximum results to return (1-100, default 20).
     """
     assert _library is not None, "Library not initialized"
 
@@ -180,10 +197,20 @@ def list_documents(
         status_filter = DocumentStatus(status.lower())
 
     try:
-        all_docs = _library.list(status=status_filter)
+        all_docs = _library.list(
+            status=status_filter,
+            year=year,
+            year_missing=year_missing,
+            author_contains=author_contains,
+            title_contains=title_contains,
+            citekey_prefix=citekey_prefix,
+        )
         total = len(all_docs)
         displayed = all_docs[:limit]
         return format_document_list(displayed, total)
+    except ValueError as e:
+        # Mutual exclusion or similar filter validation errors
+        return format_tool_error(str(e))
     except Exception as e:
         logger.exception("Error listing documents")
         return format_user_error(f"Failed to list documents: {e}")

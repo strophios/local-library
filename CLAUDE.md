@@ -96,7 +96,7 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - **MCP server**: FastMCP-based server (stdio transport) exposing 4 read-only tools (search_library, show_document, list_documents, get_document_text) for Claude Code integration. Markdown-only responses, identifier resolution via @citekey/UUID, chunk-based document text access with short-doc/long-doc modes
 - **Extraction resilience**: PDF pre-check via pymupdf (page count + text sampling) before Marker runs. Dynamic timeout scaling (text PDFs 5s/page, image PDFs 45s/page, capped at 4h). pdftext fallback when Marker fails and the PDF has extractable text — fallback documents go to NEEDS_REVIEW with EXTRACTION_FALLBACK error code but still embed. Progress callback protocol (precheck_complete, extraction_progress every 30s, extraction_complete, extraction_fallback events) used by zotero import for live Rich output.
 - **Metadata provenance pipeline**: `MetadataSource` enum (ZOTERO, EXPLICIT, FILENAME, TEXT_EXTRACTED) tracks where metadata came from. Library.add() persists preliminary metadata before extraction, so FAILED documents retain citekey and basic metadata. Filename heuristic parser (`parse_filename_metadata`) generates best-effort CSL-JSON from academic naming conventions (Author - Year - Title, Author_Year_Title, AuthorYear, etc.). After successful extraction, FILENAME-sourced metadata can be upgraded via text extraction; ZOTERO/EXPLICIT metadata is authoritative and never upgraded. Upgrades that would change the citekey flag NEEDS_REVIEW rather than auto-applying, preserving referential stability.
-- SQLite storage with content-addressable file layout (schema v3)
+- SQLite storage with content-addressable file layout (schema v4)
 - CLI interface (add, list, show, delete, open, update, review, reextract, embed, search, ask commands)
 - @citekey identifier support with fuzzy matching suggestions
 - Pagination support (--limit, --all flags on list command)
@@ -227,6 +227,11 @@ All commands accepting document IDs support both UUID (full or partial) and @cit
 - `uv run local-library add <path> --metadata <csl-json-file>` - Add with bibliographic metadata
 - `uv run local-library add <path> --llm-extract` - Add with LLM-enhanced PDF extraction (requires GEMINI_API_KEY)
 - `uv run local-library list` - List all documents (use `--limit N` for pagination, `--all` for unlimited)
+- `uv run local-library list --year 2023` - Filter by publication year
+- `uv run local-library list --year-missing` - Show documents with no extractable year
+- `uv run local-library list --author-contains Zippel` - Filter authors (case-insensitive substring)
+- `uv run local-library list --title-contains methods` - Filter titles (case-insensitive substring)
+- `uv run local-library list --citekey-prefix Bourdieu` - Filter citekeys (case-insensitive prefix)
 - `uv run local-library show <id>` - Show document details
 - `uv run local-library delete <id>` - Delete a document (cascades to embeddings)
 - `uv run local-library open <id>` - Open extracted markdown in editor (use `--pdf` for PDF, `--both` for both)
@@ -264,7 +269,7 @@ src/local_library/
 ├── core/                # Domain: models, storage, orchestration
 │   ├── models.py        # Document, EmbeddingStatus, result types (Functional Core)
 │   ├── errors.py        # Exception hierarchy with ErrorCode (Functional Core)
-│   ├── storage.py       # SQLite CRUD operations, schema v3 (Imperative Shell)
+│   ├── storage.py       # SQLite CRUD operations, schema v4 (Imperative Shell)
 │   ├── library.py       # Library orchestrator (Imperative Shell)
 │   └── vec_extension.py # sqlite-vec extension loading and availability checking
 ├── embeddings/          # Domain: chunking, embedding computation, vector storage, retrieval, reranking
