@@ -32,6 +32,29 @@ def list_docs(
             "--status", "-s", help="Filter by status (pending, ready, failed, needs_review)"
         ),
     ] = None,
+    year: Annotated[
+        int | None,
+        typer.Option("--year", help="Filter by publication year (e.g., 2023)"),
+    ] = None,
+    year_missing: Annotated[
+        bool,
+        typer.Option("--year-missing", help="Show only documents with no extractable year"),
+    ] = False,
+    author_contains: Annotated[
+        str | None,
+        typer.Option("--author-contains", help="Filter authors containing TEXT (case-insensitive)"),
+    ] = None,
+    title_contains: Annotated[
+        str | None,
+        typer.Option("--title-contains", help="Filter titles containing TEXT (case-insensitive)"),
+    ] = None,
+    citekey_prefix: Annotated[
+        str | None,
+        typer.Option(
+            "--citekey-prefix",
+            help="Filter citekeys starting with TEXT (case-insensitive)",
+        ),
+    ] = None,
     limit: Annotated[
         int | None,
         typer.Option("--limit", "-n", help="Maximum number of rows to display"),
@@ -53,6 +76,14 @@ def list_docs(
     By default, shows up to 15 documents. Use --limit to change this,
     or --all to show all documents in a pager.
     """
+    # Check mutual exclusion before opening Library
+    if year is not None and year_missing:
+        typer.echo(
+            "Error: --year and --year-missing are mutually exclusive.",
+            err=True,
+        )
+        raise typer.Exit(code=2)
+
     # Parse status filter
     status_filter: DocumentStatus | None = None
     if status:
@@ -64,7 +95,14 @@ def list_docs(
             raise typer.Exit(code=1) from None
 
     with Library() as lib:
-        docs = lib.list(status=status_filter)
+        docs = lib.list(
+            status=status_filter,
+            year=year,
+            year_missing=year_missing,
+            author_contains=author_contains,
+            title_contains=title_contains,
+            citekey_prefix=citekey_prefix,
+        )
 
     total_count = len(docs)
 
