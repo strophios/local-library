@@ -316,9 +316,7 @@ class TestFormatDocumentText:
         """Short document (<50 chunks) returns full text."""
         doc = _make_document()
         text = "# Full Document\n\nSome content here."
-        output = format_document_text(
-            doc, text=text, chunks=None, total_chunks=10
-        )
+        output = format_document_text(doc, text=text, chunks=None, total_chunks=10)
         assert "Full Document" in output
         assert "Some content here." in output
 
@@ -329,9 +327,7 @@ class TestFormatDocumentText:
             _make_chunk(chunk_index=i, text=f"Chunk {i} text.", section=f"Section {i}")
             for i in range(20)
         ]
-        output = format_document_text(
-            doc, text=None, chunks=chunks, total_chunks=200
-        )
+        output = format_document_text(doc, text=None, chunks=chunks, total_chunks=200)
         assert "200" in output  # Total chunk count
         assert "Chunk 0 text." in output  # First chunk present
         assert "get_document_text" in output.lower() or "range" in output.lower()
@@ -344,8 +340,12 @@ class TestFormatDocumentText:
             for i in range(10, 15)
         ]
         output = format_document_text(
-            doc, text=None, chunks=chunks, total_chunks=200,
-            start_chunk=10, end_chunk=14,
+            doc,
+            text=None,
+            chunks=chunks,
+            total_chunks=200,
+            start_chunk=10,
+            end_chunk=14,
         )
         assert "Chunk 10 text." in output
         assert "Chunk 14 text." in output
@@ -354,7 +354,5 @@ class TestFormatDocumentText:
     def test_includes_document_header(self) -> None:
         """Output includes document identification."""
         doc = _make_document(citekey="Author2023", title="Test Paper")
-        output = format_document_text(
-            doc, text="Content", chunks=None, total_chunks=5
-        )
+        output = format_document_text(doc, text="Content", chunks=None, total_chunks=5)
         assert "@Author2023" in output or "Test Paper" in output
