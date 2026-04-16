@@ -248,11 +248,21 @@ class TestListDocuments:
         assert result.startswith("Error: ")
 
     def test_limit_clamped(self) -> None:
-        """Limit clamped to 100."""
-        docs = [_make_document() for _ in range(5)]
+        """Limit clamped and only requested docs returned."""
+        # Create 5 distinct documents
+        docs = [_make_document(citekey=f"Author{i}") for i in range(5)]
         self.mock_library.list.return_value = docs
-        result = list_documents(limit=200)
-        assert "|" in result
+        # Request more than available but test with limit < total
+        result = list_documents(limit=3)
+        # Should show "3 of 5" in the header
+        assert "3 of 5" in result
+        # Should contain only the first 3 citekeys in the table
+        assert "@Author0" in result
+        assert "@Author1" in result
+        assert "@Author2" in result
+        # Should NOT contain the last 2
+        assert "@Author3" not in result
+        assert "@Author4" not in result
 
     def test_status_filter_forwarded(self) -> None:
         """Status filter forwarded to Library.list()."""
@@ -271,13 +281,16 @@ class TestGetDocumentText:
             yield
 
     @patch("local_library.mcp.server.resolve_identifier")
-    @patch("local_library.mcp.server.Path")
-    def test_short_doc_returns_full_text(self, mock_path_cls, mock_resolve) -> None:
+    def test_short_doc_returns_full_text(self, mock_resolve, tmp_path) -> None:
         """Short doc (<50 chunks) returns full extracted text."""
+        # Create a real temporary file with expected content
+        extracted_file = tmp_path / "extracted.md"
+        extracted_file.write_text("# Full content", encoding="utf-8")
+
         doc = _make_document()
+        doc.extracted_path = str(extracted_file)
         mock_resolve.return_value = doc
         self.mock_library.get_chunk_count.return_value = 10
-        mock_path_cls.return_value.read_text.return_value = "# Full content"
         result = get_document_text("@Author2023")
         assert "Full content" in result
 
@@ -323,3 +336,13 @@ class TestGetDocumentText:
         self.mock_library.get_chunk_count.return_value = 200
         result = get_document_text("@Author2023", start_chunk=20, end_chunk=10)
         assert "Error: " in result
+
+    @patch("local_library.mcp.server.resolve_identifier")
+    def test_negative_chunk_index_returns_error(self, mock_resolve) -> None:
+        """Negative chunk indices return tool error."""
+        doc = _make_document()
+        mock_resolve.return_value = doc
+        self.mock_library.get_chunk_count.return_value = 200
+        result = get_document_text("@Author2023", start_chunk=-1)
+        assert result.startswith("Error: ")
+        assert "non-negative" in result
