@@ -1,29 +1,31 @@
 # Roadmap
 
-Last updated: 2026-04-15
+Last updated: 2026-04-16
 
 This document provides a high-level overview of the project's feature areas and current focus. For detailed planning within each area, see the linked feature area documents. For the development approach, see `build_philosophy.md`.
 
-## Current Focus: Post-Import Polish and Feature Development
+## Current Focus: Feature Development
 
-The Phase 1 PDF pipeline (M1-M7) is complete. **Full Zotero corpus imported**: 1,216 documents ready (99.3%), 9 failed (extraction timeout). Retrieval and RAG confirmed functional at scale via evaluation suite and manual testing.
+The Phase 1 PDF pipeline (M1-M7) is complete. **Full Zotero corpus imported**: 1,216 documents ready (99.3%), 9 failed (extraction timeout). Retrieval and RAG confirmed functional at scale.
 
-**Immediate next steps (infrastructure/polish):**
+Two infrastructure tracks recently wrapped:
+
+- ✓ **Extraction resilience and metadata pipeline** (merged `db2cb6b`) — pdftext fallback when Marker fails, dynamic timeout scaling based on pre-check, progress callback protocol, `MetadataSource` provenance tracking, preliminary metadata persistence before extraction, conditional filename-to-text metadata upgrade with citekey stability checks. See `docs/design-plans/2026-04-15-extraction-resilience-and-metadata-pipeline.md`.
+- ✓ **MCP server for Claude Code** (merged `1e0fefb`) — four read-only tools (search_library, show_document, list_documents, get_document_text) over stdio transport. Markdown-only returns, no `ask_library` (Claude synthesizes answers from retrieved chunks directly). See `docs/feature-areas/claude-code-integration/README.md`.
+
+**Still on the polish list:**
 1. UI harmonization — consistent extraction status reporting across CLI commands
-2. Extraction resilience — pdftext fallback, dynamic timeout scaling, progress callback (designed: `docs/design-plans/2026-04-15-extraction-resilience-and-metadata-pipeline.md`)
-3. Metadata pipeline reordering — persist preliminary metadata before extraction (same design plan, Phase 2)
-4. Extraction metadata persistence — schema v4 migration for duration/device/fallback tracking
+2. Extraction metadata persistence — schema v4 migration for duration/device/fallback tracking in the DB (the pipeline now produces this metadata, but it isn't persisted yet)
 
 **Feature development (parallel tracks):**
-- MCP server for Claude Code integration (validates daemon API surface; see below)
-- Web Content Ingestion (`add <url>`)
+- Research skills layered on the MCP server (low effort, high leverage; see Claude Code Integration README)
+- Content Ingestion (`add <url>`; later EPUB and external metadata API enrichment)
 - Neovim Citation Workflow (daemon → plugin)
 
 **Evaluation framework:**
-- Baseline eval queries (76) confirmed as annotation-limited at full corpus scale — retrieval is working, but annotations only cover the original 20-doc set
-- Annotation expansion deferred until after feature development stabilizes
-
-See `tests/eval/README.md` for baseline results. See `build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling" for the original rationale.
+- Corpus-scale baseline was run, but the results show an apparent quality regression that is largely an **annotation artifact**: the flood of new documents surfaces many correct-but-unannotated results that score as wrong under the existing rubric.
+- Real next step is re-annotation at scale: re-grade existing queries against the full corpus, add new queries, add chunk-level annotations. Quality target setting and conceptual-query work are gated on having solid eval data at this new scale.
+- See `docs/feature-areas/rag-pipeline-improvements/README.md` for details.
 
 ---
 
@@ -34,11 +36,11 @@ Development beyond Phase 1 is organized into five feature areas. Each area has i
 | Area | Status | Priority | Path |
 |---|---|---|---|
 | [Neovim Citation Workflow](docs/feature-areas/neovim-citation-workflow/README.md) | Exploring | Headline | `docs/feature-areas/neovim-citation-workflow/` |
-| [Claude Code Integration](docs/feature-areas/claude-code-integration/README.md) | Exploring | High (validates daemon API surface) | `docs/feature-areas/claude-code-integration/` |
-| [Web Content Ingestion](docs/feature-areas/web-content-ingestion/README.md) | Exploring | High (good value/effort) | `docs/feature-areas/web-content-ingestion/` |
+| [Claude Code Integration](docs/feature-areas/claude-code-integration/README.md) | Stable (MCP core); Exploring (research skills) | High | `docs/feature-areas/claude-code-integration/` |
+| [Content Ingestion](docs/feature-areas/content-ingestion/README.md) | Exploring | High (good value/effort) | `docs/feature-areas/content-ingestion/` |
 | [Note Management](docs/feature-areas/note-management/README.md) | Exploring | Medium | `docs/feature-areas/note-management/` |
 | [Automated Content Analysis](docs/feature-areas/automated-content-analysis/README.md) | Exploring | Lower (needs prerequisites) | `docs/feature-areas/automated-content-analysis/` |
-| [RAG Pipeline Improvements](docs/feature-areas/rag-pipeline-improvements/README.md) | Partially active | Ongoing | `docs/feature-areas/rag-pipeline-improvements/` |
+| [RAG Pipeline Improvements](docs/feature-areas/rag-pipeline-improvements/README.md) | Partially active | Ongoing (eval re-annotation is next) | `docs/feature-areas/rag-pipeline-improvements/` |
 
 ### Status Definitions
 
@@ -60,7 +62,7 @@ Neovim Citation Workflow: daemon (extracts shared operations into service)
                             ▼           ▼
                      Neovim plugin   MCP server v2 (swaps to daemon client)
 
-Web Content Ingestion ──────────── (independent; extends add <url>)
+Content Ingestion ──────────────── (independent; web, EPUB, API metadata enrichment)
 
 Note Management ────────────────── (independent; notes link to documents from any source)
 
@@ -69,9 +71,9 @@ Automated Content Analysis: auto-tagging needs manual tags as seed data
 ```
 
 Key dependencies:
-- The **MCP server** is the first external client of the Library API. It validates the operation surface (search, show, ask, list) that the daemon will later expose over a socket. It loads models in-process (acceptable for Claude Code's long-lived sessions).
-- The **library daemon** is shared infrastructure for latency-sensitive clients (Neovim). The MCP server informs its API design but doesn't block on it.
-- **Web Content Ingestion** and **Note Management** are independent tracks that can progress in parallel.
+- The **MCP server** is now the first external client of the Library API. It validated the read operation surface (search, show, list, text access) that the daemon will later expose over a socket. Notable design outcome: no `ask_library` tool — Claude synthesizes answers directly from retrieved chunks, avoiding nested LLM calls. Worth preserving in daemon design.
+- The **library daemon** is shared infrastructure for latency-sensitive clients (Neovim). The MCP server's API shape and error conventions are direct inputs.
+- **Content Ingestion** and **Note Management** are independent tracks that can progress in parallel.
 
 ---
 
@@ -79,8 +81,29 @@ Key dependencies:
 
 Features not currently assigned to a feature area but worth tracking:
 
-- **MCP server** (Claude Code integration) — promoted to feature area; see table above
 - **HTTP API** (FastAPI) — daemon can expose both socket + HTTP; build when external access needed
 - **TUI/GUI** — lowest interface priority; CLI + Neovim cover primary workflows
 - **Zotero bidirectional note sync** — high complexity; defer until note management is mature
 - **Full CSL-JSON spec handling** — accept/preserve all fields; incremental, do when encountered
+
+### Extraction infrastructure
+
+- **Upgrade Marker to v1.9.0+** — pinned at 1.8.0 because v1.9.0+ has a bug causing ~20x slowdown on Apple Silicon MPS ([marker issue #960](https://github.com/datalab-to/marker/issues/960)). Upstream features we're missing: block-mode OCR (v1.9.0), LLM-based table extraction improvements (v1.9.2), new layout detection model and HTML table rendering (v1.10.0). Upgrade steps when the upstream fix lands: change `marker-pdf==1.8.0` → `marker-pdf>=1.10.0` in `pyproject.toml`, `uv sync`, run `uv run pytest --run-extraction-quality`, verify MPS extraction is back to ~4s/page.
+- **Selective olmOCR for scanned historical documents** — olmOCR (82.3% on historical math scans vs Marker's lower quality) could handle documents Marker struggles with. Requires 20GB+ VRAM so remote GPU (Lambda Labs, Vast.ai); 20-100x slower than Marker. Workflow: identify problem docs (manual review or quality heuristics), process subset on remote GPU, replace stored markdown. Not urgent; the extraction quality framework in `tests/extraction/synthetic/` can help identify candidates systematically. See `RAG_background/pdf_extraction_tools_report.md` for the full hybrid strategy.
+
+---
+
+## What Would Change Priorities
+
+Certain developments would move items up the priority list:
+
+| Trigger | Feature to prioritize |
+|---------|----------------------|
+| Hit 250K vector scale ceiling | Migrate to LanceDB (see `RAG_background/vector_storage_report.md`) |
+| Metadata quality issues emerge at scale | External API enrichment (CrossRef, GROBID, OpenAlex) in Content Ingestion |
+| Need to query web content routinely | Web content ingestion |
+| Neovim workflow integration becomes blocking | Library daemon → Full Neovim plugin |
+| Want to share library with others | HTTP API, authentication |
+| RAG answer quality issues | Expand evaluation framework beyond retrieval to end-to-end answer quality |
+| Scanned doc extraction quality poor | Selective olmOCR |
+| Automated verification (not just triage) needed | Invest in NLI validation + fine-tuning |

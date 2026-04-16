@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-04-15
+Last verified: 2026-04-16
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -54,9 +54,9 @@ Each document record contains:
 
 Development follows a **pipeline-first, layer-complete** approach documented in `build_philosophy.md`. The key insight: pipeline stages (vertical data flow) and architectural layers (horizontal concerns) are orthogonal. Build along the pipeline for rapid feedback; implement layers completely when touched.
 
-### Current Status: M1-M7 + M3b Complete (Record Storage + Extraction + Metadata + Zotero Reader + Text Extraction + Embeddings + Retrieval + RAG Query)
+### Current Status: Phase 1 Complete + Post-M7 Extensions
 
-Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), M3b (text-based metadata extraction), M4 (Zotero read-only access), M5 (embedding pipeline), M6 (retrieval), and M7 (RAG query interface) are implemented. The system can:
+Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), M3b (text-based metadata extraction), M4 (Zotero read-only access), M5 (embedding pipeline), M6 (retrieval), and M7 (RAG query interface) are implemented. Post-M7 work has added extraction resilience (pdftext fallback, dynamic timeouts, progress callbacks), a metadata provenance pipeline, and an MCP server for Claude Code integration. **Full Zotero corpus imported**: 1,216 documents ready (99.3%), 9 extraction timeouts. The system can:
 - Ingest local PDF files via CLI (`local-library add <path>`)
 - Accept explicit CSL-JSON metadata (`--metadata <file>`)
 - Extract text to markdown via Marker
@@ -94,6 +94,8 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - **RAG query interface**: RAGInterface orchestrates context assembly, prompt construction, and LLM generation; RAGStream supports streaming with token accumulation; pre-LLM gate skips API call when no context retrieved
 - **CLI `ask` command**: streaming answers with Rich Live display, --no-stream, --json, --model, --mode, --doc, --limit, --no-rerank options; source citations with citekey attribution
 - **MCP server**: FastMCP-based server (stdio transport) exposing 4 read-only tools (search_library, show_document, list_documents, get_document_text) for Claude Code integration. Markdown-only responses, identifier resolution via @citekey/UUID, chunk-based document text access with short-doc/long-doc modes
+- **Extraction resilience**: PDF pre-check via pymupdf (page count + text sampling) before Marker runs. Dynamic timeout scaling (text PDFs 5s/page, image PDFs 45s/page, capped at 4h). pdftext fallback when Marker fails and the PDF has extractable text — fallback documents go to NEEDS_REVIEW with EXTRACTION_FALLBACK error code but still embed. Progress callback protocol (precheck_complete, extraction_progress every 30s, extraction_complete, extraction_fallback events) used by zotero import for live Rich output.
+- **Metadata provenance pipeline**: `MetadataSource` enum (ZOTERO, EXPLICIT, FILENAME, TEXT_EXTRACTED) tracks where metadata came from. Library.add() persists preliminary metadata before extraction, so FAILED documents retain citekey and basic metadata. Filename heuristic parser (`parse_filename_metadata`) generates best-effort CSL-JSON from academic naming conventions (Author - Year - Title, Author_Year_Title, AuthorYear, etc.). After successful extraction, FILENAME-sourced metadata can be upgraded via text extraction; ZOTERO/EXPLICIT metadata is authoritative and never upgraded. Upgrades that would change the citekey flag NEEDS_REVIEW rather than auto-applying, preserving referential stability.
 - SQLite storage with content-addressable file layout (schema v3)
 - CLI interface (add, list, show, delete, open, update, review, reextract, embed, search, ask commands)
 - @citekey identifier support with fuzzy matching suggestions
@@ -103,11 +105,12 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - **Reextract command**: `reextract` CLI command re-runs text extraction on existing documents (useful after extraction pipeline improvements)
 - **Extraction quality framework**: Synthetic document benchmark in `tests/extraction/synthetic/` measures extraction fidelity across 4 noise tiers (T0 clean embedded, T1 clean OCR, T2 moderate scan, T3 degraded) with CER/WER metrics and structural validators. Config-driven noise pipeline with 7 artifact types and per-page deterministic seeds. 6 annotated source documents. Opt-in via `--run-extraction-quality` pytest flag.
 
-**Immediate next step:** Post-M7 evaluation quality gate — establish quality targets, investigate the conceptual query gap, and determine the next pipeline improvement before scaling to the full Zotero corpus (~1400 docs). See `roadmap.md` for current progress and sequencing.
+**Immediate next step:** Eval set re-annotation at corpus scale. The initial full-corpus baseline run shows apparent regression that is largely an annotation artifact (the flood of new documents produces many correct-but-unannotated results that score as wrong). Real quality targets and conceptual-query improvements are gated on re-annotating existing queries against the full corpus, adding new queries, and adding chunk-level annotations. See `roadmap.md` and `docs/feature-areas/rag-pipeline-improvements/README.md`.
 
-**Beyond Phase 1:** Development is organized into five feature areas, each with its own progression. **`roadmap.md` is the central overview** — check it for current focus, progress tracking, and cross-cutting dependencies. Feature area READMEs in `docs/feature-areas/` have detailed planning per area:
+**Beyond Phase 1:** Development is organized into six feature areas, each with its own progression. **`roadmap.md` is the central overview** — check it for current focus, progress tracking, and cross-cutting dependencies. Feature area READMEs in `docs/feature-areas/` have detailed planning per area:
 - **Neovim Citation Workflow** (headline) — library daemon, Neovim plugin for visual-mode citation search
-- **Web Content Ingestion** — `add <url>` with trafilatura, making web content citable
+- **Claude Code Integration** — MCP server built (4 read-only tools); research skills layered on top are next
+- **Content Ingestion** — `add <url>` with trafilatura; later EPUB and external API metadata enrichment
 - **Note Management** — auto-generated markdown stubs with YAML frontmatter
 - **Automated Content Analysis** — auto-tagging, clustering, triage-based verification
 - **RAG Pipeline Improvements** — evaluation, retrieval quality, query processing (see feature area README for current status)
@@ -178,9 +181,10 @@ A retrieval evaluation framework is implemented in `tests/eval/`. See `tests/eva
 - **IR metrics**: `retrieval_eval.py` provides Precision@k, Recall@k, MRR, NDCG@k (with graded relevance) and unit tests (`test_retrieval_metrics.py`)
 - **Query set**: `test_queries.json` v2.0 contains 76 labeled queries across 6 categories with 3-tier graded relevance (see `annotation_rubric.md`)
 - **Comparative harness**: Runs all retriever modes (vector, FTS, hybrid) with/without reranking, per-category breakdowns
-- **Baseline results**: hybrid+rerank achieves MRR=0.913, NDCG@10=0.896 on ~20-doc dev corpus. Conceptual queries are the weak spot (NDCG@10=0.784). Full results in `baseline_results.json`
+- **Baseline results (dev corpus, ~20 docs)**: hybrid+rerank achieves MRR=0.913, NDCG@10=0.896. Conceptual queries are the weak spot (NDCG@10=0.784). Full results in `baseline_results.json`
+- **Corpus scaled**: Full Zotero corpus (1,216 docs) is now imported. Initial full-corpus eval run shows apparent regression, but this is largely an annotation artifact — the flood of new documents surfaces many correct-but-unannotated results that score as misses. Real corpus-scale performance requires re-annotation before quality targets or conceptual-query work can move forward.
 - **Reranker benchmark**: `reranker_benchmark.py` evaluates cross-encoder models; results in `reranker_results.json`
-- **Next steps**: Establish quality targets, investigate conceptual query gap, scale to full Zotero corpus (~1400 docs)
+- **Next steps**: Re-annotate existing queries at corpus scale, expand query set, add chunk-level annotations, then reassess quality targets. See `docs/feature-areas/rag-pipeline-improvements/README.md`.
 
 ### Extraction Quality Framework
 A synthetic extraction quality framework is implemented in `tests/extraction/synthetic/`. It measures how well the Marker + cleanup pipeline preserves content fidelity across document types and degradation levels.
@@ -314,7 +318,6 @@ See `src/local_library/core/CLAUDE.md`, `src/local_library/llm/CLAUDE.md`, `src/
 - `docs/feature-areas/`: **Feature area planning** — one directory per area with canonical README and supporting material
 - `build_plan.md`: Phase 1 milestone overview and layer responsibilities (historical reference once Phase 1 complete)
 - `build_philosophy.md`: Pipeline-first, layer-complete development approach
-- `future_roadmap.md`: Original deferred features document (contents being migrated to feature area READMEs)
 - `docs/design-plans/`: Point-in-time design specifications (date-prefixed)
 - `docs/implementation-plans/`: Point-in-time implementation plans (date-prefixed, phased)
 

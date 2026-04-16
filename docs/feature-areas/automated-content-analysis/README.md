@@ -1,6 +1,6 @@
 # Automated Content Analysis
 
-Last updated: 2026-03-06
+Last updated: 2026-04-16
 
 ## Vision
 
@@ -65,6 +65,9 @@ Push auto-generated tags back to Zotero via the local API (HTTP on port 23119).
 - Visualize the library's conceptual landscape
 - Identify gaps in coverage
 
+### Full Automated Claim Verification (vs. Triage)
+Triage-based verification (narrowing the search space for a human) is the near-term design. Fully automated NLI-based verification — "reject commits with unsupported citations" or similar — is a different problem with a much higher accuracy bar. Out of reach with off-the-shelf NLI models (~77-78% on academic text), and probably not worth chasing unless an automated workflow specifically requires it. The path if we ever need it: build a labeled test set of 50-100 claim/source pairs, validate accuracy on academic content, potentially fine-tune. Roughly 2-4 weeks of work with meaningful risk that the result still isn't good enough. See `RAG_background/citation_tooling_report.md` § 8.2.
+
 ## Open Questions
 
 - What tag vocabulary to use? Controlled vs. free-form has significant implications for the approach
@@ -86,7 +89,6 @@ Push auto-generated tags back to Zotero via the local API (HTTP on port 23119).
 
 ## References
 
-- `future_roadmap.md` § "Auto-Tagging", "Dual Embeddings" — original descriptions
 - `RAG_background/embedding_approaches_report.md` — embedding strategies, dual embedding discussion
-- `RAG_background/citation_tooling_report.md` § triage reframing — verification approaches
+- `RAG_background/citation_tooling_report.md` § triage reframing + § 8.2 — verification approaches, NLI validation
 - `CLAUDE.md` § "Writing to Zotero" — Zotero export constraints

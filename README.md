@@ -16,9 +16,10 @@ The core pipeline (PDF ingestion through RAG query) is implemented and functiona
 
 ## Coming Next
 
-Development is organized into five feature areas, each with documented plans in `docs/feature-areas/`:
+Development is organized into six feature areas, each with documented plans in `docs/feature-areas/`:
 
-- **Web Content Ingestion** - `add <url>` for web articles, blog posts, and other online content via trafilatura
+- **Content Ingestion** - `add <url>` for web articles, later EPUB and other formats, plus external metadata API enrichment
+- **Claude Code Integration** - MCP server (built) exposing library operations as Claude Code tools; research skills layered on top
 - **Neovim Citation Workflow** - library daemon + Neovim plugin for visual-mode citation search from within your editor
 - **Note Management** - auto-generated markdown stubs with YAML frontmatter linked to library records
 - **Automated Content Analysis** - ML-based auto-tagging, clustering, and triage-based verification across the full corpus

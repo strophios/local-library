@@ -1,40 +1,38 @@
 # Claude Code Integration
 
-Last updated: 2026-04-15
+Last updated: 2026-04-16
 
 ## Vision
 
-Make the document library a first-class tool in Claude Code sessions. When working on academic projects, Claude can search the corpus, retrieve specific documents, get RAG-generated answers, and surface relevant literature — all through structured MCP tool calls rather than ad-hoc shell commands.
+Make the document library a first-class tool in Claude Code sessions. When working on academic projects, Claude can search the corpus, retrieve specific documents, and surface relevant literature — all through structured MCP tool calls rather than ad-hoc shell commands.
 
-This is also the first external client of the Library API. The tool surface defined here (search, show, ask, list) is the same surface the daemon will later expose over a socket for Neovim and other clients. Building the MCP server first validates that API surface with a real consumer before committing to the daemon's architecture.
+This is also the first external client of the Library API. The tool surface defined here is the same surface the daemon will later expose over a socket for Neovim and other clients. Building the MCP server first validates that API surface with a real consumer before committing to the daemon's architecture.
 
 ## Current State
 
-No MCP server or Claude Code-specific integration exists. The Library API (`core/library.py`) exposes all needed operations. CLI commands have `--json` output modes. The library is usable via shell commands in Claude Code sessions today, but with poor ergonomics (untyped output, cold-start latency on every invocation, no session state).
+**MCP server is built and merged (see commits `fb74a7f..1e0fefb`).** Four read-only tools expose library operations to Claude Code over stdio transport. Claude Code discovers the server via `.mcp.json` at the project root. Tools return markdown; the server loads models once at startup and shares them across tool calls.
 
-## Near-Term (next to build)
+Implementation lives under `src/local_library/mcp/` with a domain CLAUDE.md documenting contracts and conventions.
 
-### MCP Server
+### Tools
 
-An MCP server exposing library operations as structured tools. Claude Code discovers and connects to it automatically via `.mcp.json` at the project root.
+- `search_library` — hybrid/vector/FTS search. Returns ranked results with citekeys, scores, section headers, and chunk indices. Supports `limit`, `mode`, `doc` scope, and a reranking toggle.
+- `show_document` — document metadata (citekey, title, authors, date, status, chunk count, CSL-JSON fields) by UUID or @citekey.
+- `list_documents` — markdown table of documents with optional status filter and pagination.
+- `get_document_text` — extracted markdown content. Returns full text for short documents (<50 chunks); for longer documents, returns a preview of the first 20 chunks plus instructions for fetching specific chunk ranges. Chunk indices from `search_library` feed directly into this tool.
 
-**Technical approach:**
-- FastMCP framework (part of the `mcp` SDK, v1.27.0+) — decorators + type hints auto-generate tool schemas
-- stdio transport (JSON-RPC 2.0) — Claude Code manages the subprocess lifecycle
-- In-process Library instance — models (embedding, cross-encoder) loaded once at startup, shared across tool calls
-- Long-lived process — acceptable cold start (~5-10s) since Claude Code keeps the server up for the session duration
+### Key design decisions made
 
-**Tools to expose (read/query operations):**
-- `search_library` — hybrid/vector/FTS search with limit, mode, doc scope, reranking toggle
-- `ask_library` — RAG question-answering with model selection, doc scope, mode
-- `show_document` — full document details (metadata, status, embedding info) by UUID or @citekey
-- `list_documents` — paginated document listing with optional status filter
-- `get_document_text` — extracted markdown content for a specific document (useful for Claude to read a paper directly)
+- **No `ask_library` tool.** The original plan included a RAG-based answer tool, but building it would mean Claude calling a tool that calls another LLM. Instead, `search_library` returns chunks and Claude synthesizes answers directly. This eliminates latency, avoids context isolation between the inner LLM call and the outer session, and keeps our codebase simpler.
+- **Markdown-only returns.** No JSON format option. One output format reduces per-call decision overhead for Claude and keeps tool output readable in conversation.
+- **No session state.** Each tool call is stateless. "Show me more about that third result" is handled by Claude re-issuing a tool call with the right identifier, not by the server tracking conversational context.
+- **Error convention with two severity levels.** `⚠ USER-FACING ERROR:` prefix signals infrastructure problems (sqlite-vec unavailable, empty corpus) that Claude should surface to the user. Plain `Error:` means tool-level issues (identifier miss, invalid range) that Claude can work around or retry. Tool functions never raise to the MCP protocol.
+- **stdout is protocol-only.** All logging goes to stderr. A dedicated audit test (`tests/mcp/test_stdout_discipline.py`) verifies that importing and invoking tools produces zero stdout output. This prevents any accidental `print()` from breaking the JSON-RPC stream.
+- **Chunk-based long-doc access.** Documents above 50 chunks return a preview rather than the full text. Chunk indices returned by `search_library` let Claude fetch specific passages on demand instead of loading entire papers.
 
-**Tools to defer (write operations):**
-- add, delete, update, reextract, embed — these are management operations better handled via CLI. Exposing them as MCP tools adds complexity (confirmation flows, error handling) without clear value for research workflows.
+### Configuration
 
-**Configuration (`.mcp.json` at project root):**
+`.mcp.json` at the project root:
 ```json
 {
   "mcpServers": {
@@ -51,26 +49,27 @@ An MCP server exposing library operations as structured tools. Claude Code disco
 }
 ```
 
-**Key design decisions to make:**
-- Return format: structured JSON vs. formatted markdown? Claude works well with both, but markdown is more readable in conversation output. Could offer both via a `format` parameter.
-- Session state: should the server track recently accessed documents or search results across tool calls? Useful for "show me more about that third result" style interactions, but adds complexity.
-- Error handling: MCP tools should return error strings (not raise exceptions) for graceful degradation. How verbose should error messages be?
-- `ask_library` and the LLM layer: this tool calls our RAG pipeline which calls an LLM. When Claude Code *is* Claude, there's an interesting recursion — Claude calling a tool that calls Claude. This works fine technically (the RAG pipeline uses a separate API call via LiteLLM), but we should consider whether Claude Code could skip the inner LLM call and do the answer synthesis itself from the retrieved context. That would be a `get_context` tool (retrieval only, no LLM generation) as an alternative to `ask_library`.
-- stdout discipline: stdio transport means all stdout is protocol traffic. All logging must go to stderr or to file. Library code that prints to stdout would break the protocol.
+### What we validated
 
-**What we already know works:**
-- Library class is instantiable and holds all needed state
-- `--json` output modes exist for search and ask commands (validates the output shapes)
-- The retriever protocol, RAG interface, and document storage are all tested at scale (1,216 docs)
+- FastMCP framework (mcp SDK v1.27.0+) handles tool schema generation cleanly via decorators and type hints.
+- Cold start (~2-5s for the embedder on first search) is acceptable for long-lived Claude Code sessions. Subsequent calls are fast.
+- The Library API's read surface (search, show, list, chunk access) maps directly to MCP tools without wrapper complexity. New public methods were added to Library for chunk access (`get_chunks_for_document`, etc.) so the MCP layer doesn't need private-API access.
 
-### Research Skills (layer on top of MCP)
+## Near-Term (next to build)
 
-After the MCP server works, Claude Code skills can encode research workflows:
-- "When the user mentions academic literature, search the library first"
-- "When citing a claim, verify it against the corpus"
-- "When starting a literature review, list relevant documents and summarize key arguments"
+### Research skills layered on MCP
 
-These are essentially CLAUDE.md instructions or Claude Code skills that reference the MCP tools. Low effort, high leverage, but depend on having the MCP server working first.
+The server is working; now encode the workflows. Claude Code skills (CLAUDE.md instructions or project-level skills) can reference the MCP tools:
+
+- "When the user mentions a paper or concept from the literature, search `local-library` first before external search."
+- "When citing a claim, verify it against the corpus via `search_library` and quote the relevant chunk."
+- "When starting a literature review in this project, `list_documents` with relevant status, then `search_library` for the topic."
+
+These are low effort, high value. They don't require code changes — just a few well-placed skill definitions that point at the existing tools.
+
+### Write-operation tools (if warranted)
+
+The current tool set is deliberately read-only. If real use surfaces a pattern where `add`, `reextract`, or metadata updates from within Claude Code sessions prove valuable, expose them selectively. Each write tool needs confirmation semantics and careful error handling, so add them one at a time based on demonstrated demand rather than speculative coverage.
 
 ## Longer-Term Ideas
 
@@ -83,30 +82,30 @@ When the library daemon is built (for Neovim), the MCP server becomes a thin cli
 - Gains shared model lifecycle (lower memory if multiple clients)
 - No change to tool interfaces or Claude Code configuration
 
-### Write Operations
-If experience shows that adding documents or managing metadata from within Claude Code sessions is valuable, selectively expose write operations with appropriate confirmation flows.
-
 ## Dependencies
 
 **Provides to other areas:**
-- Validates the Library API surface that the daemon will expose
-- Tool schemas become the canonical operation definitions shared across clients
+- Validates the Library API surface that the daemon will expose (confirmed with real consumer)
+- Tool contracts (markdown-only, stateless, two-tier errors) inform daemon protocol design
+- Motivated public Library methods for chunk access that benefit other clients too
 
 **Needs from other areas:**
-- Full corpus import (done) — library search is only useful with content
-- RAG Pipeline Improvements — search/answer quality affects tool usefulness
-- Extraction Resilience — FAILED documents with no metadata are confusing in tool results
+- Full corpus import (done — 1,216 docs) — library search is only useful with content
+- RAG Pipeline Improvements — search quality directly affects tool usefulness
+- Extraction Resilience (done) — FAILED documents now retain citekey and filename metadata, so they're identifiable in tool results rather than anonymous errors
 
 **Independent of:**
-- Web Content Ingestion (but ingested web content appears in MCP search results)
+- Content Ingestion (but ingested web content will appear in MCP search results)
 - Note Management (but notes could become MCP resources later)
 - Neovim Citation Workflow (shared API surface, but no direct dependency)
 
 ## References
 
+- `src/local_library/mcp/CLAUDE.md` — implementation contracts and conventions
+- `docs/design-plans/2026-04-15-mcp-server.md` — original design
+- `docs/implementation-plans/2026-04-15-mcp-server/` — phased implementation plan
 - MCP Python SDK: `mcp` package v1.27.0+ on PyPI
 - FastMCP framework: `mcp.server.fastmcp` module (decorator-based tool definitions)
 - Claude Code MCP docs: https://code.claude.com/docs/en/mcp
 - MCP specification: https://modelcontextprotocol.io/docs/learn/architecture
-- `roadmap.md` — positions MCP server as first external client validating daemon API
 - `docs/feature-areas/neovim-citation-workflow/README.md` — daemon design decisions (shared infrastructure)

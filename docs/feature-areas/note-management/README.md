@@ -1,6 +1,6 @@
 # Note Management
 
-Last updated: 2026-03-06
+Last updated: 2026-04-16
 
 ## Vision
 
@@ -10,7 +10,7 @@ The near-term goal is the infrastructure: auto-generated stubs, organized layout
 
 ## Current State
 
-No note management exists. The `CLAUDE.md` mentions "path to markdown file with YAML frontmatter linking back to record" as part of the core data model, and `future_roadmap.md` has a brief entry, but nothing has been built.
+No note management exists. The `CLAUDE.md` mentions "path to markdown file with YAML frontmatter linking back to record" as part of the core data model, but nothing has been built.
 
 The `open` CLI command exists for viewing extracted markdown and PDFs. Notes would be a natural third target for `open`.
 
@@ -50,6 +50,7 @@ Auto-generated markdown files with YAML frontmatter, organized in a discoverable
 - **Batch note generation**: Generate stubs for all documents that don't have notes yet
 - **Note status tracking**: Has this document been read/annotated? (Could be as simple as "note modified since generation")
 - **Note as metadata source**: Allow for modification of document metadata through editing the associated note's YAML header fields (likely not for all metadata values but, e.g., for tags or read/unread, etc.)
+- **Bidirectional Zotero note sync**: Sync notes between local markdown files and Zotero. Conflict resolution is the hard part — two independent edit streams with no natural merge. Two simpler framings worth considering first: (a) one-way sync (local → Zotero only, treating local as authoritative), which sidesteps conflict resolution entirely; (b) treat the two stores as separate with manual reconciliation. Full bidirectional is a lot of complexity for a feature whose value is unclear until notes are actually in use.
 
 ## Open Questions
 
@@ -69,6 +70,5 @@ Auto-generated markdown files with YAML frontmatter, organized in a discoverable
 
 ## References
 
-- `future_roadmap.md` § "Markdown Note Generation" — original description
 - `CLAUDE.md` § "Core Data Model" — notes as part of the data model
 - `project_breakdown.md` — mentions note management as a priority area

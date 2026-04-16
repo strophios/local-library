@@ -1,6 +1,6 @@
 # RAG Pipeline Improvements
 
-Last updated: 2026-04-01
+Last updated: 2026-04-16
 
 ## Vision
 
@@ -18,39 +18,47 @@ The pipeline is functional end-to-end with competitive retrieval quality on the 
 - **RAG**: `RAGInterface` orchestrates context assembly → prompt construction → LLM generation (LiteLLM)
 - **Evaluation**: 76 labeled queries with graded relevance (3-tier), Precision@k, Recall@k, MRR, NDCG@k metrics. See `tests/eval/README.md` for full details
 
-**Baseline results** (hybrid+rerank, ~20-doc dev corpus): MRR=0.913, Recall@10=0.926, NDCG@10=0.896. Conceptual queries are the weakest category (NDCG@10=0.784). Full results in `tests/eval/baseline_results.json`.
+**Dev-corpus baseline** (hybrid+rerank, ~20 docs): MRR=0.913, Recall@10=0.926, NDCG@10=0.896. Conceptual queries are the weakest category (NDCG@10=0.784). Full results in `tests/eval/baseline_results.json`.
 
-## Near-Term: Evaluation Pass and Corpus Scaling
+**Full corpus imported** (1,216 docs, 99.3% success). Initial corpus-scale eval run shows apparent quality regression — see below for why this is largely an annotation artifact rather than a real retrieval regression.
 
-The evaluation pass is underway, gated before full corpus import. See `build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling".
+## Near-Term: Eval Re-Annotation at Corpus Scale
+
+The big shift: the evaluation framework was built and tuned against a 20-doc dev set. At 1,216 documents, the same 76 queries surface many more plausibly-correct results that aren't in the gold set, so they score as misses even when retrieval is working correctly. The corpus-scale numbers look worse than the dev-corpus numbers, but this reflects the annotation gap, not a pipeline regression. Informal manual spot-checking of queries at corpus scale suggests retrieval quality is fine.
+
+The real next step is making the eval set meaningful at the new scale before investing more in pipeline tuning:
+
+- **Re-annotate existing 76 queries** against the full corpus — each query likely has additional relevant documents we didn't know existed at the dev-corpus stage.
+- **Expand the query set** — more queries, better coverage across categories and document types now that the corpus is diverse.
+- **Add chunk-level annotations** — current annotations are document-level. Chunk-level gold data would let us measure retrieval precision more directly and separate retrieval quality from chunk-selection quality.
+- **Reassess quality targets** once the eval infrastructure is solid at scale.
+
+The existing improvement queue (conceptual query gap, query expansion, etc.) is still valid, but prioritizing it over re-annotation would mean tuning against noisy signal.
 
 ### Done
-- ✓ Expanded query set to 76 queries with graded relevance and annotation rubric
+- ✓ Expanded query set to 76 queries with graded relevance and annotation rubric (dev-corpus scale)
 - ✓ Cross-encoder reranking implemented, benchmarked, enabled by default
 - ✓ FTS5 query preprocessing: stop-word removal, OR-mode, sanitizer hardening
 - ✓ RRF weight tuning (2:1 vector-to-FTS ratio)
-- ✓ Baseline evaluation run across all configurations
+- ✓ Baseline evaluation run across all configurations (dev corpus)
+- ✓ Full Zotero corpus imported (1,216 docs)
+- ✓ First pass of corpus-scale eval — results flagged as annotation-limited
 
-### In Progress
-- Establish quality targets based on baseline analysis
-- Investigate conceptual query gap (NDCG@10=0.784 vs 0.896 overall)
-- Determine which pipeline improvement to target next
+### In Progress / Blocked
 
-### Remaining Before Corpus Import
-- Meet quality targets on dev corpus
-- Import full Zotero corpus (~1400 docs)
-- Re-evaluate with full corpus
+- **Re-annotation at corpus scale** — eval set expansion and re-scoring (top priority; blocks most other work)
+- **Establish corpus-scale quality targets** (blocked on re-annotation)
+- **Investigate conceptual query gap** at corpus scale (blocked on re-annotation — dev-corpus gap may or may not survive re-annotation)
 
 ### Improvement Queue
 
-The iterative improvement loop continues. Items completed are struck through; remaining items ordered by expected impact:
+Items below are still ordered roughly by expected impact once the eval infrastructure supports meaningful measurement at corpus scale:
 
-1. ~~**Cross-encoder reranking**~~ — Implemented. Document-aware grouping, MiniLM-L-12-v2, sigmoid normalization, broadened candidate pool. Recall@10 improved ~7% over plain vector.
-
+1. ~~**Cross-encoder reranking**~~ — Implemented. Document-aware grouping, MiniLM-L-12-v2, sigmoid normalization, broadened candidate pool. Recall@10 improved ~7% over plain vector on dev corpus.
 2. ~~**FTS query preprocessing**~~ — Implemented. Stop-word removal + explicit OR mode made FTS viable (was returning 0 results). Asymmetric RRF weights tuned.
 
-3. **Conceptual query improvement** (next target)
-   - Queries about mechanisms/arguments are the weakest category
+3. **Conceptual query improvement**
+   - Queries about mechanisms/arguments were the weakest category on dev corpus
    - Likely causes: distributed arguments across chunks, abstract vocabulary, chunk boundary issues
    - Potential approaches: query expansion, increased chunk overlap, chunk merging at retrieval time, document-level scoring
 
@@ -71,12 +79,12 @@ The iterative improvement loop continues. Items completed are struck through; re
 
 If the above aren't sufficient:
 
-5. **Embedding strategy changes** (require re-embedding entire corpus)
+7. **Embedding strategy changes** (require re-embedding entire corpus)
    - Late chunking (embed full document, chunk embeddings post-hoc)
    - Alternative embedding models (Qwen3, BGE, E5-Mistral)
    - Different chunking parameters (size, overlap, boundary strategy)
 
-6. **Hierarchical retrieval**
+8. **Hierarchical retrieval**
    - Document-level embeddings (of summaries or full text) for coarse retrieval
    - Then chunk-level retrieval within top documents
    - See `project_breakdown.md` notes on multi-stage search
@@ -107,10 +115,11 @@ If the above aren't sufficient:
 
 ## Open Questions
 
-- What quality targets are appropriate? Baseline is established (MRR=0.913, NDCG@10=0.896); targets need to be set based on this and expected degradation at scale.
-- What's the right approach for the conceptual query gap? Chunk overlap tuning is cheap; query expansion is more complex but potentially higher impact.
-- Should the evaluation framework test end-to-end RAG answer quality, or just retrieval quality? Retrieval is now well-measured; answer quality evaluation is the remaining gap.
-- At what corpus size does performance become a concern? ~20 documents currently; need to reassess after full corpus import (~1400 docs, ~100K+ vectors).
+- How do we efficiently re-annotate 76 queries against 1,216 documents? Full manual review is prohibitive. Options: run each query and annotate the top-N returned results (biased toward whatever retriever we use), LLM-assisted annotation with human spot-checking, or sampling-based approaches. Likely some combination.
+- Should we expand the query set before or after re-annotating existing queries? Re-annotating first gives a consistent baseline; expanding first gets more signal but means annotating more queries twice (once naively, once properly).
+- What quality targets are appropriate once we have solid corpus-scale measurements? The dev-corpus numbers (MRR=0.913, NDCG@10=0.896) set a ceiling expectation, but degradation at scale is expected and normal.
+- What's the right approach for the conceptual query gap? Chunk overlap tuning is cheap; query expansion is more complex but potentially higher impact. May or may not survive re-annotation.
+- Should the evaluation framework test end-to-end RAG answer quality, or just retrieval quality? Retrieval is well-measured on dev corpus; answer quality evaluation is the remaining gap.
 - Is there a meaningful difference between "good retrieval" and "good for citation search"? The Neovim workflow may need different tuning than general RAG queries.
 
 ## Dependencies

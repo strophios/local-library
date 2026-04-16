@@ -1,6 +1,6 @@
 # Neovim Citation Workflow
 
-Last updated: 2026-03-06
+Last updated: 2026-04-16
 
 ## Vision
 
@@ -62,6 +62,7 @@ A Lua plugin communicating with the daemon. The core interaction:
 - **LLM-augmented query rewriting**: Before searching, use an LLM to expand or refine the query (especially useful when the selected text is a claim rather than a keyword query)
 - **Bibliography-aware search**: Pass a `.bib` file and preferentially search those documents, or use titles/abstracts from the bibliography as additional query context
 - **Tag-aware search**: Use document tags (when auto-tagging exists) to weight or filter results
+- **Confidence-based result filtering**: Earlier thinking sketched threshold tiers (strict ~0.65, default ~0.45, broad ~0.30) for citation suggestion. The specific numbers are tentative and may not survive once we measure against real use. Worth keeping as a starting point if/when we need to expose "more/fewer results" knobs to the user.
 
 ### Triage-Based Verification Modes
 - "What in my library might not support this claim?" — surface potentially contradicting sources
@@ -77,6 +78,12 @@ A Lua plugin communicating with the daemon. The core interaction:
 - Floating window for direct `search` or `ask` queries (type a query instead of selecting text)
 - Document-level search (scope results to a specific document or set of documents)
 
+## Previously considered
+
+### nvim-cmp autocomplete source on `[@` trigger
+
+Early sketches included a nvim-cmp source that triggered on `[@` to surface citation candidates inline as the user typed. Latency budget would have been ~70-120ms (feasible with a warm daemon). Dropped because the interaction model doesn't match the actual writing workflow: citations are usually inserted based on a claim or passage, not a half-typed citekey. The visual-mode selection workflow above is a better fit. Leaving this note as a pointer in case something brings it back into scope.
+
 ## Dependencies
 
 **Provides to other areas:**
@@ -90,6 +97,5 @@ A Lua plugin communicating with the daemon. The core interaction:
 ## References
 
 - `project_breakdown.md` — detailed interaction design notes (especially the Neovim plugin UX)
-- `future_roadmap.md` § "Citation Tooling", "Interface Expansion" — original feature descriptions
 - `RAG_background/citation_tooling_report.md` — citation suggestion architecture, triage reframing
 - `RAG_background/llm_query_interface_report.md` — LLM integration patterns

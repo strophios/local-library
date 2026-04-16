@@ -17,9 +17,9 @@ This plan applies the pipeline-first, layer-complete development approach descri
 
 ### What Phase 1 Does Not Include
 
-Features deferred to later phases are documented in `future_roadmap.md`:
-- Web content ingestion (trafilatura)
-- Citation tooling (Neovim integration, CLI suggestion, MCP server)
+Features deferred to later phases are documented in the feature area READMEs under `docs/feature-areas/` and tracked in `roadmap.md`. At a glance:
+- Content ingestion (web via trafilatura; later EPUB; external API metadata enrichment)
+- Citation tooling (Neovim integration, daemon; MCP server is built)
 - Auto-tagging and dual embeddings
 - Note management
 - Zotero export (pushing tags back)
@@ -340,7 +340,7 @@ Each milestone extends the pipeline and delivers testable functionality.
 
 **Status:** Deferred to post-Phase 1. Evaluate need based on M3b accuracy results.
 
-**See:** `future_roadmap.md` § "External API Metadata Enrichment (M3c)" for full implementation details, API cascade architecture, and decision criteria.
+**See:** `docs/feature-areas/content-ingestion/README.md` § "External API Metadata Enrichment" for the API cascade architecture (CrossRef → GROBID → OpenAlex), decision criteria, and design considerations.
 
 ---
 
