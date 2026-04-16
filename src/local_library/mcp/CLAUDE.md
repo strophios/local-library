@@ -21,7 +21,7 @@ Exposes the document library to Claude Code via MCP (Model Context Protocol) too
 
 ## Dependencies
 
-- **Uses**: `core.Library` (orchestrator), `core.models` (Document, DocumentStatus, EmbeddingStatus), `core.errors` (LookupError, EmbeddingError, FTSQueryError), `core.vec_extension` (is_vec_available), `cli.utils` (resolve_identifier, suggest_citekeys), `embeddings.base` (SearchResult, Chunk, Retriever)
+- **Uses**: `core.Library` (orchestrator), `core.errors` (LookupError, EmbeddingError, FTSQueryError), `core.vec_extension` (is_vec_available), `cli.utils` (resolve_identifier), `embeddings.base` (SearchResult)
 - **Used by**: Claude Code (via MCP protocol over stdio)
 - **Boundary**: MCP MUST NOT be imported by core, embeddings, ingestion, or rag. CLI may import from MCP for shared utilities if needed.
 
