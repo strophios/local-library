@@ -23,7 +23,7 @@ Exposes the document library to Claude Code via MCP (Model Context Protocol) too
   - Chunk indices validated: must be non-negative, s <= e, s < total_chunks
   - list_documents filters combine with AND semantics; status, year, year_missing, author_contains, title_contains, citekey_prefix parameters are all optional
   - list_documents year and year_missing are mutually exclusive (tool returns error if both provided)
-  - list_documents substring filters (author_contains, title_contains) are case-insensitive with SQL LIKE metacharacter escaping
+  - list_documents substring filters (author_contains, title_contains) are case-insensitive; wildcard characters (%, _) are matched literally rather than as patterns
   - list_documents citekey_prefix is case-insensitive prefix match
   - Library instance created once at startup, shared across tool calls
   - Models load lazily on first use (~2-5s one-time for embedder)
