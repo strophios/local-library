@@ -13,7 +13,7 @@ from uuid import uuid4
 
 import pytest
 
-from local_library.core.models import Document, DocumentStatus, EmbeddingStatus
+from local_library.core.models import Document, DocumentStatus
 from local_library.mcp.formatters import (
     format_document,
     format_document_list,
