@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-04-07
+Last verified: 2026-04-15
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -93,6 +93,7 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - **LLM abstraction layer**: LLMClient protocol with LiteLLMClient implementation; provider-agnostic LLM access with error mapping to ErrorCode hierarchy
 - **RAG query interface**: RAGInterface orchestrates context assembly, prompt construction, and LLM generation; RAGStream supports streaming with token accumulation; pre-LLM gate skips API call when no context retrieved
 - **CLI `ask` command**: streaming answers with Rich Live display, --no-stream, --json, --model, --mode, --doc, --limit, --no-rerank options; source citations with citekey attribution
+- **MCP server**: FastMCP-based server (stdio transport) exposing 4 read-only tools (search_library, show_document, list_documents, get_document_text) for Claude Code integration. Markdown-only responses, identifier resolution via @citekey/UUID, chunk-based document text access with short-doc/long-doc modes
 - SQLite storage with content-addressable file layout (schema v3)
 - CLI interface (add, list, show, delete, open, update, review, reextract, embed, search, ask commands)
 - @citekey identifier support with fuzzy matching suggestions
@@ -132,6 +133,7 @@ Five horizontal concerns cut across the system:
 - **Metadata**: CrossRef API, GROBID (for academic PDFs), Open Graph tags (for web)
 - **Vector storage**: sqlite-vec (v0.1.6+), SQLite FTS5 for hybrid search
 - **LLM interface**: Custom RAGInterface + LiteLLM for provider abstraction
+- **MCP server**: FastMCP (mcp>=1.27.0) for Claude Code tool integration over stdio
 - **Citations**: citeproc-py against CSL-JSON
 
 ## RAG System Design Decisions
