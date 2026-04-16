@@ -7,8 +7,14 @@ from uuid import uuid4
 import pytest
 
 from local_library.core.errors import EmbeddingError, ErrorCode, FTSQueryError, LookupError
+from local_library.core.models import Document, DocumentStatus, EmbeddingStatus
 from local_library.embeddings.base import Chunk, SearchResult
-from local_library.mcp.server import search_library
+from local_library.mcp.server import (
+    get_document_text,
+    list_documents,
+    search_library,
+    show_document,
+)
 
 
 def _make_chunk(doc_id=None, chunk_index=0, text="Sample text.", section="Intro"):
@@ -23,6 +29,28 @@ def _make_chunk(doc_id=None, chunk_index=0, text="Sample text.", section="Intro"
         char_end=len(text),
         created_at=datetime.now(timezone.utc),
     )
+
+
+def _make_document(citekey="Author2023", title="Test Doc", status=DocumentStatus.READY):
+    """Create a mock Document for testing."""
+    doc = MagicMock(spec=Document)
+    doc.id = uuid4()
+    doc.citekey = citekey
+    doc.title = title
+    doc.authors = "Test Author"
+    doc.issued_date = "2023"
+    doc.status = status
+    doc.embedding_status = EmbeddingStatus.CURRENT
+    doc.original_path = "/path/to/doc.pdf"
+    doc.extracted_path = "/path/to/extracted.md"
+    doc.csl_json = {"type": "article-journal", "title": title}
+    doc.content_hash = "abc123"
+    doc.storage_path = "/storage/ab/cd/abc123.pdf"
+    doc.created_at = datetime(2023, 6, 15, tzinfo=timezone.utc)
+    doc.updated_at = datetime(2023, 6, 15, tzinfo=timezone.utc)
+    doc.error_message = None
+    doc.error_code = None
+    return doc
 
 
 def _make_result(score=0.95, doc_citekey="Author2023", doc_title="Test Doc", **kwargs):
@@ -164,3 +192,134 @@ class TestSearchLibrary:
         result = search_library("obscure query")
         assert "no results" in result.lower()
         assert "obscure query" in result
+
+
+class TestShowDocument:
+    """Tests for show_document tool."""
+
+    @pytest.fixture(autouse=True)
+    def setup_mock_library(self):
+        self.mock_library = MagicMock()
+        with patch("local_library.mcp.server._library", self.mock_library):
+            yield
+
+    @patch("local_library.mcp.server.resolve_identifier")
+    def test_returns_document_metadata(self, mock_resolve) -> None:
+        """Returns formatted document metadata."""
+        doc = _make_document(citekey="Bourdieu1984")
+        mock_resolve.return_value = doc
+        self.mock_library.get_chunk_count.return_value = 100
+        result = show_document("@Bourdieu1984")
+        assert "@Bourdieu1984" in result
+
+    @patch("local_library.mcp.server.resolve_identifier")
+    def test_not_found_returns_error_with_suggestions(self, mock_resolve) -> None:
+        """Missing document returns suggestions."""
+        mock_resolve.side_effect = LookupError(
+            "not found",
+            ErrorCode.NOT_FOUND,
+            details={"suggestions": ["Author2023"]},
+        )
+        result = show_document("@Auth2023")
+        assert "Error: " in result
+        assert "@Author2023" in result
+
+
+class TestListDocuments:
+    """Tests for list_documents tool."""
+
+    @pytest.fixture(autouse=True)
+    def setup_mock_library(self):
+        self.mock_library = MagicMock()
+        with patch("local_library.mcp.server._library", self.mock_library):
+            yield
+
+    def test_returns_document_table(self) -> None:
+        """Returns markdown table of documents."""
+        docs = [_make_document(citekey=f"Author{i}") for i in range(3)]
+        self.mock_library.list.return_value = docs
+        result = list_documents()
+        assert "|" in result
+        assert "@Author0" in result
+
+    def test_invalid_status_returns_error(self) -> None:
+        """Invalid status filter returns tool error."""
+        result = list_documents(status="bogus")
+        assert result.startswith("Error: ")
+
+    def test_limit_clamped(self) -> None:
+        """Limit clamped to 100."""
+        docs = [_make_document() for _ in range(5)]
+        self.mock_library.list.return_value = docs
+        result = list_documents(limit=200)
+        assert "|" in result
+
+    def test_status_filter_forwarded(self) -> None:
+        """Status filter forwarded to Library.list()."""
+        self.mock_library.list.return_value = []
+        list_documents(status="ready")
+        self.mock_library.list.assert_called_with(status=DocumentStatus.READY)
+
+
+class TestGetDocumentText:
+    """Tests for get_document_text tool."""
+
+    @pytest.fixture(autouse=True)
+    def setup_mock_library(self):
+        self.mock_library = MagicMock()
+        with patch("local_library.mcp.server._library", self.mock_library):
+            yield
+
+    @patch("local_library.mcp.server.resolve_identifier")
+    @patch("local_library.mcp.server.Path")
+    def test_short_doc_returns_full_text(self, mock_path_cls, mock_resolve) -> None:
+        """Short doc (<50 chunks) returns full extracted text."""
+        doc = _make_document()
+        mock_resolve.return_value = doc
+        self.mock_library.get_chunk_count.return_value = 10
+        mock_path_cls.return_value.read_text.return_value = "# Full content"
+        result = get_document_text("@Author2023")
+        assert "Full content" in result
+
+    @patch("local_library.mcp.server.resolve_identifier")
+    def test_long_doc_without_range_shows_preview(self, mock_resolve) -> None:
+        """Long doc without range shows preview with instructions."""
+        doc = _make_document()
+        mock_resolve.return_value = doc
+        self.mock_library.get_chunk_count.return_value = 200
+        self.mock_library.get_chunks.return_value = [
+            _make_chunk(chunk_index=i, text=f"Preview {i}") for i in range(20)
+        ]
+        result = get_document_text("@Author2023")
+        assert "200" in result
+        assert "Preview 0" in result
+
+    @patch("local_library.mcp.server.resolve_identifier")
+    def test_long_doc_with_range_returns_chunks(self, mock_resolve) -> None:
+        """Long doc with range returns specific chunks."""
+        doc = _make_document()
+        mock_resolve.return_value = doc
+        self.mock_library.get_chunk_count.return_value = 200
+        self.mock_library.get_chunks.return_value = [
+            _make_chunk(chunk_index=i, text=f"Content {i}") for i in range(10, 15)
+        ]
+        result = get_document_text("@Author2023", start_chunk=10, end_chunk=14)
+        assert "Content 10" in result
+
+    @patch("local_library.mcp.server.resolve_identifier")
+    def test_no_extracted_path_returns_error(self, mock_resolve) -> None:
+        """Doc without extracted_path returns tool error."""
+        doc = _make_document()
+        doc.extracted_path = None
+        mock_resolve.return_value = doc
+        result = get_document_text("@Author2023")
+        assert "Error: " in result
+
+    @patch("local_library.mcp.server.resolve_identifier")
+    def test_invalid_range_returns_error(self, mock_resolve) -> None:
+        """start_chunk > end_chunk returns tool error."""
+        doc = _make_document()
+        mock_resolve.return_value = doc
+        self.mock_library.get_chunk_count.return_value = 200
+        result = get_document_text("@Author2023", start_chunk=20, end_chunk=10)
+        assert "Error: " in result
