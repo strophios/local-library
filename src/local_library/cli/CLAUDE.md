@@ -33,7 +33,7 @@ Command-line interface for the local-library system. Provides user-facing comman
   - reextract --all targets READY and NEEDS_REVIEW documents; continues on per-document errors
   - list command accepts --year (integer), --year-missing (flag), --author-contains (string), --title-contains (string), --citekey-prefix (string) filters that combine with AND semantics
   - list --year and --year-missing are mutually exclusive; passing both raises error
-  - list substring filters (--author-contains, --title-contains) are case-insensitive with SQL LIKE metacharacter escaping
+  - list substring filters (--author-contains, --title-contains) are case-insensitive; wildcard characters (%, _) are matched literally rather than as patterns
   - list --citekey-prefix is case-insensitive prefix match
 - **Expects**: Library context manager for database access; editor available for update/review/open commands
 
