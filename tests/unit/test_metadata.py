@@ -970,3 +970,45 @@ class TestExtractYearForCitekey:
 
         csl = {"issued": {"date-parts": [[None]]}}
         assert _extract_year_for_citekey(csl) == ""
+
+
+class TestMetadataHandlerIssuedYear:
+    """Tests for issued_year extraction in MetadataHandler.process()."""
+
+    def test_process_populates_issued_year_from_date_parts(self) -> None:
+        from local_library.ingestion.metadata import MetadataHandler
+
+        handler = MetadataHandler()
+        csl = {
+            "type": "article-journal",
+            "title": "Test",
+            "author": [{"family": "Smith", "given": "J"}],
+            "issued": {"date-parts": [[2023, 6, 15]]},
+        }
+        result = handler.process(csl)
+        assert result.issued_year == 2023
+
+    def test_process_issued_year_none_for_missing_date(self) -> None:
+        from local_library.ingestion.metadata import MetadataHandler
+
+        handler = MetadataHandler()
+        csl = {
+            "type": "article-journal",
+            "title": "Test",
+            "author": [{"family": "Smith", "given": "J"}],
+        }
+        result = handler.process(csl)
+        assert result.issued_year is None
+
+    def test_process_issued_year_none_for_literal_date(self) -> None:
+        from local_library.ingestion.metadata import MetadataHandler
+
+        handler = MetadataHandler()
+        csl = {
+            "type": "article-journal",
+            "title": "Test",
+            "author": [{"family": "Smith", "given": "J"}],
+            "issued": {"literal": "Spring 2023"},
+        }
+        result = handler.process(csl)
+        assert result.issued_year is None

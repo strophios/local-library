@@ -574,6 +574,7 @@ class MetadataHandler:
         title = self._extract_title(csl_json)
         authors, author_list = self._extract_authors(csl_json)
         issued_date = self._extract_issued_date(csl_json)
+        issued_year = extract_year_from_csl(csl_json)
 
         return MetadataResult.create(
             csl_json=csl_json,
@@ -581,6 +582,7 @@ class MetadataHandler:
             title=title,
             authors=authors,
             issued_date=issued_date,
+            issued_year=issued_year,
             validation_warnings=warnings,
             author_list=author_list,
         )
