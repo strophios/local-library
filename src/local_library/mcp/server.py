@@ -63,9 +63,7 @@ def search_library(
 
     # Validate mode
     if mode not in VALID_MODES:
-        return format_tool_error(
-            f"invalid mode: {mode}. Expected one of: {', '.join(VALID_MODES)}"
-        )
+        return format_tool_error(f"invalid mode: {mode}. Expected one of: {', '.join(VALID_MODES)}")
 
     # Check sqlite-vec availability (required for vector and hybrid modes, not FTS)
     if mode != "fts" and not is_vec_available():
@@ -93,14 +91,10 @@ def search_library(
         suggestions = e.details.get("suggestions", [])
         if suggestions:
             suggestion_text = ", ".join(f"@{s}" for s in suggestions)
-            return format_tool_error(
-                f"{e.message}. Did you mean {suggestion_text}?"
-            )
+            return format_tool_error(f"{e.message}. Did you mean {suggestion_text}?")
         return format_tool_error(e.message)
     except FTSQueryError as e:
-        return format_tool_error(
-            f"{e.message}. Try a different search query or use mode='vector'."
-        )
+        return format_tool_error(f"{e.message}. Try a different search query or use mode='vector'.")
     except EmbeddingError as e:
         return format_user_error(str(e))
 
