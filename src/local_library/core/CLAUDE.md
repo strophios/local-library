@@ -1,6 +1,6 @@
 # Core Domain
 
-Last verified: 2026-04-15
+Last verified: 2026-04-16
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 
 ## Contracts
 
-- **Exposes**: Document, DocumentStatus (PENDING, READY, FAILED, NEEDS_REVIEW), EmbeddingStatus (PENDING, CURRENT, STALE), MetadataSource (ZOTERO, EXPLICIT, FILENAME, TEXT_EXTRACTED), RAGResponse, AddResult, FieldExtraction, TextExtractionResult, ErrorCode hierarchy (including EXTRACTION_FALLBACK, MetadataError, ZoteroError, EmbeddingError, LLMError, RAGError), Library class (with get_by_citekey, get_all_citekeys, get_chunk_count, get_chunks, update_metadata, embed, embed_all, get_retriever, query, query_stream; reranking enabled by default), storage functions, vec_extension module
+- **Exposes**: Document, DocumentStatus (PENDING, READY, FAILED, NEEDS_REVIEW), EmbeddingStatus (PENDING, CURRENT, STALE), MetadataSource (ZOTERO, EXPLICIT, FILENAME, TEXT_EXTRACTED), RAGResponse, AddResult, FieldExtraction, TextExtractionResult, ErrorCode hierarchy (including EXTRACTION_FALLBACK, MetadataError, ZoteroError, EmbeddingError, LLMError, RAGError), Library class (with get_by_citekey, get_all_citekeys, get_chunk_count, get_chunks, list, update_metadata, embed, embed_all, get_retriever, query, query_stream; reranking enabled by default), storage functions, vec_extension module
 - **Guarantees**:
   - Document.id is UUID, globally unique
   - Document.content_hash is SHA-256, content-addressable
@@ -40,6 +40,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
   - RAGInterface lazily initialized on first query() or query_stream() call
   - Library.get_chunk_count(doc_id: UUID) returns 0 if sqlite-vec unavailable or document has no chunks
   - Library.get_chunks(doc_id: UUID, start, end) returns empty list if sqlite-vec unavailable or document has no chunks; supports optional index range slicing
+  - Library.list(status, year, year_missing, author_contains, title_contains, citekey_prefix) returns documents matching all provided filters (AND semantics). `year` and `year_missing` are mutually exclusive; passing both raises ValueError. Substring filters (`author_contains`, `title_contains`) are case-insensitive with LIKE metacharacter escaping. `citekey_prefix` is case-insensitive prefix match.
 - **Expects**: Sources handled by at least one registered acquirer; files handled by at least one extractor
 
 ## Dependencies
@@ -76,6 +77,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 - **Reranking by default**: get_retriever(rerank=True) wraps base retriever with RerankedRetriever; _get_reranker() lazily initializes CrossEncoderReranker on first use. Cross-encoder model loaded on first rerank call, not at Library construction
 - **Rerank parameter forwarding**: query() and query_stream() accept rerank parameter, forwarded to get_retriever()
 - **RAGResponse dataclass**: Frozen dataclass capturing question, answer, context_chunks (tuple of SearchResult), model, and retrieval_mode for display and serialization
+- **Denormalized `issued_year` column**: `documents.issued_year INTEGER` added in schema v4. Populated at write time from `csl_json["issued"]` via `extract_year_from_csl()` in `metadata.py`. Index `idx_documents_issued_year` enables efficient year-equality queries. NULL when year is unextractable; the `year_missing` filter surfaces these records for review.
 
 ## Invariants
 

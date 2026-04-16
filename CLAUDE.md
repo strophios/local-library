@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-04-15
+Last verified: 2026-04-16
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -223,6 +223,11 @@ All commands accepting document IDs support both UUID (full or partial) and @cit
 - `uv run local-library add <path> --metadata <csl-json-file>` - Add with bibliographic metadata
 - `uv run local-library add <path> --llm-extract` - Add with LLM-enhanced PDF extraction (requires GEMINI_API_KEY)
 - `uv run local-library list` - List all documents (use `--limit N` for pagination, `--all` for unlimited)
+- `uv run local-library list --year 2023` - Filter by publication year
+- `uv run local-library list --year-missing` - Show documents with no extractable year
+- `uv run local-library list --author-contains Zippel` - Filter authors (case-insensitive substring)
+- `uv run local-library list --title-contains methods` - Filter titles (case-insensitive substring)
+- `uv run local-library list --citekey-prefix Bourdieu` - Filter citekeys (case-insensitive prefix)
 - `uv run local-library show <id>` - Show document details
 - `uv run local-library delete <id>` - Delete a document (cascades to embeddings)
 - `uv run local-library open <id>` - Open extracted markdown in editor (use `--pdf` for PDF, `--both` for both)

@@ -1,6 +1,6 @@
 # MCP Server Domain
 
-Last verified: 2026-04-15 (Phase 2 complete)
+Last verified: 2026-04-16 (Phase 2 complete)
 
 ## Purpose
 
@@ -11,7 +11,7 @@ Exposes the document library to Claude Code via MCP (Model Context Protocol) too
 - **Exposes**: MCP tools
   - `search_library` — semantic/keyword search with scores, chunk indices, and optional reranking
   - `show_document` — document metadata (citekey, title, authors, date, status, chunk count, CSL-JSON fields)
-  - `list_documents` — documents as markdown table with optional status filter and pagination
+  - `list_documents` — documents as markdown table with optional status, year, author, title, citekey filters and pagination
   - `get_document_text` — extracted markdown: full text for short docs (<50 chunks), chunk subset for ranges, preview with instructions for long docs
 - **Guarantees**:
   - All tools return markdown with consistent, parseable structure
@@ -21,6 +21,10 @@ Exposes the document library to Claude Code via MCP (Model Context Protocol) too
   - Identifier resolution supports both UUID (full/partial) and @citekey with fuzzy match suggestions on miss
   - File reading errors caught and reported (file may have been moved/deleted)
   - Chunk indices validated: must be non-negative, s <= e, s < total_chunks
+  - list_documents filters combine with AND semantics; status, year, year_missing, author_contains, title_contains, citekey_prefix parameters are all optional
+  - list_documents year and year_missing are mutually exclusive (tool returns error if both provided)
+  - list_documents substring filters (author_contains, title_contains) are case-insensitive with SQL LIKE metacharacter escaping
+  - list_documents citekey_prefix is case-insensitive prefix match
   - Library instance created once at startup, shared across tool calls
   - Models load lazily on first use (~2-5s one-time for embedder)
   - All logging to stderr; stdout reserved for JSON-RPC protocol
