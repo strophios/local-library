@@ -94,7 +94,7 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - **RAG query interface**: RAGInterface orchestrates context assembly, prompt construction, and LLM generation; RAGStream supports streaming with token accumulation; pre-LLM gate skips API call when no context retrieved
 - **CLI `ask` command**: streaming answers with Rich Live display, --no-stream, --json, --model, --mode, --doc, --limit, --no-rerank options; source citations with citekey attribution
 - **MCP server**: FastMCP-based server (stdio transport) exposing 4 read-only tools (search_library, show_document, list_documents, get_document_text) for Claude Code integration. Markdown-only responses, identifier resolution via @citekey/UUID, chunk-based document text access with short-doc/long-doc modes
-- SQLite storage with content-addressable file layout (schema v3)
+- SQLite storage with content-addressable file layout (schema v4)
 - CLI interface (add, list, show, delete, open, update, review, reextract, embed, search, ask commands)
 - @citekey identifier support with fuzzy matching suggestions
 - Pagination support (--limit, --all flags on list command)
@@ -265,7 +265,7 @@ src/local_library/
 ├── core/                # Domain: models, storage, orchestration
 │   ├── models.py        # Document, EmbeddingStatus, result types (Functional Core)
 │   ├── errors.py        # Exception hierarchy with ErrorCode (Functional Core)
-│   ├── storage.py       # SQLite CRUD operations, schema v3 (Imperative Shell)
+│   ├── storage.py       # SQLite CRUD operations, schema v4 (Imperative Shell)
 │   ├── library.py       # Library orchestrator (Imperative Shell)
 │   └── vec_extension.py # sqlite-vec extension loading and availability checking
 ├── embeddings/          # Domain: chunking, embedding computation, vector storage, retrieval, reranking

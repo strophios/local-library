@@ -1,6 +1,6 @@
 # Ingestion Domain
 
-Last verified: 2026-04-15
+Last verified: 2026-04-16
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Handles content acquisition (getting files into the system), extraction (convert
 
 ## Contracts
 
-- **Exposes**: ContentAcquirer protocol, ContentExtractor protocol, FileAcquirer, PdfExtractor (with PreCheckResult, ProgressCallback), TextMetadataExtractor, MetadataHandler, parse_filename_metadata, cleanup_markdown, clean_artifacts, BOILERPLATE_RULES, BoilerplateRule, ZoteroReader (with ZoteroLibrary, ZoteroCollection, ZoteroItem, ZoteroAttachment dataclasses)
+- **Exposes**: ContentAcquirer protocol, ContentExtractor protocol, FileAcquirer, PdfExtractor (with PreCheckResult, ProgressCallback), TextMetadataExtractor, MetadataHandler, parse_filename_metadata, extract_year_from_csl, cleanup_markdown, clean_artifacts, BOILERPLATE_RULES, BoilerplateRule, ZoteroReader (with ZoteroLibrary, ZoteroCollection, ZoteroItem, ZoteroAttachment dataclasses)
 - **Guarantees**:
   - `can_handle()` returns True only for sources/files the handler can process
   - Acquirers copy to temp location (never modify source)
@@ -73,7 +73,7 @@ Handles content acquisition (getting files into the system), extraction (convert
 - `base.py` - ContentAcquirer, ContentExtractor protocols; compute_storage_path utility
 - `file.py` - FileAcquirer (any local file), compute_file_hash, dynamic MIME detection
 - `pdf.py` - PdfExtractor (Marker wrapper with pre-check, dynamic timeout, pdftext fallback, progress callbacks), PreCheckResult, ProgressCallback
-- `metadata.py` - MetadataHandler (CSL-JSON validation, citekey generation, field extraction), parse_filename_metadata (heuristic filename parser)
+- `metadata.py` - MetadataHandler (CSL-JSON validation, citekey generation, field extraction), parse_filename_metadata (heuristic filename parser), extract_year_from_csl (CSL-JSON → int year; shared by MetadataHandler and Library.update_metadata)
 - `text_extraction.py` - TextMetadataExtractor, LLMExtractor, field extractors (extract_title, extract_authors, extract_date, extract_doc_type), build_csl_json converter
 - `artifact_cleanup.py` - clean_artifacts (four-pass content artifact removal: non-Latin script filtering, image description reformatting, watermark removal, publisher boilerplate stripping), BoilerplateRule dataclass, BOILERPLATE_RULES catalog
 - `markdown_cleanup.py` - cleanup_markdown (three-pass post-processing: HTML coercion, dehyphenation, paragraph reflow)

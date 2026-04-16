@@ -92,7 +92,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 
 - `models.py` - Document, AcquisitionResult, ExtractionResult, AddResult, FieldExtraction, TextExtractionResult, RAGResponse, EmbeddingStatus, MetadataSource
 - `errors.py` - ErrorCode enum, exception hierarchy (includes ACQUISITION_*, EXTRACTION_* (incl. EXTRACTION_FALLBACK), METADATA_*, ZOTERO_*, EMBEDDING_*, RAG_*, LLM_* codes; LLMError, RAGError exceptions)
-- `storage.py` - SQLite CRUD (get_connection, init_schema, create/get/update/delete), schema v3 with chunks and FTS5
+- `storage.py` - SQLite CRUD (get_connection, init_schema, create/get/update/delete), schema v4 (adds denormalized `issued_year` column in v3 → v4 migration) with chunks and FTS5
 - `library.py` - Library orchestrator (add, get, get_by_citekey, get_all_citekeys, get_chunk_count, get_chunks, list, delete, embed, embed_all, update_metadata, get_retriever, query, query_stream) with handler dispatch, preliminary metadata persistence, conditional metadata upgrade, lazy RAG initialization, and lazy cross-encoder reranking
 - `vec_extension.py` - sqlite-vec extension loading, vec0 table creation, availability checking
 
