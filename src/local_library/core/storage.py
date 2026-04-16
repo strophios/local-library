@@ -334,6 +334,7 @@ def _row_to_document(row: sqlite3.Row) -> Document:
         title=row["title"],
         authors=row["authors"],
         issued_date=row["issued_date"],
+        issued_year=row["issued_year"],
         error_message=row["error_message"],
         error_code=row["error_code"],
         embedding_status=(
@@ -649,6 +650,7 @@ def update_document_metadata(
     title: str | None = None,
     authors: str | None = None,
     issued_date: str | None = None,
+    issued_year: int | None = None,
 ) -> Document:
     """Update a document's metadata fields.
 
@@ -663,6 +665,7 @@ def update_document_metadata(
         title: Extracted title
         authors: Formatted author string
         issued_date: ISO date or year
+        issued_year: Extracted year for filtering
 
     Returns:
         Updated Document
@@ -687,6 +690,7 @@ def update_document_metadata(
                 title = COALESCE(?, title),
                 authors = COALESCE(?, authors),
                 issued_date = COALESCE(?, issued_date),
+                issued_year = COALESCE(?, issued_year),
                 updated_at = ?
             WHERE id = ?
             """,
@@ -696,6 +700,7 @@ def update_document_metadata(
                 title,
                 authors,
                 issued_date,
+                issued_year,
                 now.isoformat(),
                 str(doc_id),
             ),

@@ -742,3 +742,51 @@ class TestSchemaMigrationV3ToV4:
         assert row["authors"] == "Original Author"
         assert row["issued_date"] == "2023-06-15"
         assert row["issued_year"] == 2023  # Backfilled
+
+
+class TestUpdateDocumentMetadataIssuedYear:
+    """Tests for writing issued_year through update_document_metadata."""
+
+    def test_update_persists_issued_year(self, temp_dir: Path) -> None:
+        """update_document_metadata writes issued_year to the database."""
+        conn = get_connection(temp_dir / "test.db")
+        init_schema(conn)
+        created_doc = create_document(
+            conn,
+            original_path="/tmp/test.pdf",
+            content_hash="abc123",
+            storage_path="ab/cd/abc123.pdf",
+        )
+
+        update_document_metadata(
+            conn,
+            created_doc.id,
+            issued_date="2023",
+            issued_year=2023,
+        )
+
+        doc = get_document_by_id(conn, created_doc.id)
+        assert doc is not None
+        assert doc.issued_year == 2023
+
+    def test_update_preserves_issued_year_on_none(self, temp_dir: Path) -> None:
+        """Passing issued_year=None does not overwrite an existing value (COALESCE)."""
+        conn = get_connection(temp_dir / "test.db")
+        init_schema(conn)
+        created_doc = create_document(
+            conn,
+            original_path="/tmp/test.pdf",
+            content_hash="abc123",
+            storage_path="ab/cd/abc123.pdf",
+        )
+        update_document_metadata(
+            conn,
+            created_doc.id,
+            issued_date="2023",
+            issued_year=2023,
+        )
+        # Second update with issued_year=None should NOT clear the year
+        update_document_metadata(conn, created_doc.id, title="New Title")
+        doc = get_document_by_id(conn, created_doc.id)
+        assert doc is not None
+        assert doc.issued_year == 2023

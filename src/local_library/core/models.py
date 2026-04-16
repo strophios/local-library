@@ -66,6 +66,7 @@ class Document:
     title: str | None = None  # Extracted title for search
     authors: str | None = None  # Formatted author string for search
     issued_date: str | None = None  # ISO date or year for search
+    issued_year: int | None = None  # Extracted year for filtering
 
     # Error tracking for failed documents
     error_message: str | None = None
