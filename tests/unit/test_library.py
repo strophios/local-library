@@ -1571,3 +1571,69 @@ class TestLibraryChunkAccess:
             assert chunks == []
         finally:
             library.close()
+
+
+class TestLibraryIssuedYearWritePaths:
+    """Tests that issued_year is persisted through all three Library write paths."""
+
+    def test_add_with_explicit_metadata_persists_issued_year(self, temp_dir: Path) -> None:
+        """Library.add() with explicit CSL-JSON metadata populates issued_year."""
+        library = Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=False,
+            embed_on_add=False,
+        )
+
+        try:
+            pdf_path = temp_dir / "test.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4 test content")
+
+            metadata = {
+                "type": "article-journal",
+                "title": "Test Paper",
+                "author": [{"family": "Smith", "given": "J"}],
+                "issued": {"date-parts": [[2023, 6, 15]]},
+            }
+
+            with patch.object(library._extractors[0], "extract_and_validate") as mock_ext:
+                mock_ext.return_value = MagicMock(text="content " * 20)
+                result = library.add(str(pdf_path), metadata=metadata)
+
+            doc = library.get(str(result.document.id))
+            assert doc.issued_year == 2023
+        finally:
+            library.close()
+
+    def test_update_metadata_persists_issued_year(self, temp_dir: Path) -> None:
+        """Library.update_metadata() populates issued_year from inline extraction."""
+        library = Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            text_extraction_enabled=False,
+            embed_on_add=False,
+        )
+
+        try:
+            pdf_path = temp_dir / "test.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4 test content")
+
+            with patch.object(library._extractors[0], "extract_and_validate") as mock_ext:
+                mock_ext.return_value = MagicMock(text="content " * 20)
+                result = library.add(str(pdf_path))
+
+            # Update metadata with a new CSL-JSON that has an issued year
+            new_csl = {
+                "type": "article-journal",
+                "title": "Updated Title",
+                "author": [{"family": "Smith"}],
+                "issued": {"date-parts": [[1984]]},
+            }
+            library.update_metadata(result.document.id, csl_json=new_csl)
+
+            doc = library.get(str(result.document.id))
+            assert doc.issued_year == 1984
+        finally:
+            library.close()

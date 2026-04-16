@@ -62,7 +62,7 @@ from local_library.ingestion.artifact_cleanup import clean_artifacts
 from local_library.ingestion.base import ContentAcquirer, ContentExtractor, compute_storage_path
 from local_library.ingestion.file import FileAcquirer
 from local_library.ingestion.markdown_cleanup import cleanup_markdown
-from local_library.ingestion.metadata import MetadataHandler
+from local_library.ingestion.metadata import MetadataHandler, extract_year_from_csl
 from local_library.ingestion.pdf import PdfExtractor
 from local_library.ingestion.text_extraction import (
     TextMetadataExtractor,
@@ -629,6 +629,7 @@ class Library:
             title=result.title,
             authors=result.authors,
             issued_date=result.issued_date,
+            issued_year=result.issued_year,
         )
 
         # Set NEEDS_REVIEW if extraction confidence is low
@@ -901,6 +902,7 @@ class Library:
             title=result.title,
             authors=result.authors,
             issued_date=result.issued_date,
+            issued_year=result.issued_year,
         )
 
     # --- Query Operations ---
@@ -1098,6 +1100,7 @@ class Library:
         title = None
         authors = None
         issued_date = None
+        issued_year = None
 
         if csl_json:
             title = csl_json.get("title")
@@ -1120,6 +1123,8 @@ class Library:
                     if date_parts:
                         issued_date = str(date_parts[0])  # Year
 
+            issued_year = extract_year_from_csl(csl_json)
+
         # Update status if provided
         if status is not None:
             update_document_status(self._conn, doc_id, status)
@@ -1133,6 +1138,7 @@ class Library:
             title=title,
             authors=authors,
             issued_date=issued_date,
+            issued_year=issued_year,
         )
 
     def list(self, status: DocumentStatus | None = None) -> list[Document]:
