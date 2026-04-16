@@ -790,3 +790,108 @@ class TestUpdateDocumentMetadataIssuedYear:
         doc = get_document_by_id(conn, created_doc.id)
         assert doc is not None
         assert doc.issued_year == 2023
+
+
+class TestListDocumentsFilters:
+    """Tests for list_documents() with new filter parameters."""
+
+    @pytest.fixture
+    def seeded_conn(self, temp_dir: Path) -> sqlite3.Connection:
+        """Create a connection with a few documents varying in year/author/title/citekey."""
+        conn = get_connection(temp_dir / "test.db")
+        init_schema(conn)
+
+        docs = [
+            # (citekey, title, authors, issued_year)
+            ("Zippel2023", "Analytical Methods", "Adam Zippel; Jane Doe", 2023),
+            ("Zippel2019", "Computational Approaches", "Adam Zippel", 2019),
+            ("Smith2023", "Machine Learning", "John Smith", 2023),
+            ("Jones2020", "Statistical Theory", "Mary Jones", 2020),
+            ("Noyear", "Untitled Work", "Anonymous", None),
+            ("BourdieuPasseron1970", "Reproduction", "Pierre Bourdieu; Jean-Claude Passeron", 1970),
+        ]
+        for citekey, title, authors, year in docs:
+            doc = create_document(
+                conn,
+                original_path=f"/tmp/{citekey}.pdf",
+                content_hash=citekey,
+                storage_path=f"ab/cd/{citekey}.pdf",
+            )
+            update_document_metadata(
+                conn,
+                doc.id,
+                citekey=citekey,
+                title=title,
+                authors=authors,
+                issued_year=year,
+            )
+        return conn
+
+    def test_filter_by_year(self, seeded_conn: sqlite3.Connection) -> None:
+        results = list_documents(seeded_conn, year=2023)
+        assert {d.citekey for d in results} == {"Zippel2023", "Smith2023"}
+
+    def test_filter_year_missing(self, seeded_conn: sqlite3.Connection) -> None:
+        results = list_documents(seeded_conn, year_missing=True)
+        assert [d.citekey for d in results] == ["Noyear"]
+
+    def test_filter_year_and_year_missing_mutually_exclusive(
+        self, seeded_conn: sqlite3.Connection
+    ) -> None:
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            list_documents(seeded_conn, year=2023, year_missing=True)
+
+    def test_filter_author_contains_case_insensitive(self, seeded_conn: sqlite3.Connection) -> None:
+        results = list_documents(seeded_conn, author_contains="zippel")
+        assert {d.citekey for d in results} == {"Zippel2023", "Zippel2019"}
+
+    def test_filter_author_contains_partial(self, seeded_conn: sqlite3.Connection) -> None:
+        results = list_documents(seeded_conn, author_contains="Jane")
+        assert {d.citekey for d in results} == {"Zippel2023"}
+
+    def test_filter_title_contains(self, seeded_conn: sqlite3.Connection) -> None:
+        results = list_documents(seeded_conn, title_contains="Method")
+        # "Analytical Methods" contains "Method" (case-insensitive)
+        assert {d.citekey for d in results} == {"Zippel2023"}
+
+    def test_filter_citekey_prefix(self, seeded_conn: sqlite3.Connection) -> None:
+        results = list_documents(seeded_conn, citekey_prefix="Bourdieu")
+        assert {d.citekey for d in results} == {"BourdieuPasseron1970"}
+
+    def test_filter_citekey_prefix_case_insensitive(self, seeded_conn: sqlite3.Connection) -> None:
+        results = list_documents(seeded_conn, citekey_prefix="zippel")
+        assert {d.citekey for d in results} == {"Zippel2023", "Zippel2019"}
+
+    def test_filters_combine_with_and(self, seeded_conn: sqlite3.Connection) -> None:
+        results = list_documents(seeded_conn, year=2023, author_contains="Zippel")
+        assert {d.citekey for d in results} == {"Zippel2023"}
+
+    def test_like_wildcard_in_input_is_escaped(self, seeded_conn: sqlite3.Connection) -> None:
+        """Percent signs in user input don't act as wildcards."""
+        # '%' shouldn't match everything
+        results = list_documents(seeded_conn, author_contains="%")
+        assert results == []
+        # '_' shouldn't act as single-char wildcard
+        results = list_documents(seeded_conn, author_contains="_")
+        assert results == []
+
+    def test_no_filters_returns_all(self, seeded_conn: sqlite3.Connection) -> None:
+        results = list_documents(seeded_conn)
+        assert len(results) == 6
+
+    def test_empty_string_filter_treated_as_no_filter(
+        self, seeded_conn: sqlite3.Connection
+    ) -> None:
+        """Empty string for *_contains / citekey_prefix is a no-op.
+
+        This is an intentional behavior decision: an empty substring
+        would match everything under LIKE semantics, which is surprising
+        and not useful. We treat empty strings as "no filter provided"
+        so that users passing an accidentally-empty flag value (e.g.,
+        from shell variable expansion) don't get unexpected behavior.
+        This is documented in Library.list() and list_documents()
+        docstrings.
+        """
+        assert len(list_documents(seeded_conn, author_contains="")) == 6
+        assert len(list_documents(seeded_conn, title_contains="")) == 6
+        assert len(list_documents(seeded_conn, citekey_prefix="")) == 6

@@ -546,27 +546,87 @@ def get_documents_by_partial_id(conn: sqlite3.Connection, partial_id: str) -> li
     return [_row_to_document(row) for row in cursor.fetchall()]
 
 
+def _escape_like(value: str) -> str:
+    """Escape special LIKE characters (%, _, \\) for literal matching.
+
+    Args:
+        value: Raw user input.
+
+    Returns:
+        Value with SQL LIKE metacharacters escaped.
+    """
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def list_documents(
     conn: sqlite3.Connection,
     status: DocumentStatus | None = None,
+    year: int | None = None,
+    year_missing: bool = False,
+    author_contains: str | None = None,
+    title_contains: str | None = None,
+    citekey_prefix: str | None = None,
 ) -> list[Document]:
-    """List all documents, optionally filtered by status.
+    """List documents with optional filtering.
+
+    Filters combine with AND semantics. Substring filters
+    (author_contains, title_contains) use case-insensitive LIKE with
+    metacharacter escaping to prevent accidental wildcard injection.
+    citekey_prefix uses case-insensitive prefix match.
 
     Args:
-        conn: Database connection
-        status: Filter by status if provided
+        conn: Database connection.
+        status: Exact status match (DocumentStatus enum).
+        year: Exact year match against issued_year column.
+        year_missing: If True, filter to issued_year IS NULL. Mutually
+            exclusive with year.
+        author_contains: Case-insensitive substring match on authors column.
+            Empty string is treated as "no filter" (deliberate; prevents
+            accidental match-everything from unexpanded shell variables).
+        title_contains: Case-insensitive substring match on title column.
+            Empty string behaves like `author_contains` (no-op).
+        citekey_prefix: Case-insensitive prefix match on citekey column.
+            Empty string behaves like `author_contains` (no-op).
 
     Returns:
-        List of documents, ordered by created_at descending
+        List of Document objects ordered by created_at DESC.
+
+    Raises:
+        ValueError: If both year and year_missing are provided.
     """
+    if year is not None and year_missing:
+        raise ValueError("year and year_missing are mutually exclusive filters")
+
+    predicates: list[str] = []
+    params: list[Any] = []
+
     if status is not None:
-        cursor = conn.execute(
-            "SELECT * FROM documents WHERE status = ? ORDER BY created_at DESC",
-            (status.value,),
-        )
-    else:
-        cursor = conn.execute("SELECT * FROM documents ORDER BY created_at DESC")
-    return [_row_to_document(row) for row in cursor.fetchall()]
+        predicates.append("status = ?")
+        params.append(status.value)
+
+    if year_missing:
+        predicates.append("issued_year IS NULL")
+    elif year is not None:
+        predicates.append("issued_year = ?")
+        params.append(year)
+
+    if author_contains:
+        predicates.append("LOWER(authors) LIKE ? ESCAPE '\\'")
+        params.append(f"%{_escape_like(author_contains.lower())}%")
+
+    if title_contains:
+        predicates.append("LOWER(title) LIKE ? ESCAPE '\\'")
+        params.append(f"%{_escape_like(title_contains.lower())}%")
+
+    if citekey_prefix:
+        predicates.append("LOWER(citekey) LIKE ? ESCAPE '\\'")
+        params.append(f"{_escape_like(citekey_prefix.lower())}%")
+
+    where = f" WHERE {' AND '.join(predicates)}" if predicates else ""
+    query = f"SELECT * FROM documents{where} ORDER BY created_at DESC"
+
+    rows = conn.execute(query, params).fetchall()
+    return [_row_to_document(row) for row in rows]
 
 
 def update_document_status(
