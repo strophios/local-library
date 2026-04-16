@@ -1141,16 +1141,42 @@ class Library:
             issued_year=issued_year,
         )
 
-    def list(self, status: DocumentStatus | None = None) -> list[Document]:
-        """List all documents, optionally filtered by status.
+    def list(
+        self,
+        status: DocumentStatus | None = None,
+        year: int | None = None,
+        year_missing: bool = False,
+        author_contains: str | None = None,
+        title_contains: str | None = None,
+        citekey_prefix: str | None = None,
+    ) -> list[Document]:
+        """List documents with optional filtering.
+
+        All filters are optional and combine with AND semantics.
 
         Args:
-            status: Filter by status if provided
+            status: Exact status match (DocumentStatus enum).
+            year: Exact match against issued_year. Mutually exclusive with year_missing.
+            year_missing: If True, return only documents with no extractable year.
+            author_contains: Case-insensitive substring match on authors.
+            title_contains: Case-insensitive substring match on title.
+            citekey_prefix: Case-insensitive prefix match on citekey.
 
         Returns:
-            List of documents, ordered by created_at descending
+            List of Document objects ordered by created_at DESC.
+
+        Raises:
+            ValueError: If year and year_missing are both provided.
         """
-        return list_documents(self._conn, status=status)
+        return list_documents(
+            self._conn,
+            status=status,
+            year=year,
+            year_missing=year_missing,
+            author_contains=author_contains,
+            title_contains=title_contains,
+            citekey_prefix=citekey_prefix,
+        )
 
     def delete(self, doc_id: str, delete_files: bool = True) -> bool:
         """Delete a document and optionally its files.

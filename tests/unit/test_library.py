@@ -431,6 +431,59 @@ class TestLibraryList:
         assert failed_docs[0].status == DocumentStatus.FAILED
 
 
+class TestLibraryListFilters:
+    """Tests that Library.list() passes filters through to storage layer."""
+
+    def test_year_filter_forwarded(self, temp_dir: Path) -> None:
+        with Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            embed_on_add=False,
+        ) as library:
+            with patch("local_library.core.library.list_documents") as mock_list:
+                mock_list.return_value = []
+                library.list(year=2023)
+                mock_list.assert_called_once_with(
+                    library._conn,
+                    status=None,
+                    year=2023,
+                    year_missing=False,
+                    author_contains=None,
+                    title_contains=None,
+                    citekey_prefix=None,
+                )
+
+    def test_mutual_exclusion_raises_value_error(self, temp_dir: Path) -> None:
+        with Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            embed_on_add=False,
+        ) as library:
+            with pytest.raises(ValueError, match="mutually exclusive"):
+                library.list(year=2023, year_missing=True)
+
+    def test_multiple_filters_combined(self, temp_dir: Path) -> None:
+        with Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            embed_on_add=False,
+        ) as library:
+            with patch("local_library.core.library.list_documents") as mock_list:
+                mock_list.return_value = []
+                library.list(
+                    status=DocumentStatus.READY,
+                    year=2023,
+                    author_contains="Zippel",
+                )
+                args, kwargs = mock_list.call_args
+                assert kwargs["status"] == DocumentStatus.READY
+                assert kwargs["year"] == 2023
+                assert kwargs["author_contains"] == "Zippel"
+
+
 class TestLibraryDelete:
     """Tests for Library.delete() method."""
 
