@@ -14,7 +14,7 @@ from uuid import UUID
 
 if TYPE_CHECKING:
     from local_library.core.models import RAGResponse
-    from local_library.embeddings.base import Retriever
+    from local_library.embeddings.base import Chunk, Retriever
     from local_library.embeddings.reranking import CrossEncoderReranker
     from local_library.rag.interface import RAGInterface, RAGStream
 
@@ -877,7 +877,7 @@ class Library:
         """
         return get_all_citekeys(self._conn)
 
-    def get_chunk_count(self, doc_id: "UUID") -> int:
+    def get_chunk_count(self, doc_id: UUID) -> int:
         """Get number of chunks for a document.
 
         Returns 0 if sqlite-vec is unavailable or document has no chunks.
@@ -895,10 +895,10 @@ class Library:
 
     def get_chunks(
         self,
-        doc_id: "UUID",
+        doc_id: UUID,
         start: int | None = None,
         end: int | None = None,
-    ) -> list:
+    ) -> list[Chunk]:
         """Get chunks for a document, optionally by index range.
 
         Returns empty list if sqlite-vec is unavailable or document has no chunks.
@@ -916,7 +916,7 @@ class Library:
             return []
         chunks = storage.get_chunks_by_document(doc_id)
         if start is not None or end is not None:
-            s = start or 0
+            s = start if start is not None else 0
             e = (end + 1) if end is not None else len(chunks)
             chunks = [c for c in chunks if s <= c.chunk_index < e]
         return chunks

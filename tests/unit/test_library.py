@@ -1004,19 +1004,21 @@ class TestLibraryChunkAccess:
             embed_on_add=False,
         )
 
-        pdf_path = temp_dir / "sample.pdf"
-        pdf_path.write_bytes(b"%PDF-1.4 test content")
+        try:
+            pdf_path = temp_dir / "sample.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4 test content")
 
-        with patch.object(library._extractors[0], "extract_and_validate") as mock_extract:
-            mock_extract.return_value = MagicMock(text="Test document content" * 10)
-            result = library.add(str(pdf_path))
+            with patch.object(library._extractors[0], "extract_and_validate") as mock_extract:
+                mock_extract.return_value = MagicMock(text="Test document content" * 10)
+                result = library.add(str(pdf_path))
 
-        # Mock _get_embedding_storage to return None (simulating unavailable sqlite-vec)
-        with patch.object(library, "_get_embedding_storage", return_value=None):
-            count = library.get_chunk_count(result.document.id)  # Pass UUID directly
+            # Mock _get_embedding_storage to return None (simulating unavailable sqlite-vec)
+            with patch.object(library, "_get_embedding_storage", return_value=None):
+                count = library.get_chunk_count(result.document.id)  # Pass UUID directly
 
-        assert count == 0
-        library.close()
+            assert count == 0
+        finally:
+            library.close()
 
     def test_get_chunks_no_vec_extension(self, temp_dir: Path) -> None:
         """get_chunks() should return empty list when sqlite-vec is unavailable."""
@@ -1027,16 +1029,18 @@ class TestLibraryChunkAccess:
             embed_on_add=False,
         )
 
-        pdf_path = temp_dir / "sample.pdf"
-        pdf_path.write_bytes(b"%PDF-1.4 test content")
+        try:
+            pdf_path = temp_dir / "sample.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4 test content")
 
-        with patch.object(library._extractors[0], "extract_and_validate") as mock_extract:
-            mock_extract.return_value = MagicMock(text="Test document content" * 10)
-            result = library.add(str(pdf_path))
+            with patch.object(library._extractors[0], "extract_and_validate") as mock_extract:
+                mock_extract.return_value = MagicMock(text="Test document content" * 10)
+                result = library.add(str(pdf_path))
 
-        # Mock _get_embedding_storage to return None (simulating unavailable sqlite-vec)
-        with patch.object(library, "_get_embedding_storage", return_value=None):
-            chunks = library.get_chunks(result.document.id)  # Pass UUID directly
+            # Mock _get_embedding_storage to return None (simulating unavailable sqlite-vec)
+            with patch.object(library, "_get_embedding_storage", return_value=None):
+                chunks = library.get_chunks(result.document.id)  # Pass UUID directly
 
-        assert chunks == []
-        library.close()
+            assert chunks == []
+        finally:
+            library.close()
