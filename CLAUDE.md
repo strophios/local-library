@@ -121,7 +121,7 @@ Five horizontal concerns cut across the system:
 2. **Ingestion**: Content acquisition, extraction (Marker), metadata handling
 3. **Embeddings + Retrieval**: Chunking, nomic-embed-text, similarity operations, FTS5 search, hybrid retrieval (RRF fusion), cross-encoder reranking
 4. **LLM + RAG**: LLMClient protocol, LiteLLM provider abstraction, context assembly, prompt construction, answer generation
-5. **Interface**: CLI, (later) daemon, Neovim plugin, HTTP API
+5. **Interface**: CLI, MCP server, (later) daemon, Neovim plugin, HTTP API
 
 ## Key Libraries and Tools
 
@@ -243,6 +243,7 @@ All commands accepting document IDs support both UUID (full or partial) and @cit
 - `uv run local-library zotero collections` - List Zotero collections (personal library by default; use `--library NAME` or `--all-libraries`)
 - `uv run local-library zotero libraries` - List available Zotero libraries (personal and group)
 - `uv run local-library reextract <id>` - Re-run text extraction on an existing document (useful after extraction pipeline improvements)
+- `uv run local-library-mcp` - Start the MCP server (stdio transport, for Claude Code integration)
 - `uv run pytest` - Run tests
 - `uv run pytest --run-extraction-quality` - Run synthetic extraction quality benchmarks (requires pdflatex)
 - `uv run ruff check` - Lint code
@@ -281,6 +282,10 @@ src/local_library/
 │   ├── artifact_cleanup.py # Pre-processing: non-Latin filtering, image reformatting, watermark/boilerplate removal (Functional Core)
 │   ├── markdown_cleanup.py # Post-processing: HTML coercion, dehyphenation, paragraph reflow (Functional Core)
 │   └── zotero.py        # ZoteroReader facade (database + JSON backends, citekey mapping)
+├── mcp/                 # MCP server for Claude Code integration
+│   ├── server.py        # FastMCP app, tool definitions, Library lifecycle (Imperative Shell)
+│   ├── formatters.py    # Markdown rendering functions (Functional Core)
+│   └── CLAUDE.md        # Domain contracts
 └── cli/                 # CLI interface (Typer/Rich)
     ├── main.py          # Entry point, command registration
     ├── add.py           # Add command (--skip-embed flag)
@@ -298,7 +303,7 @@ src/local_library/
     └── zotero.py        # Zotero commands (import with --skip-embed, collections, libraries)
 ```
 
-See `src/local_library/core/CLAUDE.md`, `src/local_library/llm/CLAUDE.md`, `src/local_library/rag/CLAUDE.md`, `src/local_library/ingestion/CLAUDE.md`, `src/local_library/embeddings/CLAUDE.md`, and `src/local_library/cli/CLAUDE.md` for domain contracts.
+See `src/local_library/core/CLAUDE.md`, `src/local_library/llm/CLAUDE.md`, `src/local_library/rag/CLAUDE.md`, `src/local_library/ingestion/CLAUDE.md`, `src/local_library/embeddings/CLAUDE.md`, `src/local_library/mcp/CLAUDE.md`, and `src/local_library/cli/CLAUDE.md` for domain contracts.
 
 ## Background Documentation
 
