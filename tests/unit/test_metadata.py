@@ -874,3 +874,99 @@ class TestFilenameMetadataParser:
         """Should handle numeric-only filenames as title."""
         result = parse_filename_metadata(tmp_path / "12345.pdf")
         assert result["title"] == "12345"
+
+
+class TestExtractYearFromCsl:
+    """Tests for the shared year-extraction utility."""
+
+    def test_extracts_from_date_parts_full_date(self) -> None:
+        from local_library.ingestion.metadata import extract_year_from_csl
+
+        csl = {"issued": {"date-parts": [[2023, 6, 15]]}}
+        assert extract_year_from_csl(csl) == 2023
+
+    def test_extracts_from_date_parts_year_month(self) -> None:
+        from local_library.ingestion.metadata import extract_year_from_csl
+
+        csl = {"issued": {"date-parts": [[2023, 6]]}}
+        assert extract_year_from_csl(csl) == 2023
+
+    def test_extracts_from_date_parts_year_only(self) -> None:
+        from local_library.ingestion.metadata import extract_year_from_csl
+
+        csl = {"issued": {"date-parts": [[2023]]}}
+        assert extract_year_from_csl(csl) == 2023
+
+    def test_returns_none_for_missing_issued(self) -> None:
+        from local_library.ingestion.metadata import extract_year_from_csl
+
+        assert extract_year_from_csl({}) is None
+
+    def test_returns_none_for_empty_issued(self) -> None:
+        from local_library.ingestion.metadata import extract_year_from_csl
+
+        assert extract_year_from_csl({"issued": {}}) is None
+
+    def test_returns_none_for_missing_date_parts(self) -> None:
+        from local_library.ingestion.metadata import extract_year_from_csl
+
+        assert extract_year_from_csl({"issued": {"literal": "Spring 2023"}}) is None
+
+    def test_returns_none_for_empty_date_parts_outer(self) -> None:
+        from local_library.ingestion.metadata import extract_year_from_csl
+
+        assert extract_year_from_csl({"issued": {"date-parts": []}}) is None
+
+    def test_returns_none_for_empty_date_parts_inner(self) -> None:
+        from local_library.ingestion.metadata import extract_year_from_csl
+
+        assert extract_year_from_csl({"issued": {"date-parts": [[]]}}) is None
+
+    def test_returns_none_for_none_year(self) -> None:
+        from local_library.ingestion.metadata import extract_year_from_csl
+
+        csl = {"issued": {"date-parts": [[None]]}}
+        assert extract_year_from_csl(csl) is None
+
+    def test_returns_none_for_non_int_year(self) -> None:
+        """Defensive: guard against unexpectedly-typed date parts."""
+        from local_library.ingestion.metadata import extract_year_from_csl
+
+        csl = {"issued": {"date-parts": [["2023"]]}}
+        # Permissive: "2023" could be cast, but spec says date-parts should be ints.
+        # We accept str years and convert; document the decision in the function.
+        assert extract_year_from_csl(csl) == 2023
+
+    def test_returns_none_for_malformed_str_year(self) -> None:
+        from local_library.ingestion.metadata import extract_year_from_csl
+
+        csl = {"issued": {"date-parts": [["XXXX"]]}}
+        assert extract_year_from_csl(csl) is None
+
+    def test_raw_field_not_parsed(self) -> None:
+        """Raw-format dates return None rather than attempting regex parsing."""
+        from local_library.ingestion.metadata import extract_year_from_csl
+
+        csl = {"issued": {"raw": "2023-06-15"}}
+        assert extract_year_from_csl(csl) is None
+
+
+class TestExtractYearForCitekey:
+    """Tests for the citekey year wrapper (delegates to extract_year_from_csl)."""
+
+    def test_returns_year_string(self) -> None:
+        from local_library.ingestion.metadata import _extract_year_for_citekey
+
+        csl = {"issued": {"date-parts": [[2023]]}}
+        assert _extract_year_for_citekey(csl) == "2023"
+
+    def test_returns_empty_string_when_missing(self) -> None:
+        from local_library.ingestion.metadata import _extract_year_for_citekey
+
+        assert _extract_year_for_citekey({}) == ""
+
+    def test_returns_empty_string_for_none_year(self) -> None:
+        from local_library.ingestion.metadata import _extract_year_for_citekey
+
+        csl = {"issued": {"date-parts": [[None]]}}
+        assert _extract_year_for_citekey(csl) == ""

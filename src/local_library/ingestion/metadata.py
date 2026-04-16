@@ -225,25 +225,51 @@ def _extract_author_for_citekey(csl_json: dict[str, Any]) -> str:
     return name
 
 
-def _extract_year_for_citekey(csl_json: dict[str, Any]) -> str:
-    """Extract year from issued date for citekey.
+def extract_year_from_csl(csl_json: dict[str, Any]) -> int | None:
+    """Extract the publication year from a CSL-JSON blob as an integer.
+
+    Handles the standard `issued.date-parts` shape:
+    - {"date-parts": [[2023, 6, 15]]} → 2023
+    - {"date-parts": [[2023]]} → 2023
+
+    Other shapes ({"literal": "..."}, {"raw": "..."}) return None
+    rather than attempting ambiguous regex parsing. String-typed year
+    values in date-parts are accepted (some callers produce these) and
+    converted if numeric.
+
+    Args:
+        csl_json: CSL-JSON metadata dictionary.
 
     Returns:
-        Four-digit year string or empty string if not available
+        Year as integer, or None if not extractable.
     """
     issued = csl_json.get("issued")
     if not issued:
-        return ""
-
+        return None
     date_parts = issued.get("date-parts")
     if not date_parts or not date_parts[0]:
-        return ""
-
+        return None
     year = date_parts[0][0]
     if year is None:
-        return ""
+        return None
+    if isinstance(year, int):
+        return year
+    if isinstance(year, str):
+        try:
+            return int(year)
+        except ValueError:
+            return None
+    return None
 
-    return str(year)
+
+def _extract_year_for_citekey(csl_json: dict[str, Any]) -> str:
+    """Extract year from issued date for citekey generation.
+
+    Returns:
+        Four-digit year string, or empty string if not available.
+    """
+    year = extract_year_from_csl(csl_json)
+    return str(year) if year is not None else ""
 
 
 def _extract_titleword_for_citekey(csl_json: dict[str, Any]) -> str:
