@@ -25,6 +25,7 @@ A minimal but complete path: `add <url>` downloads, extracts, and ingests.
   - trafilatura (mentioned in CLAUDE.md as primary choice) — handles download + extraction in one step
   - Separate download (requests/httpx) + extraction (trafilatura or readability-lxml)
   - Consider: SingleFile CLI for JavaScript-heavy pages? (mentioned in `project_breakdown.md`)
+  - See also: `~/bin/web2md.py`, an existing minimal script (used for downloading and processing job descriptions)
 - **Web extractor**: HTML → clean markdown. trafilatura does this natively. Quality is generally good for article-style content.
 - **Metadata extraction**: Open Graph tags (`og:title`, `og:author`, `og:published_time`) are the primary source. Fall back to text-based extraction (existing `TextMetadataExtractor`) for pages without OG tags.
 - **URL handling**: Normalization, deduplication (by normalized URL and by content hash)
