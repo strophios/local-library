@@ -9,6 +9,7 @@ import pytest
 from local_library.core.errors import ErrorCode, LookupError
 from local_library.core.models import DocumentStatus
 from local_library.core.storage import (
+    SCHEMA_VERSION,
     create_document,
     delete_document,
     get_all_citekeys,
@@ -21,6 +22,7 @@ from local_library.core.storage import (
     get_unique_citekey,
     init_schema,
     list_documents,
+    migrate_schema,
     transaction,
     update_document_metadata,
     update_document_status,
@@ -557,3 +559,186 @@ class TestGetAllCitekeys:
         citekeys = get_all_citekeys(db_conn)
 
         assert citekeys == []
+
+
+class TestSchemaMigrationV3ToV4:
+    """Tests for the v3 → v4 migration adding issued_year column."""
+
+    def _create_v3_database(self, db_path: Path) -> sqlite3.Connection:
+        """Hand-build a v3-shaped database for migration testing.
+
+        Constructs the documents table with the exact v3 column set (no
+        issued_year) and sets schema_version to 3. Does NOT call
+        migrate_schema() here — migration is the code under test.
+        """
+        conn = get_connection(db_path)
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS schema_version (
+                version INTEGER PRIMARY KEY
+            );
+            DELETE FROM schema_version;
+            INSERT INTO schema_version (version) VALUES (3);
+
+            CREATE TABLE IF NOT EXISTS documents (
+                id TEXT PRIMARY KEY,
+                original_path TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                storage_path TEXT NOT NULL,
+                extracted_path TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                citekey TEXT,
+                csl_json TEXT,
+                title TEXT,
+                authors TEXT,
+                issued_date TEXT,
+                error_message TEXT,
+                error_code TEXT,
+                embedding_status TEXT DEFAULT 'pending',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_documents_title ON documents(title);
+            CREATE INDEX IF NOT EXISTS idx_documents_issued_date ON documents(issued_date);
+            """
+        )
+        conn.commit()
+        return conn
+
+    def _insert_doc(
+        self,
+        conn: sqlite3.Connection,
+        doc_id: str,
+        issued_date: str | None,
+    ) -> None:
+        """Insert a minimal document row with a given issued_date."""
+        conn.execute(
+            """
+            INSERT INTO documents (
+                id, original_path, content_hash, storage_path,
+                status, issued_date, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, 'ready', ?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
+            """,
+            (doc_id, f"/tmp/{doc_id}.pdf", doc_id, f"ab/cd/{doc_id}.pdf", issued_date),
+        )
+        conn.commit()
+
+    def test_migration_adds_issued_year_column(self, temp_dir: Path) -> None:
+        """After migration, documents table has an issued_year INTEGER column."""
+        conn = self._create_v3_database(temp_dir / "test.db")
+
+        # Verify v3 state: no issued_year column
+        cols_v3 = {row[1] for row in conn.execute("PRAGMA table_info(documents)")}
+        assert "issued_year" not in cols_v3
+
+        # Run migration to current version (should be 4 after this task)
+        migrate_schema(conn)
+
+        cols_v4 = {row[1] for row in conn.execute("PRAGMA table_info(documents)")}
+        assert "issued_year" in cols_v4
+
+    def test_migration_creates_issued_year_index(self, temp_dir: Path) -> None:
+        """Migration creates idx_documents_issued_year index."""
+        conn = self._create_v3_database(temp_dir / "test.db")
+        migrate_schema(conn)
+        indexes = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='documents'"
+            )
+        }
+        assert "idx_documents_issued_year" in indexes
+
+    def test_migration_bumps_schema_version_to_4(self, temp_dir: Path) -> None:
+        """After migration, schema_version row is 4."""
+        conn = self._create_v3_database(temp_dir / "test.db")
+        migrate_schema(conn)
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
+        assert version == 4
+
+    def test_migration_backfills_iso_date(self, temp_dir: Path) -> None:
+        """Migration extracts year from ISO-format issued_date."""
+        conn = self._create_v3_database(temp_dir / "test.db")
+        self._insert_doc(conn, "doc1", "2023-06-15")
+        migrate_schema(conn)
+        year = conn.execute("SELECT issued_year FROM documents WHERE id = 'doc1'").fetchone()[0]
+        assert year == 2023
+
+    def test_migration_backfills_year_only(self, temp_dir: Path) -> None:
+        """Migration extracts year from year-only issued_date."""
+        conn = self._create_v3_database(temp_dir / "test.db")
+        self._insert_doc(conn, "doc1", "1984")
+        migrate_schema(conn)
+        year = conn.execute("SELECT issued_year FROM documents WHERE id = 'doc1'").fetchone()[0]
+        assert year == 1984
+
+    def test_migration_nulls_year_for_missing_date(self, temp_dir: Path) -> None:
+        """Documents with NULL issued_date get NULL issued_year."""
+        conn = self._create_v3_database(temp_dir / "test.db")
+        self._insert_doc(conn, "doc1", None)
+        migrate_schema(conn)
+        year = conn.execute("SELECT issued_year FROM documents WHERE id = 'doc1'").fetchone()[0]
+        assert year is None
+
+    def test_migration_nulls_year_for_malformed_date(self, temp_dir: Path) -> None:
+        """Non-numeric issued_date values yield NULL issued_year."""
+        conn = self._create_v3_database(temp_dir / "test.db")
+        self._insert_doc(conn, "doc1", "Spring 2023")
+        self._insert_doc(conn, "doc2", "XXXX")
+        migrate_schema(conn)
+        rows = {row[0]: row[1] for row in conn.execute("SELECT id, issued_year FROM documents")}
+        assert rows["doc1"] is None
+        assert rows["doc2"] is None
+
+    def test_init_schema_auto_migrates_v3_to_v4(self, temp_dir: Path) -> None:
+        """init_schema() auto-runs the v3→v4 migration."""
+        conn = self._create_v3_database(temp_dir / "test.db")
+        # Explicitly verify v3 starting state
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
+        assert version == 3
+        # Call init_schema (fresh invocation) which should auto-migrate
+        init_schema(conn)
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
+        assert version == SCHEMA_VERSION  # 4 after this task
+
+    def test_migration_preserves_existing_data(self, temp_dir: Path) -> None:
+        """Migration does not modify title, authors, citekey, or status."""
+        conn = self._create_v3_database(temp_dir / "test.db")
+        conn.execute(
+            """
+            INSERT INTO documents (
+                id, original_path, content_hash, storage_path,
+                status, citekey, title, authors, issued_date,
+                created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "docX",
+                "/tmp/x.pdf",
+                "hashX",
+                "ab/cd/x.pdf",
+                "ready",
+                "X2023",
+                "Original Title",
+                "Original Author",
+                "2023-06-15",
+                "2026-01-01T00:00:00Z",
+                "2026-01-01T00:00:00Z",
+            ),
+        )
+        conn.commit()
+
+        migrate_schema(conn)
+
+        row = conn.execute(
+            """
+            SELECT status, citekey, title, authors, issued_date, issued_year
+            FROM documents WHERE id = 'docX'
+            """
+        ).fetchone()
+        assert row["status"] == "ready"
+        assert row["citekey"] == "X2023"
+        assert row["title"] == "Original Title"
+        assert row["authors"] == "Original Author"
+        assert row["issued_date"] == "2023-06-15"
+        assert row["issued_year"] == 2023  # Backfilled

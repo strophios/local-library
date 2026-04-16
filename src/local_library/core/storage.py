@@ -3,6 +3,7 @@
 # pattern: Imperative Shell
 
 import json
+import logging
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -15,8 +16,10 @@ from local_library.core.errors import ErrorCode, LookupError, StorageError
 from local_library.core.models import Document, DocumentStatus, EmbeddingStatus
 from local_library.core.vec_extension import create_vec0_table, load_vec_extension
 
+logger = logging.getLogger(__name__)
+
 # Schema version for migrations
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 SCHEMA_TABLES = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -35,6 +38,7 @@ CREATE TABLE IF NOT EXISTS documents (
     title TEXT,
     authors TEXT,
     issued_date TEXT,
+    issued_year INTEGER,
     error_message TEXT,
     error_code TEXT,
     embedding_status TEXT DEFAULT 'pending',
@@ -62,6 +66,7 @@ CREATE INDEX IF NOT EXISTS idx_documents_status ON documents(status);
 CREATE INDEX IF NOT EXISTS idx_documents_citekey ON documents(citekey);
 CREATE INDEX IF NOT EXISTS idx_documents_title ON documents(title);
 CREATE INDEX IF NOT EXISTS idx_documents_issued_date ON documents(issued_date);
+CREATE INDEX IF NOT EXISTS idx_documents_issued_year ON documents(issued_year);
 CREATE INDEX IF NOT EXISTS idx_chunks_doc_id ON chunks(doc_id);
 """
 
@@ -189,6 +194,13 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
     row = cursor.fetchone()
     current_version = row["version"] if row else 0
 
+    if current_version < SCHEMA_VERSION:
+        logger.info(
+            "migrating database from schema v%d to v%d...",
+            current_version,
+            SCHEMA_VERSION,
+        )
+
     if current_version < 2:
         # Migration to v2: Add indexed metadata columns
         _migrate_v1_to_v2(conn)
@@ -196,8 +208,15 @@ def migrate_schema(conn: sqlite3.Connection) -> None:
     if current_version < 3:
         _migrate_v2_to_v3(conn)
 
+    if current_version < 4:
+        _migrate_v3_to_v4(conn)
+
     # Update schema version
     conn.execute("UPDATE schema_version SET version = ?", (SCHEMA_VERSION,))
+
+    if current_version < SCHEMA_VERSION:
+        logger.info("database migration complete (now at schema v%d)", SCHEMA_VERSION)
+
     conn.commit()
 
 
@@ -260,6 +279,41 @@ def _migrate_v2_to_v3(conn: sqlite3.Connection) -> None:
     # Create vec0 table for chunk embeddings (only if sqlite-vec is available)
     if load_vec_extension(conn):
         create_vec0_table(conn, "chunk_vectors", dimensions=768, distance_metric="cosine")
+
+
+def _migrate_v3_to_v4(conn: sqlite3.Connection) -> None:
+    """Migrate schema from v3 to v4.
+
+    Adds a derived `issued_year INTEGER` column to `documents` for
+    efficient year-based filtering. Backfills from the existing
+    `issued_date` text column using SQLite's SUBSTR + CAST with a
+    GLOB guard to skip malformed values.
+
+    Args:
+        conn: SQLite connection in a transaction.
+
+    Raises:
+        StorageError: If the migration steps fail.
+    """
+    try:
+        conn.execute("ALTER TABLE documents ADD COLUMN issued_year INTEGER;")
+        conn.execute(
+            """
+            UPDATE documents
+            SET issued_year = CAST(SUBSTR(issued_date, 1, 4) AS INTEGER)
+            WHERE issued_date IS NOT NULL
+              AND issued_date GLOB '[0-9][0-9][0-9][0-9]*';
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_documents_issued_year ON documents(issued_year);"
+        )
+    except sqlite3.Error as e:
+        raise StorageError(
+            f"failed to migrate schema from v3 to v4: {e}",
+            ErrorCode.STORAGE_MIGRATION_FAILED,
+            details={"from_version": 3, "to_version": 4},
+        ) from e
 
 
 def _row_to_document(row: sqlite3.Row) -> Document:

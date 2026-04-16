@@ -64,9 +64,9 @@ class TestEmbeddingErrorCodes:
 class TestSchemaVersion:
     """Tests for schema version and migration."""
 
-    def test_schema_version_is_3(self) -> None:
-        """SCHEMA_VERSION should be 3 for embedding support."""
-        assert SCHEMA_VERSION == 3
+    def test_schema_version_is_4(self) -> None:
+        """SCHEMA_VERSION should be 4 with issued_year support."""
+        assert SCHEMA_VERSION == 4
 
     def test_schema_migration_creates_embedding_status_column(self, temp_dir: Path) -> None:
         """Schema migration should add embedding_status column to documents."""
