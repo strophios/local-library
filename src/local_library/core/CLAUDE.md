@@ -1,6 +1,6 @@
 # Core Domain
 
-Last verified: 2026-03-06
+Last verified: 2026-04-15
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 
 ## Contracts
 
-- **Exposes**: Document, DocumentStatus (PENDING, READY, FAILED, NEEDS_REVIEW), EmbeddingStatus (PENDING, CURRENT, STALE), RAGResponse, AddResult, FieldExtraction, TextExtractionResult, ErrorCode hierarchy (including MetadataError, ZoteroError, EmbeddingError, LLMError, RAGError), Library class (with get_by_citekey, get_all_citekeys, update_metadata, embed, embed_all, get_retriever, query, query_stream; reranking enabled by default), storage functions, vec_extension module
+- **Exposes**: Document, DocumentStatus (PENDING, READY, FAILED, NEEDS_REVIEW), EmbeddingStatus (PENDING, CURRENT, STALE), RAGResponse, AddResult, FieldExtraction, TextExtractionResult, ErrorCode hierarchy (including MetadataError, ZoteroError, EmbeddingError, LLMError, RAGError), Library class (with get_by_citekey, get_all_citekeys, get_chunk_count, get_chunks, update_metadata, embed, embed_all, get_retriever, query, query_stream; reranking enabled by default), storage functions, vec_extension module
 - **Guarantees**:
   - Document.id is UUID, globally unique
   - Document.content_hash is SHA-256, content-addressable
@@ -31,6 +31,8 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
   - Library.query_stream(rerank=True) retrieves context chunks and returns RAGStream for token-by-token answer generation
   - Library accepts `rag_model` parameter (default: "gemini/gemini-2.0-flash") for RAG query LLM selection
   - RAGInterface lazily initialized on first query() or query_stream() call
+  - Library.get_chunk_count(doc_id: UUID) returns 0 if sqlite-vec unavailable or document has no chunks
+  - Library.get_chunks(doc_id: UUID, start, end) returns empty list if sqlite-vec unavailable or document has no chunks; supports optional index range slicing
 - **Expects**: Sources handled by at least one registered acquirer; files handled by at least one extractor
 
 ## Dependencies
@@ -80,7 +82,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
 - `models.py` - Document, AcquisitionResult, ExtractionResult, AddResult, FieldExtraction, TextExtractionResult, RAGResponse, EmbeddingStatus
 - `errors.py` - ErrorCode enum, exception hierarchy (includes ACQUISITION_*, EXTRACTION_*, METADATA_*, ZOTERO_*, EMBEDDING_*, RAG_*, LLM_* codes; LLMError, RAGError exceptions)
 - `storage.py` - SQLite CRUD (get_connection, init_schema, create/get/update/delete), schema v3 with chunks and FTS5
-- `library.py` - Library orchestrator (add, get, get_by_citekey, get_all_citekeys, list, delete, embed, embed_all, update_metadata, get_retriever, query, query_stream) with handler dispatch, text extraction integration, lazy RAG initialization, and lazy cross-encoder reranking
+- `library.py` - Library orchestrator (add, get, get_by_citekey, get_all_citekeys, get_chunk_count, get_chunks, list, delete, embed, embed_all, update_metadata, get_retriever, query, query_stream) with handler dispatch, text extraction integration, lazy RAG initialization, and lazy cross-encoder reranking
 - `vec_extension.py` - sqlite-vec extension loading, vec0 table creation, availability checking
 
 ## Gotchas
