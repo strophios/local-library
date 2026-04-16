@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "local-library": {
+      "command": "uv",
+      "args": ["run", "local-library-mcp"]
+    }
+  }
+}

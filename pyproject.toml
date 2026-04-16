@@ -13,6 +13,7 @@ dependencies = [
     "langchain-text-splitters>=0.3.0",
     "litellm>=1.0.0",
     "marker-pdf==1.8.0",  # Pinned: v1.9.0+ has broken MPS acceleration (20x slowdown on Apple Silicon)
+    "mcp>=1.27.0",
     "nameparser>=1.1.0",
     "platformdirs>=4.0.0",
     "pymupdf>=1.25.0",
@@ -36,6 +37,7 @@ dev = [
 
 [project.scripts]
 local-library = "local_library.cli.main:app"
+local-library-mcp = "local_library.mcp.server:main"
 
 [build-system]
 requires = ["hatchling"]

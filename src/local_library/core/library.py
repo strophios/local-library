@@ -15,7 +15,7 @@ from uuid import UUID
 
 if TYPE_CHECKING:
     from local_library.core.models import RAGResponse
-    from local_library.embeddings.base import Retriever
+    from local_library.embeddings.base import Chunk, Retriever
     from local_library.embeddings.reranking import CrossEncoderReranker
     from local_library.ingestion.pdf import ProgressCallback
     from local_library.rag.interface import RAGInterface, RAGStream
@@ -963,6 +963,50 @@ class Library:
             List of all non-null citekeys
         """
         return get_all_citekeys(self._conn)
+
+    def get_chunk_count(self, doc_id: UUID) -> int:
+        """Get number of chunks for a document.
+
+        Returns 0 if sqlite-vec is unavailable or document has no chunks.
+
+        Args:
+            doc_id: Document UUID
+
+        Returns:
+            Number of chunks
+        """
+        storage = self._get_embedding_storage()
+        if storage is None:
+            return 0
+        return storage.get_chunk_count(doc_id)
+
+    def get_chunks(
+        self,
+        doc_id: UUID,
+        start: int | None = None,
+        end: int | None = None,
+    ) -> list[Chunk]:
+        """Get chunks for a document, optionally by index range.
+
+        Returns empty list if sqlite-vec is unavailable or document has no chunks.
+
+        Args:
+            doc_id: Document UUID
+            start: Optional start chunk index (0-based, inclusive)
+            end: Optional end chunk index (inclusive)
+
+        Returns:
+            List of Chunk objects ordered by chunk_index
+        """
+        storage = self._get_embedding_storage()
+        if storage is None:
+            return []
+        chunks = storage.get_chunks_by_document(doc_id)
+        if start is not None or end is not None:
+            s = start if start is not None else 0
+            e = (end + 1) if end is not None else len(chunks)
+            chunks = [c for c in chunks if s <= c.chunk_index < e]
+        return chunks
 
     def reextract(self, doc_id: str) -> Document:
         """Re-extract text from a document's stored PDF.

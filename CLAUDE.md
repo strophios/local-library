@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-04-07
+Last verified: 2026-04-15
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -93,6 +93,7 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - **LLM abstraction layer**: LLMClient protocol with LiteLLMClient implementation; provider-agnostic LLM access with error mapping to ErrorCode hierarchy
 - **RAG query interface**: RAGInterface orchestrates context assembly, prompt construction, and LLM generation; RAGStream supports streaming with token accumulation; pre-LLM gate skips API call when no context retrieved
 - **CLI `ask` command**: streaming answers with Rich Live display, --no-stream, --json, --model, --mode, --doc, --limit, --no-rerank options; source citations with citekey attribution
+- **MCP server**: FastMCP-based server (stdio transport) exposing 4 read-only tools (search_library, show_document, list_documents, get_document_text) for Claude Code integration. Markdown-only responses, identifier resolution via @citekey/UUID, chunk-based document text access with short-doc/long-doc modes
 - SQLite storage with content-addressable file layout (schema v3)
 - CLI interface (add, list, show, delete, open, update, review, reextract, embed, search, ask commands)
 - @citekey identifier support with fuzzy matching suggestions
@@ -121,7 +122,7 @@ Five horizontal concerns cut across the system:
 2. **Ingestion**: Content acquisition, extraction (Marker), metadata handling
 3. **Embeddings + Retrieval**: Chunking, nomic-embed-text, similarity operations, FTS5 search, hybrid retrieval (RRF fusion), cross-encoder reranking
 4. **LLM + RAG**: LLMClient protocol, LiteLLM provider abstraction, context assembly, prompt construction, answer generation
-5. **Interface**: CLI, (later) daemon, Neovim plugin, HTTP API
+5. **Interface**: CLI, MCP server, (later) daemon, Neovim plugin, HTTP API
 
 ## Key Libraries and Tools
 
@@ -132,6 +133,7 @@ Five horizontal concerns cut across the system:
 - **Metadata**: CrossRef API, GROBID (for academic PDFs), Open Graph tags (for web)
 - **Vector storage**: sqlite-vec (v0.1.6+), SQLite FTS5 for hybrid search
 - **LLM interface**: Custom RAGInterface + LiteLLM for provider abstraction
+- **MCP server**: FastMCP (mcp>=1.27.0) for Claude Code tool integration over stdio
 - **Citations**: citeproc-py against CSL-JSON
 
 ## RAG System Design Decisions
@@ -243,6 +245,7 @@ All commands accepting document IDs support both UUID (full or partial) and @cit
 - `uv run local-library zotero collections` - List Zotero collections (personal library by default; use `--library NAME` or `--all-libraries`)
 - `uv run local-library zotero libraries` - List available Zotero libraries (personal and group)
 - `uv run local-library reextract <id>` - Re-run text extraction on an existing document (useful after extraction pipeline improvements)
+- `uv run local-library-mcp` - Start the MCP server (stdio transport, for Claude Code integration)
 - `uv run pytest` - Run tests
 - `uv run pytest --run-extraction-quality` - Run synthetic extraction quality benchmarks (requires pdflatex)
 - `uv run ruff check` - Lint code
@@ -281,6 +284,10 @@ src/local_library/
 │   ├── artifact_cleanup.py # Pre-processing: non-Latin filtering, image reformatting, watermark/boilerplate removal (Functional Core)
 │   ├── markdown_cleanup.py # Post-processing: HTML coercion, dehyphenation, paragraph reflow (Functional Core)
 │   └── zotero.py        # ZoteroReader facade (database + JSON backends, citekey mapping)
+├── mcp/                 # MCP server for Claude Code integration
+│   ├── server.py        # FastMCP app, tool definitions, Library lifecycle (Imperative Shell)
+│   ├── formatters.py    # Markdown rendering functions (Functional Core)
+│   └── CLAUDE.md        # Domain contracts
 └── cli/                 # CLI interface (Typer/Rich)
     ├── main.py          # Entry point, command registration
     ├── add.py           # Add command (--skip-embed flag)
@@ -298,7 +305,7 @@ src/local_library/
     └── zotero.py        # Zotero commands (import with --skip-embed, collections, libraries)
 ```
 
-See `src/local_library/core/CLAUDE.md`, `src/local_library/llm/CLAUDE.md`, `src/local_library/rag/CLAUDE.md`, `src/local_library/ingestion/CLAUDE.md`, `src/local_library/embeddings/CLAUDE.md`, and `src/local_library/cli/CLAUDE.md` for domain contracts.
+See `src/local_library/core/CLAUDE.md`, `src/local_library/llm/CLAUDE.md`, `src/local_library/rag/CLAUDE.md`, `src/local_library/ingestion/CLAUDE.md`, `src/local_library/embeddings/CLAUDE.md`, `src/local_library/mcp/CLAUDE.md`, and `src/local_library/cli/CLAUDE.md` for domain contracts.
 
 ## Background Documentation
 

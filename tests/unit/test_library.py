@@ -1482,3 +1482,92 @@ class TestReextractFailedDocuments:
         assert doc.citekey is not None
         assert doc.csl_json is not None
         assert doc.csl_json.get("_metadata_source") == "FILENAME"
+
+
+class TestLibraryChunkAccess:
+    """Tests for Library chunk access methods."""
+
+    @pytest.fixture
+    def library(self, temp_dir: Path) -> Generator[Library, None, None]:
+        """Provide a Library instance for testing."""
+        with Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            embed_on_add=False,
+        ) as lib:
+            yield lib
+
+    def test_get_chunk_count_unembedded_document(self, library: Library, temp_dir: Path) -> None:
+        """get_chunk_count() should return 0 for unembedded documents."""
+        pdf_path = temp_dir / "sample.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 test content")
+
+        with patch.object(library._extractors[0], "extract_and_validate") as mock_extract:
+            mock_extract.return_value = MagicMock(text="Test document content" * 10)
+            result = library.add(str(pdf_path))
+
+        count = library.get_chunk_count(result.document.id)  # Pass UUID directly
+        assert count == 0
+
+    def test_get_chunks_unembedded_document(self, library: Library, temp_dir: Path) -> None:
+        """get_chunks() should return empty list for unembedded documents."""
+        pdf_path = temp_dir / "sample.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 test content")
+
+        with patch.object(library._extractors[0], "extract_and_validate") as mock_extract:
+            mock_extract.return_value = MagicMock(text="Test document content" * 10)
+            result = library.add(str(pdf_path))
+
+        chunks = library.get_chunks(result.document.id)  # Pass UUID directly
+        assert chunks == []
+
+    def test_get_chunk_count_no_vec_extension(self, temp_dir: Path) -> None:
+        """get_chunk_count() should return 0 when sqlite-vec is unavailable."""
+        library = Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            embed_on_add=False,
+        )
+
+        try:
+            pdf_path = temp_dir / "sample.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4 test content")
+
+            with patch.object(library._extractors[0], "extract_and_validate") as mock_extract:
+                mock_extract.return_value = MagicMock(text="Test document content" * 10)
+                result = library.add(str(pdf_path))
+
+            # Mock _get_embedding_storage to return None (simulating unavailable sqlite-vec)
+            with patch.object(library, "_get_embedding_storage", return_value=None):
+                count = library.get_chunk_count(result.document.id)  # Pass UUID directly
+
+            assert count == 0
+        finally:
+            library.close()
+
+    def test_get_chunks_no_vec_extension(self, temp_dir: Path) -> None:
+        """get_chunks() should return empty list when sqlite-vec is unavailable."""
+        library = Library(
+            db_path=temp_dir / "test.db",
+            storage_dir=temp_dir / "storage",
+            extracted_dir=temp_dir / "extracted",
+            embed_on_add=False,
+        )
+
+        try:
+            pdf_path = temp_dir / "sample.pdf"
+            pdf_path.write_bytes(b"%PDF-1.4 test content")
+
+            with patch.object(library._extractors[0], "extract_and_validate") as mock_extract:
+                mock_extract.return_value = MagicMock(text="Test document content" * 10)
+                result = library.add(str(pdf_path))
+
+            # Mock _get_embedding_storage to return None (simulating unavailable sqlite-vec)
+            with patch.object(library, "_get_embedding_storage", return_value=None):
+                chunks = library.get_chunks(result.document.id)  # Pass UUID directly
+
+            assert chunks == []
+        finally:
+            library.close()
