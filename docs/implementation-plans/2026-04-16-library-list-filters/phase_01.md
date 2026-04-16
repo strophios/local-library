@@ -22,7 +22,7 @@
 
 - ✓ `SCHEMA_VERSION = 3` at `src/local_library/core/storage.py:19`
 - ✓ Migration framework exists: `migrate_schema()` at line 180, `_migrate_v1_to_v2()` at line 204, `_migrate_v2_to_v3()` at line 227. Auto-run by `init_schema()` (called on every Library startup).
-- ✓ `StorageError` class exists at `src/local_library/core/errors.py:109`; convention `STORAGE_*` for ErrorCode values (STORAGE_DATABASE_ERROR, STORAGE_WRITE_FAILED at lines 32-33). `SCHEMA_MIGRATION_FAILED` does not exist — add it.
+- ✓ `StorageError` class exists at `src/local_library/core/errors.py:109`; convention `STORAGE_*` for ErrorCode values (STORAGE_DATABASE_ERROR, STORAGE_WRITE_FAILED at lines 32-33). `STORAGE_MIGRATION_FAILED` does not exist — add it.
 - ✗ Discrepancy from design: **no `_extract_indexed_fields()` function exists**. Indexed field extraction is inline in `Library.update_metadata()` (lines 1097-1121) and delegated to `MetadataHandler.process()` (result has title/authors/issued_date) in the other two write paths.
 - ✓ Three write paths all converge on `update_document_metadata()` in `storage.py:590`:
   1. `Library._process_metadata()` (line 869) — uses `MetadataResult`
@@ -43,12 +43,12 @@
 ---
 
 <!-- START_TASK_1 -->
-### Task 1: Schema v4 migration with SCHEMA_MIGRATION_FAILED error code
+### Task 1: Schema v4 migration with STORAGE_MIGRATION_FAILED error code
 
 **Type:** Infrastructure + Functionality (functionality task — write test for migration, then implement)
 
 **Files:**
-- Modify: `src/local_library/core/errors.py` (add `SCHEMA_MIGRATION_FAILED` ErrorCode)
+- Modify: `src/local_library/core/errors.py` (add `STORAGE_MIGRATION_FAILED` ErrorCode)
 - Modify: `src/local_library/core/storage.py` (bump `SCHEMA_VERSION`, update `SCHEMA_TABLES`/`SCHEMA_INDEXES`, add `_migrate_v3_to_v4()`, update `migrate_schema()` dispatcher, enhance migration logging)
 - Create: `tests/unit/test_storage.py` test class `TestSchemaMigrationV3ToV4` (in existing file)
 
@@ -62,7 +62,7 @@
 - `src/local_library/core/storage.py:227-263` — `_migrate_v2_to_v3()` (another migration example with schema_version UPDATE at end)
 - `tests/unit/test_storage.py` — existing test patterns (real SQLite via `temp_dir` fixture from `tests/conftest.py`)
 
-**Step 1: Add `SCHEMA_MIGRATION_FAILED` ErrorCode**
+**Step 1: Add `STORAGE_MIGRATION_FAILED` ErrorCode**
 
 In `src/local_library/core/errors.py`, locate the STORAGE_* codes (around lines 32-33):
 
@@ -418,7 +418,7 @@ feat(storage): schema v4 migration adds issued_year column
 Adds derived `issued_year INTEGER` column to `documents` populated at
 write time from csl_json["issued"]. Migration backfills from
 `issued_date` text column using GLOB guard to skip malformed values.
-Adds `idx_documents_issued_year` index and `SCHEMA_MIGRATION_FAILED`
+Adds `idx_documents_issued_year` index and `STORAGE_MIGRATION_FAILED`
 ErrorCode. Migration runs automatically via init_schema() on Library
 startup with informational logging.
 
@@ -2083,7 +2083,7 @@ Expected: Clean.
 
 Run: `uv run pytest tests/unit/ --tb=short -q`
 
-Expected: All tests pass (should be around 1173 baseline + ~35-40 new tests).
+Expected: All tests pass (should be around 1173 baseline + ~55 new tests).
 
 **Step 7: Commit**
 
