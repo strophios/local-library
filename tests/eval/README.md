@@ -129,18 +129,22 @@ Log files are named `<timestamp>_<mode>.json` (e.g., `2026-04-03T140423Z_hybrid.
 
 3. **FTS requires stop-word removal + OR-mode** — FTS5's implicit AND was too restrictive for natural language queries (returned 0 results before fix). Stop-word removal + explicit OR between remaining terms converted FTS from useless to competitive (MRR=0.899 standalone).
 
-4. **Conceptual queries are the weak spot** — these queries ask about mechanisms, relationships, and arguments that are distributed across document sections rather than stated in a single passage. This is a primary quality improvement target.
+4. **The aggregate "conceptual query gap" is mostly cross-language, not structural** — conceptual queries score worst in aggregate (NDCG@10=0.784), but per-query diagnosis (2026-04-03) traces the gap primarily to 2–3 cross-language queries targeting German documents. English-only conceptual queries score NDCG@10=0.911, Recall@10=0.955, with only one genuine English miss. See "Conceptual Query Gap" below.
 
 5. **Cross-language retrieval is fragile** — German-language documents (Marx1968, Benjamin2014) are poorly retrieved by English queries. See "Cross-Language Retrieval Limitation" below.
 
 ### Conceptual Query Gap
 
-Conceptual queries (24 of 74) have the lowest scores across all metrics. The gap likely stems from:
-- **Distributed arguments**: Conceptual answers span multiple sections/chunks; no single chunk contains the full answer
-- **Abstract vocabulary**: Queries about mechanisms and relationships use more abstract terms than the source text
-- **Chunk boundary issues**: Section-aware chunking may split arguments across chunk boundaries
+Conceptual queries (24 of 74) have the lowest aggregate scores — but the aggregate is misleading.
 
-Potential improvements to investigate:
+**Per-query diagnosis (2026-04-03).** Excluding cross-language queries, English conceptual retrieval scores NDCG@10=0.911, Recall@10=0.955, close to the overall English baseline. The aggregate drop to NDCG@10=0.784 comes primarily from the 2–3 conceptual queries targeting Marx1968 (German), which miss entirely. Only one English conceptual query misses its target document:
+
+- `conceptual_002` ("What is the relationship between culture and social structure?") → target Sewell1996a not retrieved. Returns adjacent social-theory documents (Callon1998, Tajfel1979, Melucci1995, Schutz1944). Diagnosis: vocabulary/framing gap — the query is abstract, the document's framing is discipline-specific.
+
+**Implications.** The "conceptual gap" is a small English phenomenon amplified by cross-language contamination when the aggregate is computed over all queries. Tuning the pipeline for "conceptual retrieval" based on the aggregate number would be chasing the wrong signal. Cross-language is tracked separately below.
+
+**If the remaining English gap matters after corpus-scale re-annotation** — it's two queries on a 20-doc corpus, so its survival at scale is an open question — candidate approaches (not yet validated):
+
 - **Query expansion**: Expand abstract queries with concrete terms from related documents
 - **Larger chunk overlap**: Increase the ~15% chunk overlap to capture cross-boundary arguments
 - **Chunk merging at retrieval time**: Return adjacent chunks when a conceptual query matches
@@ -166,15 +170,33 @@ Two German-language documents — Marx1968 (*Ökonomisch-philosophische Manuskri
 
 ## Quality Targets
 
-*To be established based on baseline analysis and corpus scaling goals.*
+Numeric targets are deferred. The annotation artifact at corpus scale (see below) makes current large-scale numbers uninterpretable as a quality signal. Until the eval set catches up with the imported corpus, the best we can do is report what the dev-corpus baseline actually tells us and flag the gating work. See `docs/feature-areas/rag-pipeline-improvements/README.md` § "Near-Term: Eval Re-Annotation at Corpus Scale" for the re-annotation plan.
 
-| Metric | Target | Baseline (hybrid+rerank) | Status |
-|--------|--------|--------------------------|--------|
-| MRR | TBD | 0.895 | Baseline established |
-| Recall@10 | TBD | 0.912 | Baseline established |
-| NDCG@10 | TBD | 0.880 | Baseline established |
-| NDCG@10 (conceptual) | TBD | — | Primary improvement target |
-| Recall@10 (cross-language) | TBD | ~0.25 (1/4 Marx, 0/4 Benjamin) | Known limitation |
+### Dev-Corpus Findings (hybrid+rerank, ~20 docs, 74 answerable queries)
+
+Split by language to isolate the cross-language limitation:
+
+| Scope | Queries | Recall@10 | MRR | NDCG@10 |
+|---|---|---|---|---|
+| English overall | 70 | 0.979 | 0.944 | 0.947 |
+| English conceptual | 22 | 0.955 | 0.909 | 0.911 |
+| Cross-language (German targets) | 4 | 0.250 | — | — |
+| Combined (aggregate) | 74 | 0.912 | 0.895 | 0.880 |
+
+On the English portion, retrieval is strong. NDCG@10=0.947 is above the ~0.85 region where further IR-metric improvements show weak correlation with downstream LLM answer quality (Trappolini et al. 2025, "Redefining Retrieval Evaluation in the Era of LLMs"). Two of 70 English queries fall short of their target: `conceptual_002` is a hard miss (target Sewell1996a not retrieved at all — vocabulary gap, analyzed above) and one paraphrase query retrieves the right document but ranks it below top-10. Cross-language misses (3 of 4) all target Marx1968 — nomic-embed-text can't reliably align English queries to German academic text, which is a known model limitation rather than a pipeline bug.
+
+**Why recall is the binding metric.** When retrieval returns chunks from wrong documents, the LLM produces confident-sounding answers grounded in irrelevant material. The pre-LLM gate in `rag/interface.py` catches zero-result queries but not wrong-result queries — every point of recall failure is a silent failure with plausible-looking wrong citations. For a scholarly citation tool, that's the worst failure mode, so future work should prefer recall over precision where the two trade off.
+
+**Document-level caveat.** These metrics credit a hit if *any* chunk from a relevant document appears in the top-k. Reasonable on a 20-doc corpus where document ≈ chunk for relevance purposes; less so at scale with longer, more topically varied documents. Chunk-level annotations are a prerequisite for metrics comparable to published benchmarks (BEIR/MTEB) and for separating retrieval quality from chunk-selection quality.
+
+### Why Targets Are Deferred
+
+Setting meaningful corpus-scale targets requires two things the current evaluation framework doesn't yet provide at scale:
+
+1. **Re-annotated query set.** The same 76 queries run against 1,216 documents surface many correct-but-unannotated results. They score as misses under the existing rubric, so the corpus-scale aggregate doesn't reflect actual retrieval quality. Re-annotation is the fix.
+2. **Chunk-level gold data.** See the document-level caveat above. Chunk-level annotations let us measure what actually affects UX (did the *right passage* get retrieved?) and compare against published benchmarks.
+
+Target-setting resumes once both land. See the feature-area README for the sequencing and open questions.
 
 ### Evaluation History
 
@@ -182,6 +204,7 @@ Two German-language documents — Marx1968 (*Ökonomisch-philosophische Manuskri
 |------|--------|---------|-------------|-----|---------|-------|
 | 2026-04-01 | ~20 docs | 74 | hybrid+rerank | 0.913 | 0.896 | Initial baseline; pre-extraction-fix |
 | 2026-04-02 | ~20 docs | 74 | hybrid+rerank | 0.895 | 0.880 | Post-extraction-fix; HTML coercion allowlist; cross-language gap identified |
+| 2026-04-03 | ~20 docs | 70 (en) / 4 (de) | hybrid+rerank | 0.944 | 0.947 | English/cross-language split; per-query failure analysis (English overall row) |
 
 ## Expanding the Query Set
 

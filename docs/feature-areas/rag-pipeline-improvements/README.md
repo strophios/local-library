@@ -1,6 +1,6 @@
 # RAG Pipeline Improvements
 
-Last updated: 2026-04-16
+Last updated: 2026-04-17
 
 ## Vision
 
@@ -18,7 +18,7 @@ The pipeline is functional end-to-end with competitive retrieval quality on the 
 - **RAG**: `RAGInterface` orchestrates context assembly → prompt construction → LLM generation (LiteLLM)
 - **Evaluation**: 76 labeled queries with graded relevance (3-tier), Precision@k, Recall@k, MRR, NDCG@k metrics. See `tests/eval/README.md` for full details
 
-**Dev-corpus baseline** (hybrid+rerank, ~20 docs): MRR=0.913, Recall@10=0.926, NDCG@10=0.896. Conceptual queries are the weakest category (NDCG@10=0.784). Full results in `tests/eval/baseline_results.json`.
+**Dev-corpus baseline** (hybrid+rerank, ~20 docs, post-extraction-fix): English-only MRR=0.944, Recall@10=0.979, NDCG@10=0.947 on 70 queries. Aggregate NDCG@10=0.880 when cross-language queries are folded in; per-query diagnosis shows the aggregate "conceptual query gap" is mostly cross-language contamination, not a structural conceptual-retrieval weakness. Full results in `tests/eval/baseline_results.json`; analysis in `tests/eval/README.md`.
 
 **Full corpus imported** (1,216 docs, 99.3% success). Initial corpus-scale eval run shows apparent quality regression — see below for why this is largely an annotation artifact rather than a real retrieval regression.
 
@@ -58,9 +58,9 @@ Items below are still ordered roughly by expected impact once the eval infrastru
 2. ~~**FTS query preprocessing**~~ — Implemented. Stop-word removal + explicit OR mode made FTS viable (was returning 0 results). Asymmetric RRF weights tuned.
 
 3. **Conceptual query improvement**
-   - Queries about mechanisms/arguments were the weakest category on dev corpus
-   - Likely causes: distributed arguments across chunks, abstract vocabulary, chunk boundary issues
-   - Potential approaches: query expansion, increased chunk overlap, chunk merging at retrieval time, document-level scoring
+   - Dev-corpus aggregate conceptual NDCG@10=0.784 was largely driven by cross-language misses; English conceptual NDCG@10=0.911 (only one genuine English miss, `conceptual_002` against Sewell1996a)
+   - The remaining English gap may not survive re-annotation at corpus scale — it's two queries on 20 docs
+   - If it does: candidate approaches are query expansion, increased chunk overlap, chunk merging at retrieval time, or document-level scoring
 
 4. **Cross-language retrieval** (known limitation)
    - German documents (Marx1968, Benjamin2014) poorly retrieved by English queries
@@ -117,7 +117,7 @@ If the above aren't sufficient:
 
 - How do we efficiently re-annotate 76 queries against 1,216 documents? Full manual review is prohibitive. Options: run each query and annotate the top-N returned results (biased toward whatever retriever we use), LLM-assisted annotation with human spot-checking, or sampling-based approaches. Likely some combination.
 - Should we expand the query set before or after re-annotating existing queries? Re-annotating first gives a consistent baseline; expanding first gets more signal but means annotating more queries twice (once naively, once properly).
-- What quality targets are appropriate once we have solid corpus-scale measurements? The dev-corpus numbers (MRR=0.913, NDCG@10=0.896) set a ceiling expectation, but degradation at scale is expected and normal.
+- What quality targets are appropriate once we have solid corpus-scale measurements? Dev-corpus English-only numbers (MRR=0.944, NDCG@10=0.947) set a ceiling expectation, but degradation at scale is expected and normal.
 - What's the right approach for the conceptual query gap? Chunk overlap tuning is cheap; query expansion is more complex but potentially higher impact. May or may not survive re-annotation.
 - Should the evaluation framework test end-to-end RAG answer quality, or just retrieval quality? Retrieval is well-measured on dev corpus; answer quality evaluation is the remaining gap.
 - Is there a meaningful difference between "good retrieval" and "good for citation search"? The Neovim workflow may need different tuning than general RAG queries.

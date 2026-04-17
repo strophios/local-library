@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-04-16
+Last verified: 2026-04-17
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -90,7 +90,7 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - **Retriever protocol**: Protocol-based extensibility; `Library.get_retriever()` factory method wires up dependencies; `Reranker` protocol for pluggable reranking
 - **Cross-encoder reranking**: Document-aware CrossEncoderReranker groups candidates by document, limits chunks per document, scores via cross-encoder/ms-marco-MiniLM-L-12-v2, applies sigmoid normalization. RerankedRetriever wraps any Retriever with broadened candidate pool + reranking
 - **CLI `search` command**: hybrid/vector/fts modes, document-scoped search (--doc), JSON output (--json), configurable result limit (--limit), reranking on by default (--no-rerank to disable)
-- **Retrieval evaluation framework**: IR metrics (Precision@k, Recall@k, MRR, NDCG@k with graded relevance), 76-query evaluation set across 5 categories with 3-tier relevance grading, automated comparative evaluation harness, reranker benchmark script. Baseline: hybrid+rerank achieves MRR=0.913, NDCG@10=0.896 on ~20-doc dev corpus
+- **Retrieval evaluation framework**: IR metrics (Precision@k, Recall@k, MRR, NDCG@k with graded relevance), 76-query evaluation set across 5 categories with 3-tier relevance grading, automated comparative evaluation harness, reranker benchmark script. Dev-corpus baseline (hybrid+rerank, ~20 docs, post-extraction-fix): English-only MRR=0.944, NDCG@10=0.947 on 70 queries; aggregate NDCG@10=0.880 folds in cross-language misses. Per-query diagnosis in `tests/eval/README.md`
 - **LLM abstraction layer**: LLMClient protocol with LiteLLMClient implementation; provider-agnostic LLM access with error mapping to ErrorCode hierarchy
 - **RAG query interface**: RAGInterface orchestrates context assembly, prompt construction, and LLM generation; RAGStream supports streaming with token accumulation; pre-LLM gate skips API call when no context retrieved
 - **CLI `ask` command**: streaming answers with Rich Live display, --no-stream, --json, --model, --mode, --doc, --limit, --no-rerank options; source citations with citekey attribution
@@ -182,7 +182,7 @@ A retrieval evaluation framework is implemented in `tests/eval/`. See `tests/eva
 - **IR metrics**: `retrieval_eval.py` provides Precision@k, Recall@k, MRR, NDCG@k (with graded relevance) and unit tests (`test_retrieval_metrics.py`)
 - **Query set**: `test_queries.json` v2.0 contains 76 labeled queries across 6 categories with 3-tier graded relevance (see `annotation_rubric.md`)
 - **Comparative harness**: Runs all retriever modes (vector, FTS, hybrid) with/without reranking, per-category breakdowns
-- **Baseline results (dev corpus, ~20 docs)**: hybrid+rerank achieves MRR=0.913, NDCG@10=0.896. Conceptual queries are the weak spot (NDCG@10=0.784). Full results in `baseline_results.json`
+- **Baseline results (dev corpus, ~20 docs, post-extraction-fix)**: hybrid+rerank achieves English-only MRR=0.944, Recall@10=0.979, NDCG@10=0.947 on 70 queries; aggregate NDCG@10=0.880 when cross-language queries are folded in. Per-query diagnosis (2026-04-03) showed the aggregate "conceptual query gap" is mostly cross-language contamination, not a structural weakness — English conceptual NDCG@10=0.911. Full results in `baseline_results.json`, analysis in `tests/eval/README.md`
 - **Corpus scaled**: Full Zotero corpus (1,216 docs) is now imported. Initial full-corpus eval run shows apparent regression, but this is largely an annotation artifact — the flood of new documents surfaces many correct-but-unannotated results that score as misses. Real corpus-scale performance requires re-annotation before quality targets or conceptual-query work can move forward.
 - **Reranker benchmark**: `reranker_benchmark.py` evaluates cross-encoder models; results in `reranker_results.json`
 - **Next steps**: Re-annotate existing queries at corpus scale, expand query set, add chunk-level annotations, then reassess quality targets. See `docs/feature-areas/rag-pipeline-improvements/README.md`.
