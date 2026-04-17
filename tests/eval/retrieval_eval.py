@@ -189,6 +189,8 @@ class EvalReport:
     """Aggregate evaluation report across all queries."""
 
     results: list[QueryResult] = field(default_factory=list)
+    chunk_log: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    query_meta: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def add(self, result: QueryResult) -> None:
         """Add a query result to the report."""
@@ -318,6 +320,7 @@ def run_evaluation(
     db_path: Path,
     queries_path: Path,
     mode: str = "hybrid",
+    log_chunks: bool = False,
 ) -> EvalReport:
     """Run retrieval evaluation against labeled query set.
 
@@ -325,9 +328,11 @@ def run_evaluation(
         db_path: Path to SQLite database with embedded documents
         queries_path: Path to test_queries.json
         mode: Retriever mode (hybrid, vector, fts)
+        log_chunks: If True, capture chunk-level detail for per-query logging
 
     Returns:
-        EvalReport with metrics for all queries
+        EvalReport with metrics for all queries. When log_chunks=True,
+        report.chunk_log and report.query_meta are populated.
     """
     from local_library.core import Library
 
@@ -342,6 +347,29 @@ def run_evaluation(
                 continue  # Skip adversarial queries for retrieval metrics
 
             results = retriever.retrieve(query["text"], k=10)
+
+            # Capture chunk-level detail before collapsing to document level
+            if log_chunks:
+                report.chunk_log[query["id"]] = [
+                    {
+                        "rank": i + 1,
+                        "chunk_id": r.chunk.chunk_id,
+                        "doc_id": str(r.chunk.doc_id),
+                        "citekey": r.doc_citekey,
+                        "doc_title": r.doc_title,
+                        "section": r.chunk.section,
+                        "chunk_index": r.chunk.chunk_index,
+                        "score": round(r.score, 4),
+                        "search_methods": sorted(r.search_methods),
+                        "text": r.chunk.text,
+                    }
+                    for i, r in enumerate(results)
+                ]
+                report.query_meta[query["id"]] = {
+                    "difficulty": query.get("difficulty", "unknown"),
+                    "also_relevant": query.get("also_relevant", []),
+                    "source_context": query.get("source_context", ""),
+                }
 
             # Map chunk-level results to document-level citekeys.
             # Metrics are computed at document granularity: multiple chunks
@@ -358,6 +386,79 @@ def run_evaluation(
             report.add(qr)
 
     return report
+
+
+def write_run_log(
+    report: EvalReport,
+    mode: str,
+    db_path: Path,
+    output_dir: Path | None = None,
+) -> Path:
+    """Write a detailed per-query run log to JSON.
+
+    Captures chunk-level retrieval results alongside computed metrics for
+    each query, enabling qualitative inspection of what the retriever
+    actually returned. Requires that run_evaluation() was called with
+    log_chunks=True.
+
+    Args:
+        report: EvalReport with chunk_log and query_meta populated
+        mode: Retriever mode used for this run
+        db_path: Database path (recorded in metadata)
+        output_dir: Directory for log files. Defaults to tests/eval/runs/
+
+    Returns:
+        Path to the written log file
+    """
+    from datetime import datetime, timezone
+
+    if output_dir is None:
+        output_dir = Path(__file__).parent / "runs"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now(timezone.utc)
+    filename = f"{timestamp.strftime('%Y-%m-%dT%H%M%SZ')}_{mode}.json"
+
+    per_query = []
+    for qr in report.results:
+        meta = report.query_meta.get(qr.query_id, {})
+        entry: dict[str, Any] = {
+            "query_id": qr.query_id,
+            "query_text": qr.query_text,
+            "category": qr.category,
+            "difficulty": meta.get("difficulty", "unknown"),
+            "relevant_docs": qr.relevant_docs,
+            "also_relevant": meta.get("also_relevant", []),
+            "metrics": {
+                "precision_at_5": round(qr.precision_at_5, 4),
+                "precision_at_10": round(qr.precision_at_10, 4),
+                "recall_at_10": round(qr.recall_at_10, 4),
+                "mrr": round(qr.mrr, 4),
+                "ndcg_at_5": round(qr.ndcg_at_5, 4),
+                "ndcg_at_10": round(qr.ndcg_at_10, 4),
+            },
+            "retrieved_docs": qr.retrieved_docs,
+            "retrieved_chunks": report.chunk_log.get(qr.query_id, []),
+        }
+        per_query.append(entry)
+
+    log = {
+        "meta": {
+            "timestamp": timestamp.isoformat(),
+            "mode": mode,
+            "rerank": True,  # eval harness default; update if --no-rerank added
+            "db_path": str(db_path),
+            "total_queries": len(report.results),
+        },
+        "aggregate": report.to_dict(),
+        "per_query": per_query,
+    }
+
+    log_path = output_dir / filename
+    with open(log_path, "w") as f:
+        json.dump(log, f, indent=2)
+
+    return log_path
 
 
 def run_comparative_evaluation(
@@ -395,6 +496,11 @@ def main() -> None:
         help="Retriever mode (hybrid, vector, fts, or all)",
     )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
+    parser.add_argument(
+        "--log",
+        action="store_true",
+        help="Write detailed per-query log with chunk-level results to tests/eval/runs/",
+    )
     args = parser.parse_args()
 
     if not args.db_path.exists():
@@ -415,12 +521,26 @@ def main() -> None:
                 print(f"\n{'─' * 50}")
                 print(f"Mode: {mode}")
                 print(report.format_summary())
+        if args.log:
+            print(f"\n{'─' * 50}")
+            print(
+                "note: --log writes one file per mode; re-run with a specific --mode for logging",
+                file=sys.stderr,
+            )
     else:
-        report = run_evaluation(args.db_path, args.queries, mode=args.mode)
+        report = run_evaluation(
+            args.db_path,
+            args.queries,
+            mode=args.mode,
+            log_chunks=args.log,
+        )
         if args.json:
             print(json.dumps(report.to_dict(), indent=2))
         else:
             print(report.format_summary())
+        if args.log:
+            log_path = write_run_log(report, args.mode, args.db_path)
+            print(f"\nRun log written to: {log_path}")
 
 
 if __name__ == "__main__":

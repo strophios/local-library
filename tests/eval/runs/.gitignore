@@ -1,0 +1,4 @@
+# Run logs are ephemeral artifacts — keep the directory tracked, ignore outputs.
+*
+!.gitignore
+!.gitkeep
