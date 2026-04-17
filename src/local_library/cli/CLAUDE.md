@@ -52,7 +52,8 @@ Command-line interface for the local-library system. Provides user-facing comman
 - **Non-blocking PDF opens**: Uses platform-native commands (open/xdg-open/start) via subprocess.Popen
 - **Early API key validation**: `--llm` and `--llm-extract` check GEMINI_API_KEY before Library instantiation; warn and gracefully disable features if missing
 - **Zotero import as command group**: `zotero` subcommand groups Zotero-related operations; `import` subcommand handles batch import with progress tracking, `collections` lists available collections
-- **Citekey-based skip logic**: Batch import skips items whose citekey already exists in local-library (fast check); hash-based deduplication catches any that slip through
+- **Library-scoped import**: All import helper functions (`_handle_dry_run`, `_import_items`, `_import_items_rich`, `_import_items_json`, `_item_has_pdf`, `_process_single_item`) accept and thread `library_id: int` to ZoteroReader calls. Defaults to 1 (personal library) when CLI `--library` not specified. Prevents cross-library citekey collisions during item resolution.
+- **Citekey-based skip logic**: Batch import skips items whose citekey already exists in local-library (fast check); hash-based deduplication catches any that slip through. Citekey listing is library-scoped via `list_citekeys_in_library()`.
 - **Zotero citekey preservation**: Import passes Zotero's citekey to Library.add() to preserve BetterBibTeX citekeys; enables accurate deduplication on subsequent imports
 - **Metadata source tagging**: add command passes MetadataSource.EXPLICIT when --metadata provided; zotero import passes MetadataSource.ZOTERO. Bare paths default to FILENAME (handled by Library).
 - **Progress callback in zotero import**: `_make_console_progress_callback()` factory creates Rich Console callback for extraction events (pre-check, heartbeat, completion, fallback). Wired into `_import_items_rich()`. JSON mode uses logger fallback.

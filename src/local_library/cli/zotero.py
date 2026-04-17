@@ -361,7 +361,13 @@ def import_from_zotero(
     if dry_run:
         reader.close()
         _handle_dry_run(
-            reader, citekeys, collection, json_output, effective_zotero_dir, library_json
+            reader,
+            citekeys,
+            collection,
+            json_output,
+            effective_zotero_dir,
+            library_json,
+            library_id=effective_library_id if effective_library_id is not None else 1,
         )
         return
 
@@ -373,6 +379,7 @@ def import_from_zotero(
         llm_extract=effective_llm_extract,
         skip_embed=skip_embed,
         json_output=json_output,
+        library_id=effective_library_id if effective_library_id is not None else 1,
     )
 
 
@@ -383,6 +390,8 @@ def _handle_dry_run(
     json_output: bool,
     zotero_dir: Path,
     library_json: Path | None,
+    *,
+    library_id: int,
 ) -> None:
     """Handle dry-run mode: show what would be imported."""
     # Re-open reader for dry-run analysis
@@ -403,7 +412,7 @@ def _handle_dry_run(
 
                 # Check for PDF
                 try:
-                    item = reader.get_item(citekey)
+                    item = reader.get_item(citekey, library_id=library_id)
                     pdfs = item.pdf_attachments()
                     if not pdfs:
                         no_pdf.append(citekey)
@@ -457,6 +466,8 @@ def _import_items(
     llm_extract: bool,
     skip_embed: bool,
     json_output: bool,
+    *,
+    library_id: int,
 ) -> None:
     """Import items from Zotero with progress tracking.
 
@@ -489,6 +500,7 @@ def _import_items(
                 continue_on_error,
                 stats,
                 failures,
+                library_id=library_id,
             )
         else:
             _import_items_rich(
@@ -500,6 +512,7 @@ def _import_items(
                 continue_on_error,
                 stats,
                 failures,
+                library_id=library_id,
             )
     finally:
         reader.close()
@@ -540,6 +553,8 @@ def _import_items_rich(
     continue_on_error: bool,
     stats: dict,
     failures: list,
+    *,
+    library_id: int,
 ) -> None:
     """Import items with Rich progress bar.
 
@@ -583,7 +598,9 @@ def _import_items_rich(
                     items_since_restart = 0
 
                 # Check if this item will need extraction (not a skip)
-                will_extract = citekey not in existing_citekeys and _item_has_pdf(reader, citekey)
+                will_extract = citekey not in existing_citekeys and _item_has_pdf(
+                    reader, citekey, library_id=library_id
+                )
 
                 # Stop progress bar during extraction to avoid conflict with
                 # Marker's multiprocessing on macOS
@@ -591,7 +608,14 @@ def _import_items_rich(
                     progress.stop()
 
                 result = _process_single_item(
-                    reader, citekey, existing_citekeys, lib, continue_on_error, stats, failures
+                    reader,
+                    citekey,
+                    existing_citekeys,
+                    lib,
+                    continue_on_error,
+                    stats,
+                    failures,
+                    library_id=library_id,
                 )
 
                 # Restart progress bar after extraction
@@ -620,6 +644,8 @@ def _import_items_json(
     continue_on_error: bool,
     stats: dict,
     failures: list,
+    *,
+    library_id: int,
 ) -> None:
     """Import items in JSON mode (no progress display).
 
@@ -639,7 +665,14 @@ def _import_items_json(
                 items_since_restart = 0
 
             result = _process_single_item(
-                reader, citekey, existing_citekeys, lib, continue_on_error, stats, failures
+                reader,
+                citekey,
+                existing_citekeys,
+                lib,
+                continue_on_error,
+                stats,
+                failures,
+                library_id=library_id,
             )
 
             # Only count items that actually triggered extraction
@@ -653,13 +686,13 @@ def _import_items_json(
             lib.close()
 
 
-def _item_has_pdf(reader: ZoteroReader, citekey: str) -> bool:
+def _item_has_pdf(reader: ZoteroReader, citekey: str, *, library_id: int) -> bool:
     """Check if a Zotero item has a PDF attachment that exists.
 
     Used to determine if extraction will be needed (for progress bar handling).
     """
     try:
-        item = reader.get_item(citekey)
+        item = reader.get_item(citekey, library_id=library_id)
         pdfs = item.pdf_attachments()
         return bool(pdfs) and pdfs[0].path.exists()
     except ZoteroError:
@@ -674,6 +707,8 @@ def _process_single_item(
     continue_on_error: bool,
     stats: dict,
     failures: list,
+    *,
+    library_id: int,
 ) -> str:
     """Process a single Zotero item for import.
 
@@ -689,7 +724,7 @@ def _process_single_item(
 
     # Get item from Zotero
     try:
-        item = reader.get_item(citekey)
+        item = reader.get_item(citekey, library_id=library_id)
     except ZoteroError as e:
         stats["failed"] += 1
         failures.append({"citekey": citekey, "error": e.message})

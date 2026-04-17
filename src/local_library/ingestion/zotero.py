@@ -499,11 +499,12 @@ class CitekeyMapper:
         self._citekey_field_id = row["fieldID"]
         return self._citekey_field_id
 
-    def lookup(self, citekey: str) -> tuple[int, str]:
-        """Resolve a citekey to Zotero item identifiers.
+    def lookup(self, citekey: str, *, library_id: int) -> tuple[int, str]:
+        """Resolve a citekey to Zotero item identifiers within a specific library.
 
         Args:
             citekey: Citation key string
+            library_id: Zotero library ID to search within (1 for personal library)
 
         Returns:
             Tuple of (itemID, itemKey) where:
@@ -511,7 +512,8 @@ class CitekeyMapper:
             - itemKey: Zotero's 8-character stable key (used for storage paths)
 
         Raises:
-            ZoteroError: If citekey not found (ZOTERO_CITEKEY_NOT_FOUND)
+            ZoteroError: If citekey not found in the specified library
+                (ZOTERO_CITEKEY_NOT_FOUND)
         """
         field_id = self._get_field_id()
         conn = self._db_manager.get_connection(DatabaseManager.ZOTERO_DB)
@@ -522,9 +524,9 @@ class CitekeyMapper:
             FROM itemData id
             JOIN itemDataValues idv ON id.valueID = idv.valueID
             JOIN items i ON id.itemID = i.itemID
-            WHERE id.fieldID = ? AND idv.value = ?
+            WHERE id.fieldID = ? AND idv.value = ? AND i.libraryID = ?
             """,
-            (field_id, citekey),
+            (field_id, citekey, library_id),
         )
         row = cursor.fetchone()
 
@@ -532,19 +534,20 @@ class CitekeyMapper:
             raise ZoteroError(
                 message=f"citekey not found in Zotero database: {citekey}",
                 code=ErrorCode.ZOTERO_CITEKEY_NOT_FOUND,
-                details={"citekey": citekey},
+                details={"citekey": citekey, "library_id": library_id},
             )
 
         return (row["itemID"], row["key"])
 
-    def has_citekey(self, citekey: str) -> bool:
-        """Check if a citekey exists in Zotero.
+    def has_citekey(self, citekey: str, *, library_id: int) -> bool:
+        """Check if a citekey exists in a specific Zotero library.
 
         Args:
             citekey: Citation key string
+            library_id: Zotero library ID to search within (1 for personal library)
 
         Returns:
-            True if citekey exists, False otherwise
+            True if citekey exists in the specified library, False otherwise
         """
         field_id = self._get_field_id()
         conn = self._db_manager.get_connection(DatabaseManager.ZOTERO_DB)
@@ -553,9 +556,11 @@ class CitekeyMapper:
             """
             SELECT 1 FROM itemData id
             JOIN itemDataValues idv ON id.valueID = idv.valueID
-            WHERE id.fieldID = ? AND idv.value = ? LIMIT 1
+            JOIN items i ON id.itemID = i.itemID
+            WHERE id.fieldID = ? AND idv.value = ? AND i.libraryID = ?
+            LIMIT 1
             """,
-            (field_id, citekey),
+            (field_id, citekey, library_id),
         )
         return cursor.fetchone() is not None
 
@@ -1032,7 +1037,7 @@ class ZoteroReader:
     Usage:
         with ZoteroReader(zotero_dir) as reader:
             for citekey in reader.list_citekeys():
-                item = reader.get_item(citekey)
+                item = reader.get_item(citekey, library_id=1)
                 print(f"{citekey}: {item.csl_json.get('title')}")
                 for att in item.pdf_attachments():
                     print(f"  - {att.path}")
@@ -1085,20 +1090,22 @@ class ZoteroReader:
         self._collection_resolver = CollectionResolver(self._db_manager, self._key_mapper)
         self._library_resolver = LibraryResolver(self._db_manager)
 
-    def get_item(self, citekey: str) -> ZoteroItem:
-        """Get complete item data for a citekey.
+    def get_item(self, citekey: str, *, library_id: int) -> ZoteroItem:
+        """Get complete item data for a citekey within a specific library.
 
         Combines CSL-JSON metadata with resolved attachment paths.
 
         Args:
             citekey: Better BibTeX citation key
+            library_id: Zotero library ID to search within (1 for personal library)
 
         Returns:
             ZoteroItem with metadata and attachments
 
         Raises:
             ZoteroError: If citekey not found in library.json (ZOTERO_ITEM_NOT_FOUND)
-            ZoteroError: If citekey not in Zotero database (ZOTERO_CITEKEY_NOT_FOUND)
+            ZoteroError: If citekey not in Zotero database for the specified library
+                (ZOTERO_CITEKEY_NOT_FOUND)
         """
         # Get metadata from library.json
         metadata = self._json_parser.get_metadata(citekey)
@@ -1109,8 +1116,8 @@ class ZoteroReader:
                 details={"citekey": citekey, "source": "library.json"},
             )
 
-        # Resolve citekey to Zotero IDs
-        item_id, item_key = self._key_mapper.lookup(citekey)
+        # Resolve citekey to Zotero IDs within the specified library
+        item_id, item_key = self._key_mapper.lookup(citekey, library_id=library_id)
 
         # Get attachments
         attachments = self._attachment_resolver.get_attachments(item_id)

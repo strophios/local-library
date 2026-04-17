@@ -674,12 +674,13 @@ class TestCitekeyMapper:
         conn.execute("""
             CREATE TABLE items (
                 itemID INTEGER PRIMARY KEY,
-                key TEXT NOT NULL
+                key TEXT NOT NULL,
+                libraryID INTEGER NOT NULL DEFAULT 1
             )
         """)
-        conn.execute("INSERT INTO items (itemID, key) VALUES (100, 'SMITH001')")
-        conn.execute("INSERT INTO items (itemID, key) VALUES (200, 'JONES002')")
-        conn.execute("INSERT INTO items (itemID, key) VALUES (300, 'BROWN003')")
+        conn.execute("INSERT INTO items (itemID, key, libraryID) VALUES (100, 'SMITH001', 1)")
+        conn.execute("INSERT INTO items (itemID, key, libraryID) VALUES (200, 'JONES002', 1)")
+        conn.execute("INSERT INTO items (itemID, key, libraryID) VALUES (300, 'BROWN003', 1)")
 
         # Add native citation key tables
         _add_citekey_tables(conn)
@@ -692,6 +693,46 @@ class TestCitekeyMapper:
         return zotero_path
 
     @pytest.fixture
+    def zotero_dir_cross_library(self, temp_dir: Path) -> Path:
+        """Create mock Zotero directory where a citekey exists in two libraries.
+
+        Simulates the real bug: "smith2023" exists in personal library (1)
+        and a shared group library (5). The group library item has a different
+        itemKey, so attachment resolution would point to a non-existent path.
+        """
+        zotero_path = temp_dir / "ZoteroCrossLib"
+        zotero_path.mkdir()
+
+        zotero_db = zotero_path / "zotero.sqlite"
+        conn = sqlite3.connect(zotero_db)
+        conn.execute("""
+            CREATE TABLE items (
+                itemID INTEGER PRIMARY KEY,
+                key TEXT NOT NULL,
+                libraryID INTEGER NOT NULL
+            )
+        """)
+        # Personal library items
+        conn.execute("INSERT INTO items VALUES (100, 'SMITH001', 1)")
+        # Group library item with same citekey but different key/ID
+        conn.execute("INSERT INTO items VALUES (500, 'GRPSMITH', 5)")
+
+        _add_citekey_tables(conn)
+        _add_citekey(conn, 100, "smith2023", value_id=1)
+        _add_citekey(conn, 500, "smith2023", value_id=2)
+        conn.commit()
+        conn.close()
+
+        return zotero_path
+
+    @pytest.fixture
+    def cross_lib_db_manager(self, zotero_dir_cross_library: Path) -> DatabaseManager:
+        """Provide DatabaseManager for cross-library tests."""
+        manager = DatabaseManager(zotero_dir_cross_library)
+        yield manager
+        manager.close()
+
+    @pytest.fixture
     def db_manager(self, zotero_dir_with_citekeys: Path) -> DatabaseManager:
         """Provide DatabaseManager for tests."""
         manager = DatabaseManager(zotero_dir_with_citekeys)
@@ -702,7 +743,7 @@ class TestCitekeyMapper:
         """lookup should return (itemID, itemKey) tuple."""
         mapper = CitekeyMapper(db_manager)
 
-        item_id, item_key = mapper.lookup("smith2023")
+        item_id, item_key = mapper.lookup("smith2023", library_id=1)
 
         assert item_id == 100
         assert item_key == "SMITH001"
@@ -711,7 +752,7 @@ class TestCitekeyMapper:
         """lookup should work for different citekeys."""
         mapper = CitekeyMapper(db_manager)
 
-        item_id, item_key = mapper.lookup("jones2022")
+        item_id, item_key = mapper.lookup("jones2022", library_id=1)
 
         assert item_id == 200
         assert item_key == "JONES002"
@@ -720,24 +761,64 @@ class TestCitekeyMapper:
         """has_citekey should return True for existing citekey."""
         mapper = CitekeyMapper(db_manager)
 
-        assert mapper.has_citekey("smith2023") is True
-        assert mapper.has_citekey("jones2022") is True
+        assert mapper.has_citekey("smith2023", library_id=1) is True
+        assert mapper.has_citekey("jones2022", library_id=1) is True
 
     def test_has_citekey_returns_false_for_missing(self, db_manager: DatabaseManager) -> None:
         """has_citekey should return False for missing citekey."""
         mapper = CitekeyMapper(db_manager)
 
-        assert mapper.has_citekey("nonexistent") is False
+        assert mapper.has_citekey("nonexistent", library_id=1) is False
 
     def test_lookup_raises_for_missing_citekey(self, db_manager: DatabaseManager) -> None:
         """lookup should raise error for citekey not in Zotero."""
         mapper = CitekeyMapper(db_manager)
 
         with pytest.raises(ZoteroError) as exc_info:
-            mapper.lookup("nonexistent")
+            mapper.lookup("nonexistent", library_id=1)
 
         assert exc_info.value.code == ErrorCode.ZOTERO_CITEKEY_NOT_FOUND
         assert "nonexistent" in str(exc_info.value)
+
+    # --- Cross-library filtering tests ---
+
+    def test_lookup_filters_by_library_id(
+        self, cross_lib_db_manager: DatabaseManager
+    ) -> None:
+        """lookup should return the item from the specified library when citekey
+        exists in multiple libraries."""
+        mapper = CitekeyMapper(cross_lib_db_manager)
+
+        # Personal library should return itemID 100
+        item_id, item_key = mapper.lookup("smith2023", library_id=1)
+        assert item_id == 100
+        assert item_key == "SMITH001"
+
+        # Group library should return itemID 500
+        item_id, item_key = mapper.lookup("smith2023", library_id=5)
+        assert item_id == 500
+        assert item_key == "GRPSMITH"
+
+    def test_lookup_raises_for_wrong_library(
+        self, cross_lib_db_manager: DatabaseManager
+    ) -> None:
+        """lookup should raise when citekey exists but not in the specified library."""
+        mapper = CitekeyMapper(cross_lib_db_manager)
+
+        with pytest.raises(ZoteroError) as exc_info:
+            mapper.lookup("smith2023", library_id=99)
+
+        assert exc_info.value.code == ErrorCode.ZOTERO_CITEKEY_NOT_FOUND
+
+    def test_has_citekey_filters_by_library_id(
+        self, cross_lib_db_manager: DatabaseManager
+    ) -> None:
+        """has_citekey should respect library_id filter."""
+        mapper = CitekeyMapper(cross_lib_db_manager)
+
+        assert mapper.has_citekey("smith2023", library_id=1) is True
+        assert mapper.has_citekey("smith2023", library_id=5) is True
+        assert mapper.has_citekey("smith2023", library_id=99) is False
 
     def test_get_citekey_returns_citekey_for_item(self, db_manager: DatabaseManager) -> None:
         """get_citekey should return citekey string for valid itemID."""
@@ -758,9 +839,9 @@ class TestCitekeyMapper:
         mapper = CitekeyMapper(db_manager)
 
         # smith2023 exists, SMITH2023 does not
-        assert mapper.has_citekey("smith2023") is True
-        assert mapper.has_citekey("SMITH2023") is False
-        assert mapper.has_citekey("Smith2023") is False
+        assert mapper.has_citekey("smith2023", library_id=1) is True
+        assert mapper.has_citekey("SMITH2023", library_id=1) is False
+        assert mapper.has_citekey("Smith2023", library_id=1) is False
 
     def test_raises_for_missing_citekey_field(self, temp_dir: Path) -> None:
         """CitekeyMapper should raise if citationKey field not in schema (pre-Zotero 8)."""
@@ -781,7 +862,7 @@ class TestCitekeyMapper:
 
         try:
             with pytest.raises(ZoteroError) as exc_info:
-                mapper.lookup("anything")
+                mapper.lookup("anything", library_id=1)
 
             assert exc_info.value.code == ErrorCode.ZOTERO_DATABASE_ERROR
             assert "Zotero 8" in str(exc_info.value)
@@ -793,12 +874,12 @@ class TestCitekeyMapper:
         mapper = CitekeyMapper(db_manager)
 
         # First call triggers lookup
-        mapper.has_citekey("smith2023")
+        mapper.has_citekey("smith2023", library_id=1)
         assert mapper._citekey_field_id is not None
 
         # Cached value used on subsequent calls
         cached_id = mapper._citekey_field_id
-        mapper.has_citekey("jones2022")
+        mapper.has_citekey("jones2022", library_id=1)
         assert mapper._citekey_field_id == cached_id
 
 
@@ -1105,10 +1186,15 @@ class TestZoteroReader:
         # Create zotero.sqlite
         zotero_db = zotero_path / "zotero.sqlite"
         conn = sqlite3.connect(zotero_db)
-        conn.execute("CREATE TABLE items (itemID INTEGER PRIMARY KEY, key TEXT)")
-        conn.execute("INSERT INTO items VALUES (100, 'SMITH001')")  # Parent
-        conn.execute("INSERT INTO items VALUES (101, 'ATTACH01')")  # Attachment
-        conn.execute("INSERT INTO items VALUES (200, 'JONES001')")  # Parent (no att)
+        conn.execute("""
+            CREATE TABLE items (
+                itemID INTEGER PRIMARY KEY, key TEXT,
+                libraryID INTEGER NOT NULL DEFAULT 1
+            )
+        """)
+        conn.execute("INSERT INTO items VALUES (100, 'SMITH001', 1)")  # Parent
+        conn.execute("INSERT INTO items VALUES (101, 'ATTACH01', 1)")  # Attachment
+        conn.execute("INSERT INTO items VALUES (200, 'JONES001', 1)")  # Parent (no att)
         conn.execute("""
             CREATE TABLE itemAttachments (
                 itemID INTEGER, parentItemID INTEGER,
@@ -1137,7 +1223,7 @@ class TestZoteroReader:
     def test_get_item_returns_complete_item(self, complete_zotero_dir: Path) -> None:
         """get_item should return ZoteroItem with metadata and attachments."""
         with ZoteroReader(complete_zotero_dir) as reader:
-            item = reader.get_item("smith2023")
+            item = reader.get_item("smith2023", library_id=1)
 
         assert item.citekey == "smith2023"
         assert item.csl_json["title"] == "A Sample Paper"
@@ -1149,7 +1235,7 @@ class TestZoteroReader:
     def test_get_item_without_attachments(self, complete_zotero_dir: Path) -> None:
         """get_item should work for items without attachments."""
         with ZoteroReader(complete_zotero_dir) as reader:
-            item = reader.get_item("jones2022")
+            item = reader.get_item("jones2022", library_id=1)
 
         assert item.citekey == "jones2022"
         assert item.csl_json["title"] == "A Sample Book"
@@ -1179,7 +1265,7 @@ class TestZoteroReader:
         reader.__enter__()
 
         # Access something to open connections
-        _ = reader.get_item("smith2023")
+        _ = reader.get_item("smith2023", library_id=1)
         assert len(reader._db_manager._connections) > 0
 
         reader.__exit__(None, None, None)
@@ -1213,7 +1299,7 @@ class TestZoteroReader:
         """get_item should raise error for citekey not in library.json."""
         with ZoteroReader(complete_zotero_dir) as reader:
             with pytest.raises(ZoteroError) as exc_info:
-                reader.get_item("nonexistent")
+                reader.get_item("nonexistent", library_id=1)
 
         assert exc_info.value.code == ErrorCode.ZOTERO_ITEM_NOT_FOUND
 
@@ -1239,7 +1325,7 @@ class TestZoteroReader:
             reader.refresh()
 
             with pytest.raises(ZoteroError) as exc_info:
-                reader.get_item("orphan2023")
+                reader.get_item("orphan2023", library_id=1)
 
         assert exc_info.value.code == ErrorCode.ZOTERO_CITEKEY_NOT_FOUND
 
