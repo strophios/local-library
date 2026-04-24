@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-04-17
+Last verified: 2026-04-24
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -326,7 +326,7 @@ See `src/local_library/core/CLAUDE.md`, `src/local_library/llm/CLAUDE.md`, `src/
 ### Planning and Roadmap
 - `roadmap.md`: **Central overview** — feature areas, current focus, cross-cutting dependencies
 - `docs/feature-areas/`: **Feature area planning** — one directory per area with canonical README and supporting material
-- `build_plan.md`: Phase 1 milestone overview and layer responsibilities (historical reference once Phase 1 complete)
+- `docs/archive/build_plan.md`: Phase 1 milestone overview and layer responsibilities (historical reference; Phase 1 complete)
 - `build_philosophy.md`: Pipeline-first, layer-complete development approach
 - `docs/design-plans/`: Point-in-time design specifications (date-prefixed)
 - `docs/implementation-plans/`: Point-in-time implementation plans (date-prefixed, phased)
@@ -340,8 +340,8 @@ See `src/local_library/core/CLAUDE.md`, `src/local_library/llm/CLAUDE.md`, `src/
 - `RAG_background/citation_tooling_report.md`: Suggestion, triage-based verification, Neovim integration
 
 ### Project History
-- `background/chat_transcript.md`: Full verbatim transcript of initial planning conversation
-- `background/chat_summary.md`: Concise summary of architectural decisions and data model
-- `RAG_report_guidance.md`: Original requirements and evaluation criteria for RAG research
-- `summary_logs/rag_research_process_2.md`: Meta-documentation of research process
+- `docs/archive/background/chat_transcript.md`: Full verbatim transcript of initial planning conversation
+- `docs/archive/background/chat_summary.md`: Concise summary of architectural decisions and data model
+- `docs/archive/RAG_report_guidance.md`: Original requirements and evaluation criteria for RAG research
+- `docs/archive/summary_logs/rag_research_process_2.md`: Meta-documentation of research process
 - `README.md`: Project goals and development philosophy

@@ -249,5 +249,5 @@ The harness uses graded relevance throughout. `ndcg_at_k` accepts both `set[str]
 
 - `annotation_rubric.md` — Labeling criteria for categories, difficulty, and relevance
 - `docs/feature-areas/rag-pipeline-improvements/README.md` — Pipeline improvement planning and sequencing
-- `build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling" — Evaluation pass rationale
+- `docs/archive/build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling" — Evaluation pass rationale
 - `docs/design-plans/2026-03-05-document-aware-cross-encoder-reranking.md` — Cross-encoder design (evaluation-adjacent)

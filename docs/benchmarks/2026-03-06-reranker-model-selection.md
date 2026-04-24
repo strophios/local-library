@@ -35,7 +35,7 @@ Rationale: MiniLM-L-12-v2 provides a strong latency/capability tradeoff. Per-que
 Quality metrics (NDCG@10, MRR) were computed against the current 10-query
 test set (12 total, 2 unanswerable) but are not reliable for model selection at this scale. Quality
 benchmarking should be re-run after the test query set is expanded to
-50-100 validated queries (see build_plan.md § "Post-M7: Pipeline Evaluation
+50-100 validated queries (see docs/archive/build_plan.md § "Post-M7: Pipeline Evaluation
 and Corpus Scaling").
 
 To re-run the full benchmark:

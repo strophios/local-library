@@ -133,7 +133,7 @@ If the above aren't sufficient:
 
 ## References
 
-- `build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling" — evaluation pass sequencing
+- `docs/archive/build_plan.md` § "Post-M7: Pipeline Evaluation and Corpus Scaling" — evaluation pass sequencing
 - `docs/design-plans/2026-03-05-document-aware-cross-encoder-reranking.md` — cross-encoder design
 - `tests/eval/` — existing evaluation framework (retrieval_eval.py, test_queries.json)
 - `RAG_background/00_final_summary_report.md` — original RAG architecture recommendations
