@@ -8,6 +8,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a personal knowledge management system that ingests diverse digital documents (web articles, PDFs, etc.), extracts content, manages bibliographic metadata, provides ML-based auto-tagging, and serves as a local RAG database. The system is self-sufficient but designed for interoperability with Zotero.
 
+## Working Conventions
+
+- **`scratchpad.md`** is the user's personal scratch notes. **Ignore it by default** — do not read, reference, or include it in any response unless the user explicitly asks. It is not part of project context.
+
 ## Architectural Decisions
 
 ### System Philosophy

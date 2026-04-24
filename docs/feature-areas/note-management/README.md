@@ -71,4 +71,3 @@ Auto-generated markdown files with YAML frontmatter, organized in a discoverable
 ## References
 
 - `CLAUDE.md` § "Core Data Model" — notes as part of the data model
-- `project_breakdown.md` — mentions note management as a priority area

@@ -24,7 +24,7 @@ A minimal but complete path: `add <url>` downloads, extracts, and ingests.
 - **Web acquirer**: Download HTML from URL. Options:
   - trafilatura (primary choice per CLAUDE.md) — handles download + extraction in one step
   - Separate download (requests/httpx) + extraction (trafilatura or readability-lxml)
-  - Consider SingleFile CLI for JavaScript-heavy pages (mentioned in `project_breakdown.md`)
+  - Consider SingleFile CLI for JavaScript-heavy pages
   - See also: `~/bin/web2md.py`, an existing minimal script used for job descriptions
 - **Web extractor**: HTML → clean markdown. trafilatura does this natively; quality is good for article-style content.
 - **Metadata extraction**: Open Graph tags (`og:title`, `og:author`, `og:published_time`) first. Fall back to the existing `TextMetadataExtractor` for pages without OG tags.
@@ -117,5 +117,4 @@ Each new handler implements `ContentAcquirer` + `ContentExtractor`. No core chan
 
 - `src/local_library/ingestion/base.py` — protocol definitions
 - `src/local_library/ingestion/text_extraction.py` — `TextMetadataExtractor` (the piece API enrichment would supplement)
-- `project_breakdown.md` — early notes on web ingestion flow
 - `RAG_background/00_final_summary_report.md` § Section 1 — extraction discussion (PDF-focused but relevant patterns)

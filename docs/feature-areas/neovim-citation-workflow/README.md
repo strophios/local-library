@@ -96,6 +96,5 @@ Early sketches included a nvim-cmp source that triggered on `[@` to surface cita
 
 ## References
 
-- `project_breakdown.md` — detailed interaction design notes (especially the Neovim plugin UX)
 - `RAG_background/citation_tooling_report.md` — citation suggestion architecture, triage reframing
 - `RAG_background/llm_query_interface_report.md` — LLM integration patterns

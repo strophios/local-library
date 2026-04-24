@@ -87,7 +87,6 @@ If the above aren't sufficient:
 8. **Hierarchical retrieval**
    - Document-level embeddings (of summaries or full text) for coarse retrieval
    - Then chunk-level retrieval within top documents
-   - See `project_breakdown.md` notes on multi-stage search
 
 ## Longer-Term Ideas
 
@@ -140,4 +139,3 @@ If the above aren't sufficient:
 - `RAG_background/00_final_summary_report.md` — original RAG architecture recommendations
 - `RAG_background/embedding_approaches_report.md` — embedding model analysis
 - `RAG_background/vector_storage_report.md` — storage and search strategies
-- `project_breakdown.md` — notes on retrieval improvements, hierarchical search, late chunking
