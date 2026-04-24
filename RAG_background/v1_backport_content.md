@@ -1,12 +1,12 @@
 # v1 RAG Research: Backport Content
 
-This document captures useful content from the v1 RAG research reports (`v1_RAG_background/RAG_background/`) that should be integrated into the current implementation. The v1 research was conducted with limited web search capabilities, which led to some outdated or incorrect information (e.g., sqlite-vss instead of sqlite-vec, misattributed MTEB scores). However, several elements remain valuable.
+This document captures useful content from the v1 RAG research reports (`docs/archive/v1_RAG_background/RAG_background/`) that should be integrated into the current implementation. The v1 research was conducted with limited web search capabilities, which led to some outdated or incorrect information (e.g., sqlite-vss instead of sqlite-vec, misattributed MTEB scores). However, several elements remain valuable.
 
 ---
 
 ## 1. Evaluation Framework
 
-**Source**: `v1_RAG_background/RAG_background/00_final_summary.md`
+**Source**: `docs/archive/v1_RAG_background/RAG_background/00_final_summary.md`
 
 **Why integrate**: The current v2 reports lack a detailed evaluation framework with concrete metrics and targets. This is essential for validating RAG quality before and after implementation.
 
@@ -98,7 +98,7 @@ def evaluate_retrieval(test_set: list[dict], retriever, k: int = 10) -> dict:
 
 ## 2. Risk Assessment Table
 
-**Source**: `v1_RAG_background/RAG_background/00_final_summary.md`
+**Source**: `docs/archive/v1_RAG_background/RAG_background/00_final_summary.md`
 
 **Why integrate**: Comprehensive risk analysis with mitigations. The v2 reports have a shorter risk section; this provides more actionable detail.
 
@@ -123,7 +123,7 @@ def evaluate_retrieval(test_set: list[dict], retriever, k: int = 10) -> dict:
 
 ## 3. Batch Processing with Thermal Management
 
-**Source**: `v1_RAG_background/RAG_background/00_final_summary.md`
+**Source**: `docs/archive/v1_RAG_background/RAG_background/00_final_summary.md`
 
 **Why integrate**: Practical code for processing large PDF corpora on M1 with checkpointing and thermal throttling management.
 
@@ -222,7 +222,7 @@ process_library(remaining)
 
 ## 4. HyDE (Hypothetical Document Embeddings)
 
-**Source**: `v1_RAG_background/RAG_background/04_llm_querying.md`
+**Source**: `docs/archive/v1_RAG_background/RAG_background/04_llm_querying.md`
 
 **Why integrate**: Clear explanation of when to use HyDE and implementation. The v2 reports mention HyDE but lack this practical guidance.
 
@@ -274,7 +274,7 @@ Hypothetical excerpt:"""
 
 ## 5. Conversation Context Handling
 
-**Source**: `v1_RAG_background/RAG_background/04_llm_querying.md`
+**Source**: `docs/archive/v1_RAG_background/RAG_background/04_llm_querying.md`
 
 **Why integrate**: This is described as "a significant gap in many RAG implementations" in v1. The v2 reports don't cover this at all.
 
@@ -386,7 +386,7 @@ class ConversationTurn:
 
 ## 6. MarkdownChunker Implementation
 
-**Source**: `v1_RAG_background/RAG_background/02_embeddings_and_chunking.md`
+**Source**: `docs/archive/v1_RAG_background/RAG_background/02_embeddings_and_chunking.md`
 
 **Why integrate**: Complete, well-documented chunker that handles academic markdown structure. The v2 reports use LangChain's generic RecursiveCharacterTextSplitter example but don't show markdown-aware chunking.
 
@@ -534,7 +534,7 @@ class MarkdownChunker:
 
 ## 7. HybridSearcher and MMR Reranking
 
-**Source**: `v1_RAG_background/RAG_background/03_vector_storage.md`
+**Source**: `docs/archive/v1_RAG_background/RAG_background/03_vector_storage.md`
 
 **Why integrate**: The v2 reports show RRF hybrid search but don't include MMR for diversity. This is important when chunks from a single document dominate results.
 
@@ -633,7 +633,7 @@ def mmr_rerank(
 
 ## 8. EmbeddingSync Class
 
-**Source**: `v1_RAG_background/RAG_background/03_vector_storage.md`
+**Source**: `docs/archive/v1_RAG_background/RAG_background/03_vector_storage.md`
 
 **Why integrate**: Handles incremental re-embedding when documents change. Not covered in v2 reports.
 
