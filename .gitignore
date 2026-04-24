@@ -44,3 +44,6 @@ htmlcov/
 
 # Local development
 *.local
+
+# macOS
+.DS_Store
