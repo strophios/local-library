@@ -146,7 +146,7 @@ Five horizontal concerns cut across the system:
 
 ## RAG System Design Decisions
 
-Comprehensive research on the RAG pipeline is documented in `RAG_background/`. The final summary (`00_final_summary_report.md`) is the authoritative reference. Key decisions:
+Comprehensive research on the RAG pipeline is documented in `docs/RAG_background/`. The final summary (`00_final_summary_report.md`) is the authoritative reference. Key decisions:
 
 ### Embedding Model: nomic-embed-text-v1.5
 - **MTEB score**: 62.28% (matches OpenAI text-embedding-3-small)
@@ -332,12 +332,12 @@ See `src/local_library/core/CLAUDE.md`, `src/local_library/llm/CLAUDE.md`, `src/
 - `docs/implementation-plans/`: Point-in-time implementation plans (date-prefixed, phased)
 
 ### RAG System Research (authoritative for implementation details)
-- `RAG_background/00_final_summary_report.md`: Consolidated recommendations — code patterns, schemas, library configuration
-- `RAG_background/pdf_extraction_tools_report.md`: Marker, Docling, olmOCR analysis
-- `RAG_background/embedding_approaches_report.md`: nomic-embed-text, chunking strategies, dual embeddings
-- `RAG_background/vector_storage_report.md`: sqlite-vec vs LanceDB, hybrid search patterns
-- `RAG_background/llm_query_interface_report.md`: Custom wrapper architecture, context assembly
-- `RAG_background/citation_tooling_report.md`: Suggestion, triage-based verification, Neovim integration
+- `docs/RAG_background/00_final_summary_report.md`: Consolidated recommendations — code patterns, schemas, library configuration
+- `docs/RAG_background/pdf_extraction_tools_report.md`: Marker, Docling, olmOCR analysis
+- `docs/RAG_background/embedding_approaches_report.md`: nomic-embed-text, chunking strategies, dual embeddings
+- `docs/RAG_background/vector_storage_report.md`: sqlite-vec vs LanceDB, hybrid search patterns
+- `docs/RAG_background/llm_query_interface_report.md`: Custom wrapper architecture, context assembly
+- `docs/RAG_background/citation_tooling_report.md`: Suggestion, triage-based verification, Neovim integration
 
 ### Project History
 - `docs/archive/background/chat_transcript.md`: Full verbatim transcript of initial planning conversation

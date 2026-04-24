@@ -48,7 +48,7 @@ Push auto-generated tags back to Zotero via the local API (HTTP on port 23119).
 - Maintain a second set of embeddings using the `clustering:` prefix for nomic-embed-text
 - Only pursue if tagging quality measurably suffers with RAG embeddings
 - Storage overhead: ~6KB per document (~185MB for 1400 docs) — not a concern
-- See `RAG_background/embedding_approaches_report.md` § dual embedding strategy
+- See `docs/RAG_background/embedding_approaches_report.md` § dual embedding strategy
 
 ### Triage-Based Verification
 - "What in my library might not support this claim?" — loosely related to auto-tagging in that both use document similarity
@@ -66,7 +66,7 @@ Push auto-generated tags back to Zotero via the local API (HTTP on port 23119).
 - Identify gaps in coverage
 
 ### Full Automated Claim Verification (vs. Triage)
-Triage-based verification (narrowing the search space for a human) is the near-term design. Fully automated NLI-based verification — "reject commits with unsupported citations" or similar — is a different problem with a much higher accuracy bar. Out of reach with off-the-shelf NLI models (~77-78% on academic text), and probably not worth chasing unless an automated workflow specifically requires it. The path if we ever need it: build a labeled test set of 50-100 claim/source pairs, validate accuracy on academic content, potentially fine-tune. Roughly 2-4 weeks of work with meaningful risk that the result still isn't good enough. See `RAG_background/citation_tooling_report.md` § 8.2.
+Triage-based verification (narrowing the search space for a human) is the near-term design. Fully automated NLI-based verification — "reject commits with unsupported citations" or similar — is a different problem with a much higher accuracy bar. Out of reach with off-the-shelf NLI models (~77-78% on academic text), and probably not worth chasing unless an automated workflow specifically requires it. The path if we ever need it: build a labeled test set of 50-100 claim/source pairs, validate accuracy on academic content, potentially fine-tune. Roughly 2-4 weeks of work with meaningful risk that the result still isn't good enough. See `docs/RAG_background/citation_tooling_report.md` § 8.2.
 
 ## Open Questions
 
@@ -89,6 +89,6 @@ Triage-based verification (narrowing the search space for a human) is the near-t
 
 ## References
 
-- `RAG_background/embedding_approaches_report.md` — embedding strategies, dual embedding discussion
-- `RAG_background/citation_tooling_report.md` § triage reframing + § 8.2 — verification approaches, NLI validation
+- `docs/RAG_background/embedding_approaches_report.md` — embedding strategies, dual embedding discussion
+- `docs/RAG_background/citation_tooling_report.md` § triage reframing + § 8.2 — verification approaches, NLI validation
 - `CLAUDE.md` § "Writing to Zotero" — Zotero export constraints

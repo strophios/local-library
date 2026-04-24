@@ -68,7 +68,7 @@ A Lua plugin communicating with the daemon. The core interaction:
 - "What in my library might not support this claim?" — surface potentially contradicting sources
 - "Does the cited source(s) plausibly support this claim?" — with citekey(s) selected, check relevance
 - These lower the confidence bar from "automated decision" to "narrowing the search space for human review"
-- See `RAG_background/citation_tooling_report.md` § triage reframing for the underlying insight
+- See `docs/RAG_background/citation_tooling_report.md` § triage reframing for the underlying insight
 
 ### Additional Plugin Features
 - Open associated note (when note management exists)
@@ -96,5 +96,5 @@ Early sketches included a nvim-cmp source that triggered on `[@` to surface cita
 
 ## References
 
-- `RAG_background/citation_tooling_report.md` — citation suggestion architecture, triage reframing
-- `RAG_background/llm_query_interface_report.md` — LLM integration patterns
+- `docs/RAG_background/citation_tooling_report.md` — citation suggestion architecture, triage reframing
+- `docs/RAG_background/llm_query_interface_report.md` — LLM integration patterns

@@ -117,4 +117,4 @@ Each new handler implements `ContentAcquirer` + `ContentExtractor`. No core chan
 
 - `src/local_library/ingestion/base.py` — protocol definitions
 - `src/local_library/ingestion/text_extraction.py` — `TextMetadataExtractor` (the piece API enrichment would supplement)
-- `RAG_background/00_final_summary_report.md` § Section 1 — extraction discussion (PDF-focused but relevant patterns)
+- `docs/RAG_background/00_final_summary_report.md` § Section 1 — extraction discussion (PDF-focused but relevant patterns)

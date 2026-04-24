@@ -89,7 +89,7 @@ Features not currently assigned to a feature area but worth tracking:
 ### Extraction infrastructure
 
 - **Upgrade Marker to v1.9.0+** — pinned at 1.8.0 because v1.9.0+ has a bug causing ~20x slowdown on Apple Silicon MPS ([marker issue #960](https://github.com/datalab-to/marker/issues/960)). Upstream features we're missing: block-mode OCR (v1.9.0), LLM-based table extraction improvements (v1.9.2), new layout detection model and HTML table rendering (v1.10.0). Upgrade steps when the upstream fix lands: change `marker-pdf==1.8.0` → `marker-pdf>=1.10.0` in `pyproject.toml`, `uv sync`, run `uv run pytest --run-extraction-quality`, verify MPS extraction is back to ~4s/page.
-- **Selective olmOCR for scanned historical documents** — olmOCR (82.3% on historical math scans vs Marker's lower quality) could handle documents Marker struggles with. Requires 20GB+ VRAM so remote GPU (Lambda Labs, Vast.ai); 20-100x slower than Marker. Workflow: identify problem docs (manual review or quality heuristics), process subset on remote GPU, replace stored markdown. Not urgent; the extraction quality framework in `tests/extraction/synthetic/` can help identify candidates systematically. See `RAG_background/pdf_extraction_tools_report.md` for the full hybrid strategy.
+- **Selective olmOCR for scanned historical documents** — olmOCR (82.3% on historical math scans vs Marker's lower quality) could handle documents Marker struggles with. Requires 20GB+ VRAM so remote GPU (Lambda Labs, Vast.ai); 20-100x slower than Marker. Workflow: identify problem docs (manual review or quality heuristics), process subset on remote GPU, replace stored markdown. Not urgent; the extraction quality framework in `tests/extraction/synthetic/` can help identify candidates systematically. See `docs/RAG_background/pdf_extraction_tools_report.md` for the full hybrid strategy.
 
 ---
 
@@ -99,7 +99,7 @@ Certain developments would move items up the priority list:
 
 | Trigger | Feature to prioritize |
 |---------|----------------------|
-| Hit 250K vector scale ceiling | Migrate to LanceDB (see `RAG_background/vector_storage_report.md`) |
+| Hit 250K vector scale ceiling | Migrate to LanceDB (see `docs/RAG_background/vector_storage_report.md`) |
 | Metadata quality issues emerge at scale | External API enrichment (CrossRef, GROBID, OpenAlex) in Content Ingestion |
 | Need to query web content routinely | Web content ingestion |
 | Neovim workflow integration becomes blocking | Library daemon → Full Neovim plugin |
