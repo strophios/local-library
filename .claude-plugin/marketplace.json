@@ -1,0 +1,20 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "local-library",
+  "version": "0.1.0",
+  "owner": {
+    "name": "local-library contributors"
+  },
+  "metadata": {
+    "description": "Local-library Claude Code plugin (self-hosted from the repo)"
+  },
+  "plugins": [
+    {
+      "name": "local-library",
+      "version": "0.1.0",
+      "description": "Skills for fluently using the local-library MCP server in research and drafting workflows",
+      "source": ".",
+      "category": "research"
+    }
+  ]
+}
