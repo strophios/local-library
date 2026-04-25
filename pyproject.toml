@@ -68,7 +68,7 @@ select = [
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --basetemp=/tmp/.pytest-tmp"
 markers = [
     "unit: Unit tests (substeps)",
     "stage: Full pipeline stage tests",
