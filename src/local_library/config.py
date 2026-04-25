@@ -43,8 +43,24 @@ def get_extracted_dir() -> Path:
     return get_data_dir() / "extracted"
 
 
+def get_daemon_pid_path() -> Path:
+    """Path to the daemon PID file (data dir)."""
+    return get_data_dir() / "daemon.pid"
+
+
+def get_socket_path() -> Path:
+    """Path to the daemon's Unix domain socket (data dir)."""
+    return get_data_dir() / "daemon.sock"
+
+
+def get_daemon_log_dir() -> Path:
+    """Directory for daemon log files (data dir / logs)."""
+    return get_data_dir() / "logs"
+
+
 def ensure_directories() -> None:
     """Create all required directories if they don't exist."""
     get_data_dir().mkdir(parents=True, exist_ok=True)
     get_storage_dir().mkdir(parents=True, exist_ok=True)
     get_extracted_dir().mkdir(parents=True, exist_ok=True)
+    get_daemon_log_dir().mkdir(parents=True, exist_ok=True)
