@@ -37,8 +37,8 @@ def test_returns_none_when_fd_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
     assert socket_activation.inherited_socket() is None
 
 
-def test_bind_listen_unlinks_stale_file(tmp_path) -> None:
-    path = tmp_path / "daemon.sock"
+def test_bind_listen_unlinks_stale_file(short_tmp_path) -> None:
+    path = short_tmp_path / "daemon.sock"
     path.touch()  # pre-existing stale file
     sock = socket_activation.bind_listen(path)
     try:
@@ -49,8 +49,8 @@ def test_bind_listen_unlinks_stale_file(tmp_path) -> None:
         path.unlink(missing_ok=True)
 
 
-def test_bind_listen_creates_parent(tmp_path) -> None:
-    path = tmp_path / "subdir" / "daemon.sock"
+def test_bind_listen_creates_parent(short_tmp_path) -> None:
+    path = short_tmp_path / "subdir" / "daemon.sock"
     sock = socket_activation.bind_listen(path)
     try:
         assert path.is_socket()
