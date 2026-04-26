@@ -36,6 +36,7 @@ class ErrorCode(str, Enum):
     # Lookup errors
     NOT_FOUND = "NOT_FOUND"
     AMBIGUOUS_MATCH = "AMBIGUOUS_MATCH"
+    NOT_IMPLEMENTED = "NOT_IMPLEMENTED"
 
     # Metadata errors
     METADATA_INVALID_SCHEMA = "METADATA_INVALID_SCHEMA"
