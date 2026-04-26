@@ -6,6 +6,7 @@
 # Grouping them here is intentional for bootstrapping: callers need both path config
 # (pure) and directory creation (I/O) during initialization.
 
+import os
 from pathlib import Path
 
 from platformdirs import PlatformDirs
@@ -18,13 +19,20 @@ _dirs = PlatformDirs(APP_NAME)
 
 
 def get_data_dir() -> Path:
-    """Return the user data directory for storing database and files.
+    """Return the user data directory, with optional env-var override.
 
-    Platform paths:
+    LOCAL_LIBRARY_DATA_DIR, when set, fully overrides the platformdirs default.
+    Used by integration tests to isolate the daemon from the user's real
+    ~/Library/Application Support/local-library directory.
+
+    Platform paths (default, without override):
     - macOS: ~/Library/Application Support/local-library
     - Linux: ~/.local/share/local-library
     - Windows: C:/Users/<user>/AppData/Local/local-library
     """
+    override = os.environ.get("LOCAL_LIBRARY_DATA_DIR")
+    if override:
+        return Path(override)
     return Path(_dirs.user_data_dir)
 
 

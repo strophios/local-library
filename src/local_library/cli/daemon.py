@@ -73,6 +73,9 @@ def start() -> None:
         start_new_session=True,  # detach: new process group, no controlling TTY
         close_fds=True,
     )
+    # Close the parent's copy of the log FD. The child has its own copy via Popen,
+    # so closing here prevents FD leak in the parent process.
+    stdout.close()
 
     # Poll briefly for the PID file to appear as confirmation.
     deadline = time.monotonic() + 5.0

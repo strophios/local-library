@@ -23,9 +23,13 @@ def daemon_env(short_tmp_path: Path) -> dict[str, str]:
 
     Uses short_tmp_path (not tmp_path) to keep AF_UNIX socket path under
     Darwin's ~104-char sun_path limit.
+
+    Sets both XDG_DATA_HOME (for Linux parity) and LOCAL_LIBRARY_DATA_DIR
+    (the operative override on Darwin, where platformdirs ignores XDG_DATA_HOME).
     """
     env = os.environ.copy()
     env["XDG_DATA_HOME"] = str(short_tmp_path / "data")
+    env["LOCAL_LIBRARY_DATA_DIR"] = str(short_tmp_path / "data" / "local-library")
     env["PYTHONUNBUFFERED"] = "1"
     return env
 
@@ -55,8 +59,12 @@ def _data_dir(env: dict[str, str]) -> Path:
     return Path(probe.stdout.strip())
 
 
-def test_daemon_starts_echoes_and_shuts_down(daemon_env: dict[str, str]) -> None:
+def test_daemon_starts_echoes_and_shuts_down(
+    daemon_env: dict[str, str], short_tmp_path: Path
+) -> None:
     data_dir = _data_dir(daemon_env)
+    # Verify isolation: data_dir under short_tmp_path, not ~/Library/Application Support
+    assert str(data_dir).startswith(str(short_tmp_path))
     socket_path = data_dir / "daemon.sock"
     pid_path = data_dir / "daemon.pid"
 
@@ -94,8 +102,12 @@ def test_daemon_starts_echoes_and_shuts_down(daemon_env: dict[str, str]) -> None
             proc.wait(timeout=5)
 
 
-def test_double_start_is_rejected(daemon_env: dict[str, str]) -> None:
+def test_double_start_is_rejected(
+    daemon_env: dict[str, str], short_tmp_path: Path
+) -> None:
     data_dir = _data_dir(daemon_env)
+    # Verify isolation: data_dir under short_tmp_path, not ~/Library/Application Support
+    assert str(data_dir).startswith(str(short_tmp_path))
     socket_path = data_dir / "daemon.sock"
 
     first = subprocess.Popen(

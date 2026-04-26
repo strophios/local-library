@@ -37,8 +37,8 @@ app.command(name="embed")(embed_cmd.embed)
 app.command(name="reextract")(reextract_cmd.reextract)
 app.command(name="search")(search_cmd.search)
 app.command(name="ask")(ask_cmd.ask)
-app.add_typer(daemon_cmd.app, name="daemon")
 app.add_typer(zotero_cmd.app, name="zotero")
+app.add_typer(daemon_cmd.app, name="daemon")
 
 
 def _configure_logging() -> None:
