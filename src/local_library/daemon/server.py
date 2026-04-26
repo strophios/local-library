@@ -213,7 +213,7 @@ def main() -> int:
     Invoked by the `local-library-daemon` script entry and by
     `local-library daemon run`. Returns process exit code.
     """
-    global _START_TIME, _library, _library_executor  # noqa: PLW0603, PLW0603
+    global _START_TIME, _library, _library_executor  # noqa: PLW0603
     _configure_logging()
     _LOGGER.info("daemon starting (pid=%s, version=%s)", os.getpid(), library_version())
 
