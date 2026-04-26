@@ -18,6 +18,7 @@ from local_library.daemon import protocol
 
 if TYPE_CHECKING:
     from local_library.core.library import Library
+    from local_library.core.models import Document
     from local_library.embeddings.base import SearchResult
 
 VALID_MODES = {"hybrid", "vector", "fts"}
@@ -113,3 +114,45 @@ def _split_authors(authors: str | None) -> list[str]:
     if not authors:
         return []
     return [a.strip() for a in authors.split(";") if a.strip()]
+
+
+def get_document(
+    *,
+    library: Library,
+    identifier: str,
+) -> dict[str, Any]:
+    """Return full metadata for a document, including its CSL-JSON entry.
+
+    The plugin uses this to populate the bibliography auto-append on insert.
+    Identifier is either a UUID (full) or '@citekey'.
+    """
+    if not identifier or not identifier.strip():
+        raise protocol.InvalidParams("'identifier' must be a non-empty string")
+
+    if identifier.startswith("@"):
+        doc = library.get_by_citekey(identifier[1:])
+    else:
+        doc = library.get(identifier)
+
+    return _serialize_document(library, doc)
+
+
+def _serialize_document(library: Library, doc: Document) -> dict[str, Any]:
+    # chunk_count lives on Library (Library.get_chunk_count), not on the
+    # Document dataclass. Best-effort: 0 if the call fails (e.g., document
+    # has not been embedded yet).
+    try:
+        chunk_count = int(library.get_chunk_count(doc.id))
+    except Exception:  # noqa: BLE001 — degrade gracefully on any storage failure
+        chunk_count = 0
+    return {
+        "doc_id": str(doc.id),
+        "citekey": doc.citekey or "",
+        "csl_json": doc.csl_json or {},
+        "title": doc.title or "",
+        "authors": _split_authors(doc.authors),
+        "year": doc.issued_year,
+        "extracted_markdown_path": doc.extracted_path or "",
+        "chunk_count": chunk_count,
+        "status": doc.status.value if hasattr(doc.status, "value") else str(doc.status),
+    }

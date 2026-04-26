@@ -87,12 +87,38 @@ async def _ping_handler(**_: object) -> dict[str, object]:
 
 
 def build_dispatcher() -> dispatcher_mod.Dispatcher:
-    """Return a Dispatcher with all Phase 2 methods registered.
+    """Return a Dispatcher with all daemon methods registered.
 
-    Phase 3 will add `search` and `get_document` here.
+    Handlers that touch the Library (`search`, `get_document`) run on the
+    library executor thread via async wrappers that call run_on_library_thread.
     """
+    from local_library.daemon import methods as method_handlers
+
     d = dispatcher_mod.Dispatcher()
     d.register("ping", _ping_handler)
+
+    async def search_via_executor(**params: Any) -> Any:
+        if _library is None or _library_executor is None:
+            raise protocol.InternalError("library not initialized")
+        return await run_on_library_thread(
+            _library_executor,
+            method_handlers.search,
+            library=_library,
+            **params,
+        )
+
+    async def get_document_via_executor(**params: Any) -> Any:
+        if _library is None or _library_executor is None:
+            raise protocol.InternalError("library not initialized")
+        return await run_on_library_thread(
+            _library_executor,
+            method_handlers.get_document,
+            library=_library,
+            **params,
+        )
+
+    d.register("search", search_via_executor)
+    d.register("get_document", get_document_via_executor)
     return d
 
 
