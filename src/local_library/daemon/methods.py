@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from local_library.cli.utils import resolve_identifier
 from local_library.core.errors import ErrorCode, LocalLibraryError
 from local_library.daemon import protocol
 
@@ -124,16 +125,12 @@ def get_document(
     """Return full metadata for a document, including its CSL-JSON entry.
 
     The plugin uses this to populate the bibliography auto-append on insert.
-    Identifier is either a UUID (full) or '@citekey'.
+    Identifier is either a UUID (full or partial) or '@citekey'.
     """
     if not identifier or not identifier.strip():
         raise protocol.InvalidParams("'identifier' must be a non-empty string")
 
-    if identifier.startswith("@"):
-        doc = library.get_by_citekey(identifier[1:])
-    else:
-        doc = library.get(identifier)
-
+    doc = resolve_identifier(identifier, library)
     return _serialize_document(library, doc)
 
 
@@ -154,5 +151,5 @@ def _serialize_document(library: Library, doc: Document) -> dict[str, Any]:
         "year": doc.issued_year,
         "extracted_markdown_path": doc.extracted_path or "",
         "chunk_count": chunk_count,
-        "status": doc.status.value if hasattr(doc.status, "value") else str(doc.status),
+        "status": doc.status.value,
     }
