@@ -77,8 +77,10 @@ def test_get_document_returns_csl_json_against_real_corpus(populated_library: Li
     # Verify structural fields: title matches fixture, authors non-empty, chunk_count >= 1
     assert doc_result["title"] == "Sample Paper on RAG"
     assert doc_result["authors"]  # Non-empty list
-    # chunk_count may be 0 if embedding skipped due to missing sqlite-vec
-    assert doc_result["chunk_count"] >= 1 or doc_result["chunk_count"] == 0
+    # The fixture's narrowed try/except passes through any non-EMBEDDING_EXTENSION_UNAVAILABLE
+    # error, so reaching this line implies embedding ran successfully (or sqlite-vec was
+    # missing, in which case the fixture should have skipped). chunk_count must be ≥ 1.
+    assert doc_result["chunk_count"] >= 1
     assert doc_result["csl_json"]["id"] == "Sample2026"
 
 
