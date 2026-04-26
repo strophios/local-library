@@ -59,7 +59,7 @@ def _data_dir(env: dict[str, str]) -> Path:
     return Path(probe.stdout.strip())
 
 
-def test_daemon_starts_echoes_and_shuts_down(
+def test_daemon_responds_to_ping_and_shuts_down(
     daemon_env: dict[str, str], short_tmp_path: Path
 ) -> None:
     data_dir = _data_dir(daemon_env)
@@ -79,17 +79,24 @@ def test_daemon_starts_echoes_and_shuts_down(
         assert pid_path.exists()
         assert int(pid_path.read_text().strip()) == proc.pid
 
-        # Echo roundtrip.
+        # JSON-RPC ping roundtrip.
+        import json as _json
+
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
             client.connect(str(socket_path))
-            client.sendall(b"ping\n")
+            client.sendall(b'{"jsonrpc":"2.0","id":1,"method":"ping"}\n')
             data = b""
             while not data.endswith(b"\n"):
                 chunk = client.recv(4096)
                 if not chunk:
                     break
                 data += chunk
-            assert data == b"ping\n"
+            response = _json.loads(data)
+            assert response["jsonrpc"] == "2.0"
+            assert response["id"] == 1
+            assert response["result"]["ok"] is True
+            assert response["result"]["daemon_pid"] == proc.pid
+            assert response["result"]["library_version"]
 
         proc.send_signal(signal.SIGTERM)
         proc.wait(timeout=10)

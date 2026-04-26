@@ -25,7 +25,9 @@ from pathlib import Path
 import psutil
 
 from local_library import config
-from local_library.daemon import pid_file, socket_activation
+from local_library.daemon import dispatcher as dispatcher_mod
+from local_library.daemon import pid_file, protocol, socket_activation
+from local_library.daemon.errors import translate as translate_error
 
 _START_TIME = time.monotonic()
 _LOGGER = logging.getLogger("local_library.daemon")
@@ -61,18 +63,70 @@ def acquire_listening_socket(fallback_path: Path) -> socket.socket:
     return socket_activation.bind_listen(fallback_path)
 
 
-async def echo_handler(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-    """Phase 1 handler: echo bytes until EOF, then close cleanly.
+async def _ping_handler(**_: object) -> dict[str, object]:
+    """The canonical health / observability probe."""
+    return {
+        "ok": True,
+        "daemon_pid": os.getpid(),
+        "resident_bytes": resident_bytes(),
+        "uptime_seconds": uptime_seconds(),
+        "library_version": library_version(),
+    }
 
-    Phase 2 replaces this with the JSON-RPC dispatch loop.
+
+def build_dispatcher() -> dispatcher_mod.Dispatcher:
+    """Return a Dispatcher with all Phase 2 methods registered.
+
+    Phase 3 will add `search` and `get_document` here.
+    """
+    d = dispatcher_mod.Dispatcher()
+    d.register("ping", _ping_handler)
+    return d
+
+
+async def protocol_handler(
+    reader: asyncio.StreamReader,
+    writer: asyncio.StreamWriter,
+    dispatch: dispatcher_mod.Dispatcher,
+) -> None:
+    """Per-connection loop: read one line → parse → dispatch → write response.
+
+    Continues until the client half-closes (EOF) or an unrecoverable transport
+    error occurs. Malformed messages produce an error envelope and the loop
+    continues — a single bad message does not terminate the connection.
     """
     try:
         while True:
-            chunk = await reader.read(4096)
-            if not chunk:
-                break
-            writer.write(chunk)
-            await writer.drain()
+            raw = await reader.readline()
+            if not raw:
+                break  # clean EOF
+            try:
+                line = raw.decode("utf-8").rstrip("\n")
+            except UnicodeDecodeError as exc:
+                err = protocol.build_error_response(
+                    request_id=None,
+                    code=protocol.PARSE_ERROR,
+                    message=f"Parse error: invalid UTF-8: {exc.reason}",
+                )
+                writer.write(err.encode("utf-8"))
+                await writer.drain()
+                continue
+
+            if not line.strip():
+                continue  # blank keep-alive line; ignore
+
+            try:
+                request = protocol.parse_request(line)
+            except protocol.JsonRpcError as exc:
+                err = translate_error(request_id=None, exception=exc)
+                writer.write(err.encode("utf-8"))
+                await writer.drain()
+                continue
+
+            response_line = await dispatch.dispatch(request)
+            if response_line:
+                writer.write(response_line.encode("utf-8"))
+                await writer.drain()
     finally:
         try:
             writer.close()
@@ -82,7 +136,12 @@ async def echo_handler(reader: asyncio.StreamReader, writer: asyncio.StreamWrite
 
 
 async def _serve(listening: socket.socket, stop_event: asyncio.Event) -> None:
-    server_obj = await asyncio.start_unix_server(echo_handler, sock=listening)
+    dispatch = build_dispatcher()
+
+    async def on_connect(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        await protocol_handler(reader, writer, dispatch)
+
+    server_obj = await asyncio.start_unix_server(on_connect, sock=listening)
     async with server_obj:
         await stop_event.wait()
         server_obj.close()

@@ -3,7 +3,6 @@
 End-to-end lifecycle is verified via subprocess in tests/unit/daemon/test_lifecycle.py.
 """
 
-import asyncio
 import socket
 
 import pytest
@@ -21,30 +20,6 @@ def test_resident_bytes_reports_positive_integer() -> None:
     rss = server.resident_bytes()
     assert isinstance(rss, int)
     assert rss > 0
-
-
-def test_echo_handler_roundtrip_via_socketpair() -> None:
-    """Drive the echo handler over a real UDS socket pair."""
-    parent, child = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
-    try:
-
-        async def run() -> bytes:
-            reader, writer = await asyncio.open_unix_connection(sock=parent)
-            child_reader, child_writer = await asyncio.open_connection(sock=child)
-            handler_task = asyncio.create_task(server.echo_handler(child_reader, child_writer))
-            writer.write(b"hello\n")
-            await writer.drain()
-            data = await reader.readline()
-            writer.close()
-            await writer.wait_closed()
-            await asyncio.wait_for(handler_task, timeout=1.0)
-            return data
-
-        data = asyncio.run(run())
-        assert data == b"hello\n"
-    finally:
-        parent.close()
-        child.close()
 
 
 def test_startup_uses_inherited_socket_when_present(
