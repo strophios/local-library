@@ -21,8 +21,11 @@ import signal
 import socket
 import sys
 import time
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, TypeVar
 
 import psutil
 
@@ -31,8 +34,15 @@ from local_library.daemon import dispatcher as dispatcher_mod
 from local_library.daemon import pid_file, protocol, socket_activation
 from local_library.daemon.errors import translate as translate_error
 
+if TYPE_CHECKING:
+    from local_library.core.library import Library
+
+_T = TypeVar("_T")
+
 _START_TIME = time.monotonic()
 _LOGGER = logging.getLogger("local_library.daemon")
+_library: Library | None = None
+_library_executor: ThreadPoolExecutor | None = None
 
 
 def library_version() -> str:
@@ -172,13 +182,38 @@ def _configure_logging() -> None:
     )
 
 
+def _make_library_executor() -> ThreadPoolExecutor:
+    """Create the single-worker executor that owns all Library calls.
+
+    A single worker preserves sqlite-vec's single-threaded access invariant:
+    the long-lived sqlite3 connection is created and used exclusively from
+    this thread, so the asyncio event loop never touches the connection
+    directly. See docs/concepts/daemons.md §5 for the full rationale.
+    """
+    return ThreadPoolExecutor(max_workers=1, thread_name_prefix="library")
+
+
+async def run_on_library_thread(
+    executor: ThreadPoolExecutor,
+    fn: Callable[..., _T],
+    *args: Any,
+    **kwargs: Any,
+) -> _T:
+    """Submit `fn(*args, **kwargs)` to the library executor and await result."""
+    from functools import partial
+
+    loop = asyncio.get_running_loop()
+    bound = partial(fn, *args, **kwargs)
+    return await loop.run_in_executor(executor, bound)
+
+
 def main() -> int:
     """Foreground entry point for the daemon process.
 
     Invoked by the `local-library-daemon` script entry and by
     `local-library daemon run`. Returns process exit code.
     """
-    global _START_TIME  # noqa: PLW0603 — uptime anchors at serve start
+    global _START_TIME, _library, _library_executor  # noqa: PLW0603, PLW0603
     _configure_logging()
     _LOGGER.info("daemon starting (pid=%s, version=%s)", os.getpid(), library_version())
 
@@ -193,16 +228,43 @@ def main() -> int:
     listening = acquire_listening_socket(config.get_socket_path())
     _START_TIME = time.monotonic()
 
+    _library_executor = _make_library_executor()
+
     loop = asyncio.new_event_loop()
     try:
         asyncio.set_event_loop(loop)
         stop_event = asyncio.Event()
         _install_signal_handlers(loop, stop_event)
+
+        from local_library.core.library import Library
+
+        # Construct AND enter the Library on the executor thread. Entering
+        # via __enter__ matches the codebase's idiomatic Library lifecycle
+        # (every other Library user — MCP, CLI, integration tests — uses
+        # `with Library(...) as lib:`); the matching __exit__ is fired in
+        # the finally block below by calling close() on the executor.
+        def _construct_and_enter() -> Library:
+            lib = Library(embed_on_add=False)
+            lib.__enter__()
+            return lib
+
+        _library = loop.run_until_complete(
+            run_on_library_thread(_library_executor, _construct_and_enter)
+        )
         _LOGGER.info("daemon ready at %s", config.get_socket_path())
         loop.run_until_complete(_serve(listening, stop_event))
         _LOGGER.info("daemon shut down cleanly")
         return 0
     finally:
+        if _library is not None and _library_executor is not None:
+            try:
+                loop.run_until_complete(run_on_library_thread(_library_executor, _library.close))
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("error closing Library on shutdown")
+            _library = None
+        if _library_executor is not None:
+            _library_executor.shutdown(wait=True)
+            _library_executor = None
         try:
             listening.close()
         except OSError:
