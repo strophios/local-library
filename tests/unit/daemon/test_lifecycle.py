@@ -102,9 +102,7 @@ def test_daemon_starts_echoes_and_shuts_down(
             proc.wait(timeout=5)
 
 
-def test_double_start_is_rejected(
-    daemon_env: dict[str, str], short_tmp_path: Path
-) -> None:
+def test_double_start_is_rejected(daemon_env: dict[str, str], short_tmp_path: Path) -> None:
     data_dir = _data_dir(daemon_env)
     # Verify isolation: data_dir under short_tmp_path, not ~/Library/Application Support
     assert str(data_dir).startswith(str(short_tmp_path))
