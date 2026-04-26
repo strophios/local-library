@@ -259,6 +259,30 @@ allowed-tools:
 ## Core principle
 [1–2 sentences: extracted markdown is an artifact; the PDF is the source of truth. When the artifact is degraded for what the user is asking about, read the PDF directly.]
 
+<!-- KNOWN ISSUE (post-implementation, 2026-04-26 / commit cd75136):
+The first two cues below — "Raw `$$...$$`" and "Unprocessed `\sum`, `\int`,
+`\alpha`, `\frac{...}{...}`" — are WRONG. Those are Marker's intended
+*success* format for math content (per CLAUDE.md and MEMORY.md notes on
+Marker output), not garbling. Including them would cause the skill to
+false-positive PDF escalation on faithfully-extracted papers.
+
+The shipped SKILL.md (`skills/handling-extraction-quality/SKILL.md`)
+uses the recalibrated cue list:
+  - Subscript/superscript collapse (e.g., `QWQ i` instead of `QW^Q_i`)
+  - Escape-sequence remnants like literal `\n(1)` at equation tails
+  - Empty math delimiters (`$$` with no content; `$...$` empty)
+  - Empty `<!-- image -->` markers
+  - Broken markdown tables
+  - `**Status:** needs_review` system signal
+
+Well-formed LaTeX (`$$...$$` blocks, `\sum`/`\int`/`\frac` inside math
+delimiters) is the success case and is NOT a cue.
+
+If re-executing this plan from scratch, replace the cue list below
+with the recalibrated version above; cross-reference the shipped
+SKILL.md for the canonical phrasing.
+-->
+
 ## Recognition cues — markdown is garbled when you see
 - Raw `$$...$$` blocks rendered as LaTeX source (Marker LaTeX fallback failed)
 - Unprocessed `\sum`, `\int`, `\alpha`, `\frac{...}{...}` mixed with prose
