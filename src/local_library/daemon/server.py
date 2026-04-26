@@ -1,13 +1,15 @@
-"""Daemon asyncio server: echo loop (Phase 1), JSON-RPC dispatch arrives in Phase 2.
+"""Daemon asyncio server: line-delimited JSON-RPC 2.0 over a Unix-domain socket.
 
 # pattern: Imperative Shell
 
 Owns the event loop, the listening socket (from socket_activation), the PID
 file lock (from pid_file), and SIGTERM/SIGINT handling.
 
-Phase 1 protocol is a literal echo: the server reads bytes from each client
-and writes them back unchanged. Phase 2 replaces `echo_handler` with the
-JSON-RPC dispatch loop; the lifecycle scaffolding stays intact.
+`protocol_handler` runs the per-connection read → parse → dispatch → write
+loop, delegating to a `Dispatcher` built once per server start by
+`build_dispatcher`. Methods are registered at startup time; `ping` is the
+canonical health probe. Subsequent phases add further methods (e.g.,
+`search`, `get_document`) by extending `build_dispatcher`.
 """
 
 from __future__ import annotations
