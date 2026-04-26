@@ -1,6 +1,6 @@
 ---
 name: handling-extraction-quality
-description: Use when extracted markdown shows garbled math (raw `$$...$$`, unprocessed `\sum`/`\int`, empty `$...$`), empty `<!-- image -->` comments, broken markdown tables, single-character subscript collapse, or when `show_document` reports `**Status:** needs_review` — reads the original PDF directly with Claude Code's native `Read` tool at the path from `show_document`, using `pages:` to scope, rather than trusting the degraded markdown or asking the user for the equation.
+description: Use when the user asks about an equation, formula, derivation, loss function, algorithm, figure, table, or other visually-formatted technical content from a library document — Marker's PDF extraction reliably degrades on math and visual content, so reach for the original PDF via `Read` rather than trusting the extracted markdown for those content types. Also use reactively when extracted markdown shows garbled math (raw `$$...$$`, unprocessed `\sum`/`\int`/`\frac`, empty `$...$`), empty `<!-- image -->` comments, broken markdown tables, single-character subscript collapse like `QWQ i`, or `show_document` reports `**Status:** needs_review`. Procedure: extract `**Original path:**` from `show_document`, then `Read` the PDF with `pages:` to scope.
 allowed-tools:
   - mcp__local-library__search_library
   - mcp__local-library__show_document
@@ -24,6 +24,16 @@ Extracted markdown is an artifact of the Marker extraction pipeline. The PDF is 
 - Broken markdown tables: missing pipes, uneven cell counts, misaligned columns
 - Single-character subscript patterns: `QWQ i`, `KW K i`, `V WV i` (subscript collapse where original is `QW^Q_i`)
 - **Status: needs_review** in `show_document` output (pdftext fallback was used — extraction is unreliable)
+
+## Pre-emptive consultation — read the PDF FIRST when the user asks about
+
+- **Equations / formulas**: "What's the main equation", "explain the loss function", "what's the derivation of...", "write out the formula"
+- **Algorithms**: "how does the algorithm work", "walk me through the procedure", "explain the training loop"
+- **Figures**: "explain Figure N", "what does the diagram show", "describe the architecture diagram"
+- **Tables**: "what's in Table N", "compare the results table", "what are the hyperparameters"
+- **Math notation**: any prompt mentioning specific dimensions, subscripts, or symbolic notation (`d_k`, `Q`, `K`, `V`, etc.)
+
+For these prompts, do NOT first try `get_document_text` and then react to garbling. Go straight to `show_document` → `Read` on the PDF with a narrow `pages:` range covering the relevant section. Marker's extraction reliably degrades on math and visual content; the markdown is not the source of truth for those content types — the PDF is. This applies even when `show_document` reports `**Status:** ready` (status reflects extraction completion, not extraction fidelity for math).
 
 ## Iron law — read the PDF; do not ask the user
 
