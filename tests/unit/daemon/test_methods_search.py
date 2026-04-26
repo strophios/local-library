@@ -47,8 +47,8 @@ def _fake_document(
     doc_id: str = "00000000-0000-0000-0000-000000000001",
     citekey: str = "Smith2023",
     title: str = "A Paper",
-    authors: str = "Smith, J.; Doe, A.",
-    issued_year: int = 2023,
+    authors: str | None = "Smith, J.; Doe, A.",
+    issued_year: int | None = 2023,
     extracted_path: str = "/tmp/extracted/ab/cd/foo.md",
 ) -> MagicMock:
     doc = MagicMock()

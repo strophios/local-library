@@ -99,6 +99,9 @@ def _serialize_search_result(
         "extracted_markdown_path": doc.extracted_path or "",
     }
     if reranked:
+        # NB: rerank_score mirrors score intentionally — the current Library
+        # API overwrites the pre-rerank score in place, so we don't have a
+        # distinct value to expose. Preserving both is a deferred enhancement.
         payload["rerank_score"] = float(result.score)
     return payload
 
