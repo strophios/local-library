@@ -10,7 +10,7 @@ All four tools accept `doc_id: str` as `@citekey` (preferred, e.g., `@Smith2023`
 
 | Scenario | Start with | Follow-up | Notes |
 |---|---|---|---|
-| Known citekey; metadata only | `show_document(doc_id="@C")` | — | Check `**Status:** needs_review` — if flagged, cross-invoke `handling-extraction-quality` kernel (Phase 4). |
+| Known citekey; metadata only | `show_document(doc_id="@C")` | — | Check `**Status:** needs_review` — if flagged, cross-invoke the `handling-extraction-quality` skill. |
 | Known citekey; full text (short doc) | `get_document_text(doc_id="@C")` | — | Returns full text if total chunks < 50 (SHORT_DOC_THRESHOLD). |
 | Known citekey; long doc (no range) | `get_document_text(doc_id="@C")` | — | Returns preview of first 20 chunks (PREVIEW_CHUNK_COUNT) + section outline + instructions for range requests. |
 | Known citekey; long doc with range | `get_document_text(doc_id="@C", start_chunk=N, end_chunk=M)` | — | Indices are 0-based, inclusive. Returns the slice [N, M]. Reuse the indices labeled in search results. |
