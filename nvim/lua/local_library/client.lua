@@ -1,6 +1,7 @@
--- pattern: Mixed
---   Functional Core: encode_request (pure)
---   Imperative Shell: connect/close/send (vim.fn.sockconnect, chansend)
+-- pattern: Imperative Shell — all operations touch a channel, mutate
+-- per-instance buffer/pending state, or call into vim.fn.* I/O. The closest
+-- thing to a pure helper is the inline `vim.fn.json_encode` envelope build
+-- inside request_async; not worth extracting at this scope.
 --
 -- JSON-RPC 2.0 client over a Unix domain socket.
 --
