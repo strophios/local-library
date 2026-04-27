@@ -314,4 +314,203 @@ Five places where partial implementations commonly diverge:
 - `tests/unit/daemon/test_protocol.py` — the spec-compliance test set;
   exists specifically to keep us honest about the gotchas above
 
-*Chapters 5–8 are written in Phases 3, 6, and 7.*
+
+## Chapter 5 — asyncio and single-threaded concurrency
+
+**asyncio** gives us cooperative concurrency on a single OS thread. Tasks
+voluntarily yield (`await`) and the event loop schedules whichever ready
+coroutine runs next. There is no preemption: a task that doesn't yield
+blocks every other task and the event loop itself.
+
+This works beautifully for I/O — sockets, files, subprocess pipes — because
+the kernel readiness notifications are exactly the moments when "yield to
+the loop" is correct. It does not work for CPU-bound work: a torch model
+inference call that takes 200 ms is 200 ms during which no other task can
+run, no socket can be accepted, no `ping` can be answered.
+
+### `run_in_executor` — the asyncio escape hatch for blocking work
+
+`asyncio.AbstractEventLoop.run_in_executor(executor, fn, *args)` submits
+`fn(*args)` to a `concurrent.futures.Executor` (typically a thread pool)
+and returns an awaitable that resolves when `fn` finishes. While `fn` runs
+on its own thread, the event loop is free to handle other coroutines.
+
+The asyncio side gets a coroutine; the executor side gets a normal
+synchronous function. This is the bridge.
+
+### The sqlite-vec single-thread constraint
+
+`sqlite-vec` requires that all operations against a vector index happen
+from a single thread. This is on top of the underlying `sqlite3` module's
+own `check_same_thread=True` default, which forbids using a connection
+from a thread other than the one that created it.
+
+Naively combined with asyncio, this is a contradiction:
+- Model inference (embedder, reranker) is CPU-bound and must run off the
+  event loop thread to keep `ping` responsive.
+- sqlite-vec calls must run on the same thread that owns the connection.
+- Our `Retriever.retrieve()` interleaves model inference and sqlite-vec
+  queries inside one synchronous call.
+
+### local-library's resolution: a single-worker executor that owns the Library
+
+We use a `ThreadPoolExecutor(max_workers=1)` that owns the Library entirely:
+
+- The Library is **constructed** on the executor thread (via
+  `run_on_library_thread(executor, lambda: Library(embed_on_add=False))`).
+  This means the long-lived sqlite3 connection is created on the executor
+  thread, and `check_same_thread=True` is satisfied because every
+  subsequent query also runs on that thread.
+- Every method handler (`search`, `get_document`) runs entirely inside
+  `run_on_library_thread`. Validation, `get_retriever`, `retrieve`,
+  serialization — all on the same single thread.
+- The asyncio event loop never touches the Library directly. It owns the
+  socket I/O, the protocol parsing, and the dispatch — none of which need
+  the connection.
+- `ping` does not go through the executor. It reads `psutil`, `os.getpid`,
+  and a monotonic uptime — all event-loop-cheap. So `ping` stays sub-ms
+  responsive even while a search is occupying the executor for ~300 ms.
+
+The original design imagined a finer split: model calls in the executor,
+sqlite-vec calls on the loop thread. That split was infeasible without
+refactoring the Retriever to expose embed/query/rerank as separate steps.
+The single-worker-executor model preserves the design's two important
+properties — sqlite-vec single-thread access; loop-thread liveness during
+slow work — without that refactor.
+
+### What we lose, and why it's fine
+
+A single-worker executor cannot run two searches in parallel. If two
+clients fire searches simultaneously, the second waits for the first.
+
+In practice this is the right behavior. sqlite-vec wouldn't have allowed
+parallelism anyway; even a multi-worker executor would have to serialize
+on the connection. And our actual concurrency need is:
+
+- *Multiple slow operations interleaved with fast probes* — e.g., the
+  Neovim plugin sending `ping` while a search is in flight. The
+  single-worker model handles this perfectly, since `ping` doesn't enter
+  the executor.
+- *Multiple clients each making sequential calls* — e.g., the future
+  MCP server v2 + the Neovim plugin both connected. The single-worker
+  model handles this fine: their calls serialize on the executor, but
+  each client's connection stays responsive between calls.
+
+What we don't get is *one client overlapping two searches*. No realistic
+client does that.
+
+### Cross-references
+
+- Design doc §"Concurrency model" — original two-thread split
+- `src/local_library/daemon/server.py` — `_make_library_executor`,
+  `run_on_library_thread`, the construct-on-executor pattern in `main()`
+- `src/local_library/daemon/methods.py` — handlers that assume
+  single-threaded Library access
+- `tests/integration/daemon/test_search_lifecycle.py::test_ping_remains_responsive_during_search`
+  — the assertion that ping stays fast during a slow search
+
+## Chapter 6 — Error handling across process boundaries
+
+When a function fails locally, you get a Python traceback in the same
+process. When a function fails over RPC, the client gets bytes — and those
+bytes have to encode enough for the client to do something useful.
+
+A good cross-process error envelope answers four questions:
+
+1. **What went wrong?** A short, human-readable message.
+2. **What category?** A machine-readable code so the client can branch.
+3. **What to do?** Optional structured details — suggestions, identifiers,
+   anything that lets the client recover or retry.
+4. **Was it the client's fault or the server's?** Often implicit in the
+   code, but matters for retry semantics.
+
+### local-library's two-tier error model
+
+JSON-RPC 2.0 gives us a small set of *transport-layer* error codes:
+parse error, invalid request, method not found, invalid params, internal
+error. These answer "did your message reach me, and could I act on it?"
+They are not enough to convey domain semantics: "I understood your
+request, but the document doesn't exist."
+
+We layer a *domain* error namespace on top, using the spec's `data` field:
+
+```json
+{
+  "error": {
+    "code": -32000,
+    "message": "document not found",
+    "data": {
+      "error_code": "NOT_FOUND",
+      "details": { "identifier": "@xyz", "suggestions": ["Smith2023"] }
+    }
+  }
+}
+```
+
+The numeric code is `-32000` — JSON-RPC's reserved "server-defined" range.
+The string in `data.error_code` is from our `ErrorCode` enum. The client
+branches on the *string*, not the number; the number is fixed (-32000)
+for every domain error.
+
+### Why a string, not a number, for the domain code
+
+We could have allocated -32001, -32002, -32003 for individual domain
+errors. We chose a single -32000 plus a string for three reasons:
+
+1. **Adding new errors doesn't require coordinating two registries.** New
+   error → add to `ErrorCode` enum → done. No "is -32027 used? what was
+   it last assigned to?" bookkeeping.
+2. **Strings are self-documenting.** A client logging `error_code: "NOT_FOUND"`
+   is more useful than `code: -32014`. Grep for the string across the
+   codebase finds where it's raised and where it's handled.
+3. **Numbers cluster meaning unhelpfully at this scale.** With ~40 domain
+   error codes, there's no clean numeric grouping that adds value over
+   the existing enum's grouping by section header.
+
+### What gets logged where
+
+The translator (`daemon/errors.translate`) is a pure function — it does
+not log. Logging is the dispatcher's job, **before** translation:
+
+- **`JsonRpcError` subclasses** (parse error, invalid request) are
+  client-side problems. The dispatcher logs them at INFO level — they're
+  expected, and the message is safe to include because we constructed it.
+- **`LocalLibraryError` subclasses** are domain conditions. The dispatcher
+  logs them at WARNING level with the full structured details, then
+  translates with the safe message + code.
+- **Unknown exceptions** are programming errors. The dispatcher logs them
+  at ERROR level with the full traceback, then translates with a redacted
+  generic message — never echoing the raw exception text to the client.
+
+This separation matters: the wire envelope is *what the client should know*,
+the log line is *what the operator needs to debug*. They are not the same
+audience and not the same content.
+
+### Suggestions and structured `details`
+
+`LocalLibraryError.details` is a free-form `dict[str, Any]` carried straight
+through to `data.details`. The convention is:
+
+- For `NOT_FOUND` errors on identifier lookup: `{"identifier": ..., "suggestions": [...]}`
+  where `suggestions` is a list of citekeys returned by the existing
+  `cli/utils.suggest_citekeys` helper. The plugin uses this to display
+  "did you mean…?" hints.
+- For `EMBEDDING_EXTENSION_UNAVAILABLE`: empty `details` — this is an
+  install-time condition the user fixes by reinstalling sqlite-vec.
+- For `NOT_IMPLEMENTED`: `{"hook": "doc_id"}` — names the hook the client
+  asked for so future code can branch on it.
+
+Clients should treat `details` as *informative but optional*: keys may
+appear or disappear as features evolve. The contract is `error_code`;
+`details` is best-effort context.
+
+### Cross-references
+
+- Design doc §"Error envelope"
+- `src/local_library/core/errors.py` — the `ErrorCode` enum and
+  `LocalLibraryError` class
+- `src/local_library/daemon/errors.py` — the pure translator
+- `src/local_library/daemon/dispatcher.py` — the logging-then-translating
+  exception path
+
+*Chapter 7 is written in Phase 6 (reliability case study); chapter 8 in Phase 7.*
