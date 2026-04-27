@@ -78,4 +78,5 @@ markers = [
     "extraction_quality: Synthetic document extraction quality benchmarks",
     "embedding: Embedding pipeline tests requiring sqlite-vec",
     "slow: Slow tests that load ML models or process large data",
+    "daemon_latency: Daemon warm-latency benchmark (slow; requires real corpus)",
 ]

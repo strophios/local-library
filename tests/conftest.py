@@ -8,6 +8,39 @@ from pathlib import Path
 import pytest
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Register custom command-line options."""
+    parser.addoption(
+        "--run-extraction-quality",
+        action="store_true",
+        default=False,
+        help="Run synthetic extraction quality benchmarks (slow; requires pdflatex)",
+    )
+    parser.addoption(
+        "--run-daemon-latency",
+        action="store_true",
+        default=False,
+        help="Run the daemon warm-latency benchmark (slow; requires real corpus)",
+    )
+
+
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Skip marked tests unless their respective flags are set."""
+    # Skip extraction_quality tests unless --run-extraction-quality is set
+    if not config.getoption("--run-extraction-quality"):
+        skip_marker = pytest.mark.skip(reason="need --run-extraction-quality option to run")
+        for item in items:
+            if "extraction_quality" in item.keywords:
+                item.add_marker(skip_marker)
+
+    # Skip daemon_latency tests unless --run-daemon-latency is set
+    if not config.getoption("--run-daemon-latency"):
+        skip_marker = pytest.mark.skip(reason="need --run-daemon-latency option to run")
+        for item in items:
+            if "daemon_latency" in item.keywords:
+                item.add_marker(skip_marker)
+
+
 @pytest.fixture
 def temp_dir() -> Generator[Path, None, None]:
     """Provide a temporary directory for test isolation."""
