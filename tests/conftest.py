@@ -9,13 +9,11 @@ import pytest
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
-    """Register custom command-line options."""
-    parser.addoption(
-        "--run-extraction-quality",
-        action="store_true",
-        default=False,
-        help="Run synthetic extraction quality benchmarks (slow; requires pdflatex)",
-    )
+    """Register custom command-line options.
+
+    NOTE: --run-extraction-quality is registered in tests/extraction/conftest.py,
+    not here. Don't re-register it — pytest will error on duplicate option.
+    """
     parser.addoption(
         "--run-daemon-latency",
         action="store_true",
@@ -25,15 +23,10 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Skip marked tests unless their respective flags are set."""
-    # Skip extraction_quality tests unless --run-extraction-quality is set
-    if not config.getoption("--run-extraction-quality"):
-        skip_marker = pytest.mark.skip(reason="need --run-extraction-quality option to run")
-        for item in items:
-            if "extraction_quality" in item.keywords:
-                item.add_marker(skip_marker)
+    """Skip daemon_latency tests unless --run-daemon-latency is set.
 
-    # Skip daemon_latency tests unless --run-daemon-latency is set
+    The extraction_quality skip is handled in tests/extraction/conftest.py.
+    """
     if not config.getoption("--run-daemon-latency"):
         skip_marker = pytest.mark.skip(reason="need --run-daemon-latency option to run")
         for item in items:
