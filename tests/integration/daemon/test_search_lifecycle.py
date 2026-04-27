@@ -183,7 +183,10 @@ def test_get_document_via_socket(daemon_with_corpus: dict) -> None:
     assert response["id"] == 2
     if "error" in response:
         pytest.fail(f"get_document returned error: {response['error']}")
-    assert response["result"]["citekey"] == actual_citekey
+    # Verify the daemon round-trips the supplied metadata. csl_json["id"] is
+    # the strongest assertion — it pins the input metadata against the wire
+    # output regardless of how citekey generation chose to derive the citekey.
+    assert response["result"]["csl_json"]["id"] == "Sample2026"
     assert response["result"]["csl_json"]["title"] == "Sample Paper on RAG"
 
 
