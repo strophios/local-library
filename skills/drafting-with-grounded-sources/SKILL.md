@@ -1,6 +1,16 @@
 ---
 name: drafting-with-grounded-sources
-description: Use when writing or editing text (drafts, essays, research notes, explanations) that should be grounded in specific source documents from the local library — covers decomposition into grounded propositions, per-claim invocation of the grounding-against-library kernel, and structured output with prose + audit-trail appendix. Recommends section-by-section invocation on large drafts. Also: draft with citations, expand this with sources, explain/summarize @<citekey> for an essay, write a paragraph drawing from these papers, synthesize sources into a section.
+description: >-
+  Use when writing or editing text (drafts, essays, research notes,
+  explanations) that should be grounded in specific source documents
+  from the local library — covers decomposition into grounded
+  propositions, per-claim invocation of the grounding-against-library
+  kernel, and structured output with prose + audit-trail appendix.
+  Recommends section-by-section invocation on large drafts. Also
+  fires on phrasings like "draft with citations", "expand this with
+  sources", "explain/summarize @<citekey> for an essay", "write a
+  paragraph drawing from these papers", "synthesize sources into a
+  section".
 allowed-tools:
   - mcp__local-library__search_library
   - mcp__local-library__show_document
