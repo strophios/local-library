@@ -1,13 +1,17 @@
 -- pattern: Mixed
---   Functional Core: encode_request, _split_complete_lines (pure)
+--   Functional Core: encode_request (pure)
 --   Imperative Shell: connect/close/send (vim.fn.sockconnect, chansend)
 --
 -- JSON-RPC 2.0 client over a Unix domain socket.
 --
 -- Wire protocol: line-delimited compact JSON (each message terminated by 0x0A).
--- Neovim's sockconnect with rpc=false delivers raw bytes via the on_data
--- callback; we accumulate fragments, split on newlines, parse complete lines,
--- and dispatch each response to the matching pending request.
+-- Neovim's sockconnect with rpc=false delivers data via the on_data callback
+-- in channel-lines format (:h channel-lines). The data parameter is a Lua table
+-- where each element is a line (without the \n terminator). A trailing empty
+-- string "" means "the last element ended on a newline"; a non-empty trailing
+-- element means "partial line for continuation in the next callback".
+-- We accumulate fragments, dispatch complete lines, and handle multi-callback
+-- reassembly for lines split across multiple data events.
 
 local async = require("plenary.async")
 
@@ -28,28 +32,40 @@ function M.new(opts)
   return self
 end
 
-local function _split_complete_lines(buffer)
-  local lines = {}
-  local start = 1
-  while true do
-    local nl = buffer:find("\n", start, true)
-    if not nl then break end
-    table.insert(lines, buffer:sub(start, nl - 1))
-    start = nl + 1
-  end
-  return lines, buffer:sub(start)
-end
-
 function Client:_on_data(_chan_id, data, _event)
-  for _, fragment in ipairs(data) do
-    self._buffer = self._buffer .. fragment
+  -- Handle Neovim's channel-lines format: each element is a line (without \n).
+  -- A trailing empty string "" means newline-terminated; non-empty trailing
+  -- element means partial line for continuation in the next callback.
+  -- Special case: { "" } is the EOF/disconnect signal — ignore it.
+  if #data == 1 and data[1] == "" then
+    return
   end
-  local lines, remainder = _split_complete_lines(self._buffer)
-  self._buffer = remainder
-  for _, line in ipairs(lines) do
-    if line ~= "" then
-      self:_dispatch(line)
+
+  -- The first element appends to the existing buffer (continuation of any
+  -- partial line from a prior callback).
+  self._buffer = self._buffer .. data[1]
+
+  if #data > 1 then
+    -- We have more than one element. The first element completes a line
+    -- (because there's a second element, meaning the byte stream had a
+    -- newline after the first element). Dispatch the completed line.
+    if self._buffer ~= "" then
+      self:_dispatch(self._buffer)
     end
+    self._buffer = ""
+
+    -- Middle elements (if any) are also complete lines.
+    for i = 2, #data - 1 do
+      if data[i] ~= "" then
+        self:_dispatch(data[i])
+      end
+    end
+
+    -- Last element either completes a final line (if the previous element
+    -- was newline-terminated) or starts a new partial line. Per convention,
+    -- a trailing empty string means newline-terminated; a non-empty trailing
+    -- string starts a partial line that will be completed in the next callback.
+    self._buffer = data[#data]
   end
 end
 

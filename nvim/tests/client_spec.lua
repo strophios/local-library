@@ -60,7 +60,9 @@ describe("local_library.client", function()
     async.run(function()
       err, result = client:request_sync("ping", {})
     end)
-    captured_on_data(42, { '{"jsonrpc":"2.0","id":1,"result":{"ok":true}}\n', "" })
+    -- Neovim channel-lines format: each element is a line (no \n).
+    -- Trailing "" means newline-terminated; this simulates a complete JSON response.
+    captured_on_data(42, { '{"jsonrpc":"2.0","id":1,"result":{"ok":true}}', "" })
     vim.wait(100, function() return result ~= nil or err ~= nil end)
     assert.is_nil(err)
     assert.is_table(result)
@@ -81,8 +83,9 @@ describe("local_library.client", function()
     async.run(function()
       err, result = client:request_sync("ping", {})
     end)
+    -- Neovim channel-lines format: trailing "" indicates newline termination.
     captured_on_data(42, {
-      '{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"Method not found"}}\n',
+      '{"jsonrpc":"2.0","id":1,"error":{"code":-32601,"message":"Method not found"}}',
       "",
     })
     vim.wait(100, function() return err ~= nil end)
@@ -99,9 +102,10 @@ describe("local_library.client", function()
     async.run(function()
       err, result = client:request_sync("get_document", { identifier = "@xyz" })
     end)
+    -- Neovim channel-lines format: trailing "" indicates newline termination.
     captured_on_data(42, {
       '{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"not found",'
-        .. '"data":{"error_code":"NOT_FOUND","details":{"identifier":"@xyz"}}}}\n',
+        .. '"data":{"error_code":"NOT_FOUND","details":{"identifier":"@xyz"}}}}',
       "",
     })
     vim.wait(100, function() return err ~= nil end)
@@ -116,7 +120,8 @@ describe("local_library.client", function()
     async.run(function()
       _, result = client:ping()
     end)
-    captured_on_data(42, { '{"jsonrpc":"2.0","id":1,"result":{"ok":true,"daemon_pid":99}}\n', "" })
+    -- Neovim channel-lines format: trailing "" indicates newline termination.
+    captured_on_data(42, { '{"jsonrpc":"2.0","id":1,"result":{"ok":true,"daemon_pid":99}}', "" })
     vim.wait(100, function() return result ~= nil end)
     assert.is_true(result.ok)
     assert.equals(99, result.daemon_pid)
@@ -135,8 +140,11 @@ describe("local_library.client", function()
     async.run(function()
       _, result = client:ping()
     end)
+    -- Neovim channel-lines format: a line split across two callbacks.
+    -- First callback: { "partial" } — non-empty trailing, no newline-termination yet.
+    -- Second callback: { "completion", "" } — completes the line and signals newline.
     captured_on_data(42, { '{"jsonrpc":"2.0","id":1,"resu' })
-    captured_on_data(42, { 'lt":{"ok":true}}\n', "" })
+    captured_on_data(42, { 'lt":{"ok":true}}', "" })
     vim.wait(100, function() return result ~= nil end)
     assert.is_true(result.ok)
   end)
