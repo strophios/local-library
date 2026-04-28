@@ -128,3 +128,51 @@ def test_register_rejects_duplicate_methods() -> None:
     d.register("m", h)
     with pytest.raises(ValueError, match="already registered"):
         d.register("m", h)
+
+
+def test_dispatch_emits_structured_log_line(caplog) -> None:
+    import logging
+
+    caplog.set_level(logging.INFO, logger="local_library.daemon.dispatcher")
+    d = dispatcher.Dispatcher()
+
+    async def handler(**_) -> dict:
+        return {"ok": True}
+
+    d.register("ping", handler)
+    req = protocol.ParsedRequest(method="ping", params={}, id=1)
+    _run(d.dispatch(req))
+
+    matching = [
+        r for r in caplog.records
+        if r.levelno == logging.INFO and "method=ping" in r.message
+    ]
+    assert matching, (
+        f"expected INFO log for method=ping, "
+        f"got: {[r.message for r in caplog.records]}"
+    )
+    msg = matching[0].message
+    assert "status=ok" in msg
+    assert "duration_ms=" in msg
+
+
+def test_dispatch_logs_error_status_on_local_library_error(caplog) -> None:
+    import logging
+
+    caplog.set_level(logging.WARNING, logger="local_library.daemon.dispatcher")
+    d = dispatcher.Dispatcher()
+
+    async def handler(**_) -> dict:
+        raise LibLookupError(
+            "no", ErrorCode.NOT_FOUND, details={"identifier": "@xyz"}
+        )
+
+    d.register("get_document", handler)
+    req = protocol.ParsedRequest(method="get_document", params={}, id=2)
+    _run(d.dispatch(req))
+
+    msgs = [r.message for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any(
+        "method=get_document" in m and "error_code=NOT_FOUND" in m
+        for m in msgs
+    ), msgs

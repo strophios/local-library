@@ -23,9 +23,11 @@ Handler contract:
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+from local_library.core.errors import LocalLibraryError
 from local_library.daemon import errors, protocol
 
 _LOGGER = logging.getLogger("local_library.daemon.dispatcher")
@@ -61,8 +63,15 @@ class Dispatcher:
                 )
             return ""
 
+        start = time.perf_counter()
+
         handler = self._methods.get(request.method)
         if handler is None:
+            duration_ms = (time.perf_counter() - start) * 1000
+            _LOGGER.info(
+                "method=%s id=%s status=method_not_found duration_ms=%.1f",
+                request.method, request.id, duration_ms,
+            )
             return protocol.build_error_response(
                 request_id=request.id,
                 code=protocol.METHOD_NOT_FOUND,
@@ -72,17 +81,40 @@ class Dispatcher:
         try:
             result = await handler(**request.params)
         except protocol.JsonRpcError as exc:
+            duration_ms = (time.perf_counter() - start) * 1000
+            _LOGGER.info(
+                "method=%s id=%s status=protocol_error code=%d duration_ms=%.1f",
+                request.method, request.id, exc.code, duration_ms,
+            )
             return errors.translate(request.id, exc)
         except TypeError as exc:
-            # TypeError from **params kwargs mismatch = invalid params.
+            duration_ms = (time.perf_counter() - start) * 1000
+            _LOGGER.info(
+                "method=%s id=%s status=invalid_params duration_ms=%.1f",
+                request.method, request.id, duration_ms,
+            )
             return errors.translate(
                 request.id,
                 protocol.InvalidParams(f"Invalid params: {exc}"),
             )
-        except Exception as exc:  # noqa: BLE001 — must not leak to client
+        except LocalLibraryError as exc:
+            duration_ms = (time.perf_counter() - start) * 1000
+            _LOGGER.warning(
+                "method=%s id=%s status=domain_error error_code=%s duration_ms=%.1f",
+                request.method, request.id, exc.code.value, duration_ms,
+            )
+            return errors.translate(request.id, exc)
+        except Exception as exc:  # noqa: BLE001
+            duration_ms = (time.perf_counter() - start) * 1000
             _LOGGER.exception(
-                "handler raised unexpected exception (method=%s)", request.method
+                "method=%s id=%s status=internal_error duration_ms=%.1f",
+                request.method, request.id, duration_ms,
             )
             return errors.translate(request.id, exc)
 
+        duration_ms = (time.perf_counter() - start) * 1000
+        _LOGGER.info(
+            "method=%s id=%s status=ok duration_ms=%.1f",
+            request.method, request.id, duration_ms,
+        )
         return protocol.build_success_response(request.id, result)
