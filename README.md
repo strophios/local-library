@@ -156,3 +156,111 @@ uv run pytest --run-extraction-quality           # Include extraction quality be
 ## License
 
 MIT
+
+
+---
+
+## Claude Code Plugin
+
+This repo also ships as a Claude Code plugin: six skills bundled with the MCP server config Claude Code needs to talk to your local library. With the plugin installed, a citekey dropped in conversation prompts a library lookup automatically, and grounded writing/checking is the path of least resistance.
+
+### What the plugin provides
+
+- Two **orientation** skills (always-apply): teach Claude to notice library-adjacent cues and reach for `mcp__local-library__*` tools fluently; teach Claude to fall back to the original PDF when extracted markdown is garbled.
+- One **shared grounding kernel**: atomic per-assertion retrieve → quote → synthesize → report cycle the procedural skills compose on.
+- Three **procedural composition** skills: drafting with grounded sources (prose + audit appendix), implementation-check against papers (assertion table comparing code to method descriptions), verifying claims against the library (claim-by-claim status with quoted support).
+
+The plugin works from any project where you have Claude Code running — the library doesn't have to be the project you're working on.
+
+### Who this is for
+
+Anyone using the local-library MCP server who wants Claude Code to:
+- Treat citekeys as library handles, not topic labels
+- Quote evidence by default, not paraphrase from training
+- Tag claims with explicit support / contradict / partial / not-found rather than rubber-stamp them
+- Read the PDF when extracted markdown can't be trusted (math, figures, tables)
+
+### Plugin install
+
+From a fresh checkout:
+
+    git clone <this-repo>
+    cd local-library
+    uv sync
+
+Then in a Claude Code session anywhere on your machine:
+
+    /plugin marketplace add /absolute/path/to/local-library
+    /plugin install local-library
+
+The plugin's `.mcp.json` brings the MCP server with it (no separate registration), and the six skills auto-discover via Claude Code's plugin loader.
+
+### Architectural overview
+
+The plugin uses a three-layer architecture that separates concerns cleanly: orientation skills (always-apply) notice library-adjacent cues and reach for MCP tools fluently; a grounding kernel handles the atomic retrieve-quote-synthesize cycle per assertion; procedural composition skills decompose problems and orchestrate the kernel across multiple claims.
+
+Why this split? Plugins can't ship a user-global CLAUDE.md, so orientation skills must be always-apply to catch citekeys and extraction problems automatically. The kernel is deliberately atomic—a single claim, one retrieve pass, evidence quoted and synthesized—because composing skills handle the decomposition. Without this split, the kernel would bias toward "one chunk answers the whole question," which short-changes multi-source synthesis and forces users to rephrase broad questions as narrow ones.
+
+The plugin bundles with the repository for practical reasons: it travels with your library instance, is shareable (you can publish the repo and others add it from GitHub), and works from any project on your machine without global registration overhead.
+
+Safety is built in. When the extraction-quality skill detects garbled math or broken figures in extracted markdown, it cross-invokes itself with a fallback: use the native Read tool on the PDF path provided by show_document. This keeps you grounded in the source when the text layer is unreliable.
+
+End-to-end flow: A citekey appears in conversation, the orientation skill triggers show_document and quotes the abstract. You ask a question that decomposes into multiple claims. The procedural skill enumerates them. The kernel runs per-claim—retrieve relevant chunks, quote evidence, synthesize—and each result flows to the output formatter. The final result (prose with appendix, assertion table, claim table) is assembled per skill format.
+
+### Skills at a glance
+
+| Skill | Layer | What it does |
+|---|---|---|
+| `using-local-library-mcp` | Orientation | Reach for `mcp__local-library__*` tools when citekeys or library cues appear |
+| `handling-extraction-quality` | Orientation | Fall back to `Read` on the PDF when extracted markdown is garbled |
+| `grounding-against-library` | Kernel | Per-assertion retrieve → quote → synthesize → report; multi-source |
+| `drafting-with-grounded-sources` | Procedural | Decompose into propositions; ground each via the kernel; produce prose + appendix |
+| `implementation-check-against-papers` | Procedural | Decompose code into claims; ground against paper(s); produce assertion table |
+| `verifying-claims-against-library` | Procedural | Enumerate citation-bearing claims; per-claim grounding; produce claim table |
+
+### Test-drive scenarios
+
+After installing, try these:
+
+1. **Orientation triggers on bare citekey:**
+   > "What does @<your-citekey> argue about <topic>?"
+   Expected: Claude calls `show_document` (or `search_library`) before responding; quotes evidence rather than summarizing from training.
+
+2. **Safety hatch triggers on garbled extraction:**
+   > "Open @<your-mathy-citekey> and explain the main equation."
+   Expected: Claude reads the PDF directly via `Read` if extracted markdown is garbled; cites page number.
+
+3. **Kernel returns control on a broad request:**
+   > "Tell me how the literature in my library handles <topic>."
+   Expected: Claude declines to answer and proposes a decomposition.
+
+4. **Drafting with appendix:**
+   > "Write a short note on <topic> drawing from @<A> and @<B>."
+   Expected: prose with inline citekeys + grounding-summary appendix at end.
+
+5. **Verifying claims:**
+   > "Check whether my library supports these:
+   > 1. <claim> — per @<X>
+   > 2. <claim> — per @<Y>"
+   Expected: claim table with quoted support, statuses, summary line.
+
+### Disabling / overriding plugin skills
+
+To disable individual skills without uninstalling the plugin:
+- Edit `~/.claude/settings.json` and add the skill name to the `disabledSkills` list (or use the `/plugin` UI).
+- To narrow tool authorization for a single skill, edit the `allowed-tools` block in that skill's `SKILL.md` after installation (note: this edits the installed copy, not the source repo).
+
+To uninstall:
+
+    /plugin uninstall local-library
+    /plugin marketplace remove local-library
+
+### Where the plugin's pieces live
+
+- Skills: `skills/<skill-name>/SKILL.md`
+- Plugin manifest: `.claude-plugin/plugin.json`
+- Marketplace advertisement: `.claude-plugin/marketplace.json`
+- MCP server config: `.mcp.json` (uses `${CLAUDE_PLUGIN_ROOT}`)
+- Design doc: `docs/design-plans/2026-04-24-local-library-claude-code-plugin.md`
+- Implementation plan: `docs/implementation-plans/2026-04-24-local-library-claude-code-plugin/`
+- RED baselines, GREEN/Tier-3 transcripts, smoke tests: `tests/skills/`
