@@ -170,7 +170,9 @@ describe("local_library.client", function()
     })
     local sc = stub(vim.fn, "sockconnect").returns(7)
     local cs = stub(vim.fn, "chansend").returns(1)
-    stub(vim.fn, "chaninfo").returns({ id = 7 })
+    -- Note: vim.api.nvim_get_chan_info is already stubbed in before_each.
+    -- This test triggers the timeout before any post-connect _is_alive call,
+    -- so no additional channel-info stubbing is needed.
     local async = require("plenary.async")
     local err
     async.run(function()
@@ -180,6 +182,6 @@ describe("local_library.client", function()
     assert.is_table(err)
     assert.is_truthy(err.message:match("ping"))
     assert.is_truthy(err.message:match("50ms"))
-    sc:revert(); cs:revert(); vim.fn.chaninfo:revert()
+    sc:revert(); cs:revert()
   end)
 end)
