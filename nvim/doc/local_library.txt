@@ -1,0 +1,179 @@
+*local_library.txt*	Claim-driven semantic search for Neovim
+
+==============================================================================
+CONTENTS                                              *local-library-contents*
+
+  1. Introduction                          |local-library|
+  2. Requirements                          |local-library-requirements|
+  3. Installation                          |local-library-installation|
+  4. Quickstart                            |local-library-quickstart|
+  5. Commands                              |local-library-commands|
+  6. Keymaps                               |local-library-keymaps|
+  7. Configuration                         |local-library-config|
+  8. Daemon management                     |local-library-daemon|
+  9. Troubleshooting                       |local-library-troubleshooting|
+
+==============================================================================
+1. INTRODUCTION                                            *local-library*
+
+local-library.nvim is a Neovim plugin for claim-driven semantic search
+against the local-library document corpus. Visual-select a sentence in your
+prose; the plugin queries the long-running local-library daemon over a
+Unix domain socket; you get a Telescope picker of ranked matching chunks
+from your library; selecting one inserts a citation and (optionally)
+appends the CSL-JSON entry to your project bibliography.
+
+==============================================================================
+2. REQUIREMENTS                                *local-library-requirements*
+
+- Neovim 0.10 or later
+- The local-library Python package and daemon (see project README)
+- plenary.nvim (transitive dependency via Telescope)
+- Telescope.nvim
+- jq (optional; used to pretty-print bibliography files)
+
+==============================================================================
+3. INSTALLATION                                *local-library-installation*
+
+Install via lazy.nvim using a local directory entry:
+>
+    {
+      dir = "~/development/local-library/nvim",
+      name = "local-library.nvim",
+      dependencies = { "nvim-lua/plenary.nvim", "nvim-telescope/telescope.nvim" },
+      lazy = false,
+      config = function()
+        require("local_library").setup({})
+      end,
+    }
+<
+
+==============================================================================
+4. QUICKSTART                                    *local-library-quickstart*
+
+1. Start the daemon: `:LocalLibraryDaemon start`
+2. Confirm health:   `:checkhealth local_library`
+3. Open a markdown file with a `bibliography:` frontmatter field
+4. Visual-select a sentence; press `<leader>c`
+5. Browse results in the Telescope picker; press `<CR>` to insert citekey,
+   `<C-t>` to insert citekey + chunk text as a blockquote, `<C-o>` to open
+   the source markdown
+
+==============================================================================
+5. COMMANDS                                        *local-library-commands*
+
+                                                          *:LocalLibraryCite*
+:LocalLibraryCite       Run a claim-driven library search on the visual
+                        selection. Opens a Telescope picker. Bound by
+                        default to `<leader>c` in visual mode.
+
+                                                       *:LocalLibraryDaemon*
+:LocalLibraryDaemon {action}
+                        Manage the daemon process. {action} is one of:
+                          start    spawn the background daemon
+                          stop     SIGTERM the daemon
+                          status   show pid, uptime, memory
+                          restart  stop + start
+
+                                                              *:checkhealth*
+:checkhealth local_library
+                        Diagnose plugin + daemon liveness.
+
+==============================================================================
+6. KEYMAPS                                          *local-library-keymaps*
+
+Default mapping (visual mode):
+>
+    <leader>c    :LocalLibraryCite
+<
+
+Disable default keymaps:
+>
+    require("local_library").setup({ keymaps = { enabled = false } })
+<
+
+Override the keymap:
+>
+    require("local_library").setup({
+      keymaps = { visual_cite = "<leader>x" },
+    })
+<
+
+Inside the Telescope picker:
+- `<CR>`     insert citekey at end of selection (auto-append to bibliography)
+- `<C-t>`    insert citekey + chunk text as a blockquote on a new line
+- `<C-o>`    open the extracted markdown source at the chunk
+- `<Esc>`    cancel
+
+==============================================================================
+7. CONFIGURATION                                     *local-library-config*
+
+                                                  *local-library.setup()*
+require('local_library').setup({opts})
+
+Defaults:
+>
+    {
+      socket_path = nil,
+        -- nil → resolve from $XDG_DATA_HOME/local-library/daemon.sock
+        --       or ~/Library/Application Support/local-library/daemon.sock
+      request_timeout_ms = 5000,
+        -- legacy fallback (use timeouts.* instead)
+      timeouts = {
+        default_ms = 5000,
+        by_method = {
+          ping = 2000,
+          get_document = 2000,
+          search = 5000,
+        },
+      },
+      keymaps = {
+        enabled = true,
+        visual_cite = "<leader>c",
+      },
+      search = {
+        limit = 10,
+        rerank = true,
+      },
+    }
+<
+
+==============================================================================
+8. DAEMON MANAGEMENT                                *local-library-daemon*
+
+The plugin requires a running daemon. Start it once per session via
+`:LocalLibraryDaemon start`. Logs are at:
+>
+    ~/Library/Application Support/local-library/logs/daemon.log
+<
+
+The daemon publishes its socket at:
+>
+    ~/Library/Application Support/local-library/daemon.sock
+<
+
+Override either path via `:lua require('local_library').setup{socket_path
+= '...'}`.
+
+==============================================================================
+9. TROUBLESHOOTING                          *local-library-troubleshooting*
+
+|:checkhealth| says "no socket file":
+    The daemon isn't running. Run `:LocalLibraryDaemon start`.
+
+|:checkhealth| says "daemon ping failed":
+    The daemon is up but not responding. Check the daemon log:
+>
+    tail -f ~/Library/Application\ Support/local-library/logs/daemon.log
+<
+
+`<leader>c` does nothing:
+    Default keymap may be disabled. Check `:lua print(vim.inspect(
+    require('local_library').config().keymaps))`. Re-enable with
+    `setup({keymaps = {enabled = true}})`.
+
+"DAEMON_UNREACHABLE" notifications:
+    The daemon was killed or crashed. Run `:LocalLibraryDaemon start`.
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:

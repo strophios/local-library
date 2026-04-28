@@ -1,0 +1,15 @@
+:LocalLibraryCite	local_library.txt	/*:LocalLibraryCite*
+:LocalLibraryDaemon	local_library.txt	/*:LocalLibraryDaemon*
+:checkhealth	local_library.txt	/*:checkhealth*
+local-library	local_library.txt	/*local-library*
+local-library-commands	local_library.txt	/*local-library-commands*
+local-library-config	local_library.txt	/*local-library-config*
+local-library-contents	local_library.txt	/*local-library-contents*
+local-library-daemon	local_library.txt	/*local-library-daemon*
+local-library-installation	local_library.txt	/*local-library-installation*
+local-library-keymaps	local_library.txt	/*local-library-keymaps*
+local-library-quickstart	local_library.txt	/*local-library-quickstart*
+local-library-requirements	local_library.txt	/*local-library-requirements*
+local-library-troubleshooting	local_library.txt	/*local-library-troubleshooting*
+local-library.setup()	local_library.txt	/*local-library.setup()*
+local_library.txt	local_library.txt	/*local_library.txt*
