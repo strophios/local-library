@@ -513,4 +513,115 @@ appear or disappear as features evolve. The contract is `error_code`;
 - `src/local_library/daemon/dispatcher.py` — the logging-then-translating
   exception path
 
-*Chapter 7 is written in Phase 6 (reliability case study); chapter 8 in Phase 7.*
+
+## Chapter 7 — Reliability: crash recovery, timeouts, liveness
+
+A daemon plus a client is a distributed system, even when both processes
+live on the same machine. The daemon can crash, hang, become slow, or
+just stop responding. The client must:
+
+1. Detect that the daemon is unreachable and tell the user something
+   actionable (not "request failed: -1").
+2. Recover when the daemon comes back, ideally without restarting itself.
+3. Bound the time it will wait for any single request, so a hung daemon
+   doesn't lock up the editor.
+
+These three behaviors compose into what we call **tier-1 reliability** —
+enough to keep the workflow usable under common failure modes (the user
+killed the daemon manually, the machine slept, a query is genuinely slow).
+Higher tiers (transparent failover, persistent request queues, retries
+with idempotency tokens) are out of scope for this MVP.
+
+### Detection: dead-channel + structured envelopes
+
+Two signals tell the client the daemon is gone:
+
+- **OS-level dead channel.** `vim.fn.chansend` returns 0 on a closed
+  socket. `vim.fn.chaninfo(chan_id)` returns an empty table. We check
+  the latter before every request and the former after every send.
+- **No response within the per-method timeout.** If the daemon is alive
+  but hung, our deferred timeout fires and we surface a request-level
+  error with the method name and elapsed time.
+
+Both paths produce a typed error table with a stable shape:
+`{ code, message, error_code, details }`. The plugin's `notify.lua`
+mapper translates the `error_code` to a user-facing string and a
+`vim.log.levels` value. `DAEMON_UNREACHABLE` always pairs with an
+ERROR-level toast that names `:LocalLibraryDaemon start` so the user
+knows the next step.
+
+### Recovery: bounded retry, not infinite reconnection
+
+When `request_async` finds the channel dead, it tries to reconnect up
+to three times with exponential backoff (50 ms, 150 ms, 450 ms). If all
+three fail, the request errors out with `DAEMON_UNREACHABLE`. We do
+*not* loop forever:
+
+- **Three attempts is enough** to ride through a launchd respawn or a
+  manual `daemon restart`, both of which complete in well under 1 s on
+  a warm system.
+- **Failing fast is correct** when the daemon is genuinely down. The
+  user has actionable information; further retries just delay the
+  notification.
+
+The client also reconnects between sessions transparently. If the user
+kills the daemon, runs `:LocalLibraryDaemon start`, and immediately
+fires `<leader>c` without reloading Neovim, the first request succeeds
+via the reconnect path.
+
+### Bounded waits: per-method timeouts
+
+Different RPCs have different reasonable durations:
+
+- `ping`: ~1 ms warm, 50 ms cold. **2 s timeout** flags real wedging.
+- `get_document`: a few SQL lookups, no model inference. **2 s timeout**.
+- `search`: includes embedder + reranker + sqlite-vec. **5 s timeout**
+  by default; the warm p95 should be well under this.
+
+Configurable per-method timeouts are essential because a search timeout
+must be larger than a ping timeout, and tying them together means
+either pings hang too long or searches abort spuriously.
+
+The timeout is implemented via `vim.defer_fn` + a pending-id check in
+`request_async`. If the response arrives before the timeout fires, the
+deferred callback finds the pending entry already cleared and does
+nothing. If the timeout wins, the response (when it eventually
+arrives) is dropped — its id is no longer in `_pending`.
+
+### What we did NOT build (and why)
+
+- **Idempotency tokens for retries.** All our methods are read-only;
+  retrying a `search` that may have partially completed is harmless.
+  When write methods land (Phase 7+ MCP v2 ingestion), this becomes
+  necessary.
+- **Connection pooling.** A single client instance per Neovim session
+  is fine; the daemon happily multiplexes via `asyncio.start_unix_server`'s
+  per-connection coroutines.
+- **Circuit breakers.** With a 3-attempt cap and per-method timeouts,
+  the existing logic is effectively a tiny circuit breaker (open after
+  3 failures within ~700 ms; closes on the next successful connect).
+  A formal breaker would add state we don't currently need.
+
+### Operator visibility: structured logs
+
+The daemon-side logging change emits one log line per request:
+
+```
+2026-04-25 09:15:01,234 INFO local_library.daemon.dispatcher
+  method=search id=42 status=ok duration_ms=183.4
+```
+
+`grep status=domain_error` shows all errors over a session. `grep
+duration_ms=` plus `awk` gives ad-hoc latency distributions without
+spinning up a metrics stack. This is the simplest possible observability
+that's still useful — operator tooling builds on top of grep, not under it.
+
+### Cross-references
+
+- Design doc §"Edge cases" — the table of failure modes and their UX
+- `nvim/lua/local_library/client.lua` — reconnect + timeout logic
+- `nvim/lua/local_library/notify.lua` — `error_code` → user message mapper
+- `src/local_library/daemon/dispatcher.py` — structured per-request log
+- `nvim/tests/reliability_spec.lua` — kill + restart roundtrip verification
+
+*Chapter 8 is written in Phase 7 (case studies + cross-references).*
