@@ -12,6 +12,16 @@ local _setup_done = false
 function M.setup(opts)
   _config_module.setup(opts)
   _setup_done = true
+  -- Direct keymap registration. The autocmd in plugin/local_library.lua
+  -- is a fallback for users who call setup() inside lazy.nvim's `config`
+  -- block (autocmd registered before setup runs). Calling vim.keymap.set
+  -- twice with identical args is a no-op.
+  local opts_resolved = _config_module.options
+  if opts_resolved.keymaps and opts_resolved.keymaps.enabled then
+    vim.keymap.set("x", opts_resolved.keymaps.visual_cite, ":LocalLibraryCite<CR>",
+      { silent = true, desc = "local-library: cite from selection" })
+  end
+  vim.api.nvim_exec_autocmds("User", { pattern = "LocalLibraryConfigured" })
 end
 
 local function _ensure_setup()
@@ -62,6 +72,49 @@ function M.run_daemon_cli(subcommand)
     )
   end
   return code
+end
+
+--- Visual-mode entry point: capture selection, run search, open Telescope picker.
+function M.cite()
+  local selection = require("local_library.selection")
+  local query = selection.get_visual()
+  if not query or query == "" then
+    vim.notify("local-library: no visual selection", vim.log.levels.WARN)
+    return
+  end
+  local range = selection.get_visual_range()
+
+  local async = require("plenary.async")
+  async.run(function()
+    local cli = M.client()
+    local err, response = cli:request_sync("search", {
+      query = query,
+      limit = M.config().search.limit,
+      rerank = M.config().search.rerank,
+    })
+    if err then
+      vim.notify("local-library: search failed: " .. (err.message or "?"),
+        vim.log.levels.ERROR)
+      return
+    end
+    if not response or #(response.results or {}) == 0 then
+      vim.notify("local-library: no results for selection", vim.log.levels.INFO)
+      return
+    end
+
+    local refs_path = require("local_library.bibliography").resolve_refs_path(0)
+    vim.schedule(function()
+      require("telescope").extensions.local_library.cite({
+        results = response.results,
+        ctx = {
+          end_line = range.end_line,
+          end_col = range.end_col,
+          refs_path = refs_path,
+          bufnr = vim.api.nvim_get_current_buf(),
+        },
+      })
+    end)
+  end)
 end
 
 return M

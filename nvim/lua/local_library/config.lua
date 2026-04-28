@@ -14,6 +14,14 @@ local M = {}
 M.defaults = {
   socket_path = nil,
   request_timeout_ms = 5000,
+  keymaps = {
+    enabled = true,
+    visual_cite = "<leader>c",
+  },
+  search = {
+    limit = 10,
+    rerank = true,
+  },
 }
 
 local function default_socket_path()

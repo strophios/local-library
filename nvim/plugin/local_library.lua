@@ -22,3 +22,20 @@ end, {
   nargs = "?",
   complete = function() return { "start", "stop", "status", "restart" } end,
 })
+
+vim.api.nvim_create_user_command("LocalLibraryCite", function()
+  require("local_library").cite()
+end, { range = true, desc = "Run claim-driven library search on the visual selection" })
+
+-- Default keymap: <leader>c in visual mode. Registered after setup() runs
+-- so user-supplied keymaps.enabled = false is honored.
+vim.api.nvim_create_autocmd("User", {
+  pattern = "LocalLibraryConfigured",
+  callback = function()
+    local cfg = require("local_library.config").options
+    if cfg.keymaps and cfg.keymaps.enabled then
+      vim.keymap.set("x", cfg.keymaps.visual_cite, ":LocalLibraryCite<CR>",
+        { silent = true, desc = "local-library: cite from selection" })
+    end
+  end,
+})
