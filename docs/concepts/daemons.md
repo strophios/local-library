@@ -624,4 +624,220 @@ that's still useful — operator tooling builds on top of grep, not under it.
 - `src/local_library/daemon/dispatcher.py` — structured per-request log
 - `nvim/tests/reliability_spec.lua` — kill + restart roundtrip verification
 
-*Chapter 8 is written in Phase 7 (case studies + cross-references).*
+
+## Chapter 8 — Case studies: how the abstract patterns landed in this project
+
+Earlier chapters introduced abstract patterns: daemons (ch. 1), service
+management (ch. 2), framing (ch. 3), RPC envelopes (ch. 4), single-thread
+DB constraints (ch. 5), cross-process error handling (ch. 6), reliability
+(ch. 7). This final chapter pulls four of the most consequential decisions
+into one place — what we chose, what we considered, and why the result is
+what it is.
+
+### Case study 1 — sqlite-vec → asyncio: the single-worker executor
+
+**Context (ch. 5):** sqlite-vec requires single-thread access. asyncio
+gives us cooperative concurrency on one thread, which seems compatible —
+until you observe that model inference (embedder, reranker) is CPU-bound
+and would block the event loop, killing `ping` responsiveness.
+
+**Considered:**
+
+1. *Refactor `Retriever.retrieve()` to expose embed/query/rerank phases
+   separately,* so the daemon could run model phases in an executor and
+   sqlite-vec phases on the loop thread. Would honor the original design
+   verbatim. Cost: changes to the Retriever protocol, ripples through
+   `VectorRetriever`, `FTSRetriever`, `HybridRetriever`, `RerankedRetriever`,
+   plus their tests. High-touch, scope-bending.
+2. *Use a multi-worker executor with `check_same_thread=False`.* Would
+   permit theoretical parallelism but defeat sqlite-vec's invariant; we'd
+   need our own mutex on the connection. The "concurrency" we'd buy is
+   illusory — sqlite-vec serializes anyway.
+3. *Run the entire `retrieve()` call on the asyncio loop thread.* Simplest
+   to write; hangs `ping` for the duration of any search. Unacceptable.
+
+**Chose:** A `ThreadPoolExecutor(max_workers=1)` that owns the Library
+end-to-end. The Library is *constructed* on the executor thread, *closed*
+on the executor thread, and every `retrieve()` runs on it. The asyncio
+loop thread handles only socket I/O and dispatch.
+
+**Why it works:** sqlite-vec sees one thread for its entire lifetime.
+The event loop stays free for `ping` (which doesn't enter the executor)
+and for accepting new connections. The "loss" of parallel searches is
+illusory — sqlite-vec wouldn't have allowed it anyway.
+
+**See:** `daemon/server.py:_make_library_executor`,
+`run_on_library_thread`; concepts ch. 5 §"local-library's resolution".
+
+### Case study 2 — JSON-RPC + debuggability: rejecting msgpack-rpc
+
+**Context (ch. 4):** RPC needs a serialization format. The mainstream
+choices for a Python daemon talking to a Neovim plugin are JSON-RPC 2.0,
+msgpack-rpc (Neovim's native protocol), and a custom binary protocol.
+
+**Considered:**
+
+1. *msgpack-rpc.* Neovim's `vim.fn.sockconnect("...", ..., {rpc=true})`
+   speaks it natively. Bytes on the wire are 30-50% smaller than JSON
+   for our payloads. `msgpack` is faster to parse than `json`. Looks
+   like the obvious choice.
+2. *A custom binary protocol.* Maximum compactness; no library
+   dependency. Real overhead in implementation and debugging.
+3. *JSON-RPC 2.0.* Human-readable, debuggable with `nc -U` + a text
+   editor, every language has a JSON library, the spec is three pages
+   and two decades stable.
+
+**Chose:** JSON-RPC 2.0.
+
+**Why it works:** Our payloads are small (`<10 KB` typical search
+result). The 30-50% size difference is negligible at our scale —
+microseconds of wire transit on a Unix socket. What we lose: a small
+amount of throughput we never needed. What we gain:
+
+- A human can `nc -U $socket` and type a request. msgpack is opaque
+  bytes you can't paste.
+- `tcpdump -i lo0 -A` (or its UDS equivalent) shows readable traffic.
+  msgpack requires a decoder.
+- `python-lsp-jsonrpc` and `jsonrpcserver` exist, but neither earned
+  its keep at our 3-method scale (ch. 4 §"Library choice"). We rolled
+  our own framing + parser in ~200 LOC and own every line.
+
+**Why msgpack-rpc was actually wrong, not just suboptimal:** Neovim's
+msgpack-rpc framing is *its own* — it's not the standard msgpack-rpc
+spec. Adopting `rpc=true` would have entangled us with Neovim's RPC
+quirks (notification dispatch through Neovim, request-id semantics,
+the implicit `nvim_*` method namespace). Our daemon must remain
+editor-agnostic for the future MCP server v2 to share it.
+
+**See:** `daemon/protocol.py`; design doc §"Patterns this design
+deliberately does not follow"; concepts ch. 4 §"Why JSON-RPC 2.0".
+
+### Case study 3 — CLI-managed with launchd pathway
+
+**Context (ch. 2):** Three styles of process supervision: user-managed
+CLI, system supervisor (launchd/systemd), socket activation.
+
+**Considered:**
+
+1. *Full launchd LaunchAgent now.* Plist with `KeepAlive`, `RunAtLoad`,
+   `Sockets`. Pays for itself if the daemon is "always on." Requires
+   the user to install the plist, deal with launchd diagnostics
+   (`launchctl print user/$UID/com.local-library.daemon`), and accept
+   that "stop the daemon" means "edit the plist."
+2. *Double-fork demonization (PEP 3143).* The classic Unix daemon
+   recipe. Modern consensus (per `man systemd.exec` and the
+   "type=simple" design): cargo-cult for user-level services in 2025.
+3. *CLI-managed (foreground + signal-driven shutdown).* User runs
+   `local-library daemon start`/`stop`. No double-fork. Process is a
+   plain foreground program for tooling purposes (`ps`, `lsof`).
+
+**Chose:** CLI-managed for MVP, with explicit forward-compat for
+launchd via the `LAUNCH_ACTIVATE_SOCKET_FD` env var hook.
+
+**Why it works:**
+
+- The user's workflow is "start the daemon when I begin writing,
+  stop it when I'm done." launchd's "always on" model would burn
+  ~200 MB of RSS across days when nothing is happening.
+- The forward-compat shim (`socket_activation.inherited_socket()`)
+  is ~15 LOC and tested. Migrating to launchd is a *packaging* change
+  (write a plist, add a `KeepAlive` policy), not a code change.
+- Avoiding double-fork avoids a class of bugs: TTY detachment, file
+  descriptor inheritance, working directory surprises. We don't pay
+  for this complexity because we don't need it.
+
+**The path forward:** A LaunchAgent plist with a `Sockets` key would
+pre-bind the socket and pass the FD; the daemon's `inherited_socket()`
+would pick it up. No code change in the daemon. The shim turns the
+launchd migration from a refactor into a config edit.
+
+**See:** `daemon/socket_activation.py`; design doc §"Process model";
+concepts ch. 2 §"local-library's choice".
+
+### Case study 4 — Three hook scaffolding mechanisms
+
+**Context (Phase 5/6):** The MVP defers three features (document-scoped
+search, bib-aware ranking, direct text input). Each could be
+"deferred" with no scaffolding — but then enabling each later requires
+coordinated changes on both sides of the socket boundary. We wanted to
+choose hook mechanisms that match each feature's failure semantics.
+
+The three mechanisms (named for their failure mode):
+
+#### Loud-error hook: `search.doc_id`
+
+Document-scoped search ("find chunks within `@Smith2023`") would
+silently change the *content* of the response if the daemon ignored
+the parameter — the user asks for "within Smith2023" and gets the full
+corpus.
+
+**Mechanism:** Daemon accepts `doc_id` parameter. Non-null value raises
+`LocalLibraryError(NOT_IMPLEMENTED, details={"hook": "doc_id"})`. The
+plugin's `notify` mapper translates this to "document-scoped search is
+not yet available." The user gets *signal*, not a wrong answer.
+
+**Coupling profile:** When implementation lands, daemon and plugin
+both need to update — daemon to actually filter, plugin to remove the
+"not yet available" notification path. Tight two-side coordination.
+
+#### Silent-inert hook: `search.boost_citekeys`
+
+Bib-aware preferential ranking would silently change the *ordering* of
+search results if the daemon ignored the parameter — degraded
+gracefully, the user just gets unsorted-by-citation-presence results.
+That's a quality regression, not a correctness regression.
+
+**Mechanism:** Daemon accepts `boost_citekeys` and currently ignores
+it. The plugin always passes the current project's citekeys
+(`bibliography.list_citekeys(refs_path)`). When the daemon-side
+implementation lands, it has effect immediately — no plugin release
+needed.
+
+**Coupling profile:** Plugin-leads-backend. Plugin code is already
+correct; daemon catches up in a future release with zero coordination.
+
+#### Architectural hook: direct text input mode
+
+A future feature lets the user type a free-text query (not a visual
+selection). The daemon already accepts arbitrary query strings via
+`search.query`, so there's no protocol change to make. The hook is
+*structural*: the plugin's hybrid UI/data split means a future
+`input_ui.lua` module (or an alternative Telescope picker) can feed
+the existing pipeline without touching the daemon or any other module.
+
+**Mechanism:** None on the wire. The hook is the architecture itself —
+the discipline that `client.lua`, `actions.lua`, `bibliography.lua`
+know nothing about Telescope. A new UI consumes them as-is.
+
+**Coupling profile:** Plugin-only. Adding direct input mode is purely
+a plugin change.
+
+#### What this vocabulary buys us
+
+We now have three named patterns for "scaffold a future feature today,"
+each matched to a different failure mode:
+
+| Mechanism | Failure mode if ignored | Coupling on rollout |
+|-----------|-------------------------|---------------------|
+| Loud-error | Wrong content | Tight two-side |
+| Silent-inert | Degraded ordering | Plugin-leads-backend |
+| Architectural | N/A (structural) | Plugin-only |
+
+Each design choice — *not just* "build a hook" but *which kind of
+hook* — is a small decision that compounds over the project's life.
+Documenting the vocabulary explicitly (here and in design doc
+§"Structural hooks") means future contributors can reach for the right
+mechanism by name.
+
+**See:** Design doc §"Structural hooks"; `daemon/methods.py`
+(loud-error in `search()`); `nvim/lua/local_library/init.lua`
+(silent-inert via `boost_citekeys` always passed);
+`nvim/lua/local_library/` module organization (architectural).
+
+---
+
+The daemons concepts doc closes here. Each chapter has cross-references
+into the design doc and the codebase; each design and code decision has
+a return path into a chapter. Future maintainers — including future-you
+— have a single document that explains both *what* the daemon does and
+*why* it's shaped the way it is.
