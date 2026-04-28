@@ -79,6 +79,19 @@ function Client:_dispatch(line)
     )
     return
   end
+  -- An id of vim.NIL (JSON null) means the daemon couldn't correlate the
+  -- response to a request — typically a parse-error or invalid-request reply.
+  -- Surface it as a warning rather than dropping silently; otherwise the
+  -- requesting coroutine waits to its full timeout for a response that was
+  -- already returned (just untargeted).
+  if msg.id == nil or msg.id == vim.NIL then
+    vim.notify(
+      "local-library: daemon returned untargeted error: "
+        .. ((msg.error or {}).message or vim.inspect(msg)),
+      vim.log.levels.WARN
+    )
+    return
+  end
   local cb = self._pending[msg.id]
   if not cb then
     return
@@ -114,7 +127,10 @@ end
 
 function Client:_is_alive()
   if not self.chan_id then return false end
-  local info = vim.fn.chaninfo(self.chan_id)
+  -- vim.fn.chaninfo / vim.fn.getchaninfo error with E117 on Neovim 0.12.2;
+  -- only the API form is reliable. Returns vim.empty_dict() for invalid ids.
+  local ok, info = pcall(vim.api.nvim_get_chan_info, self.chan_id)
+  if not ok then return false end
   return next(info) ~= nil
 end
 
@@ -125,11 +141,18 @@ function Client:request_async(method, params, cb)
   end
   self._next_id = self._next_id + 1
   local id = self._next_id
+  -- vim.fn.json_encode serializes empty Lua tables as JSON arrays (`[]`).
+  -- The daemon's protocol layer rejects by-position params with InvalidRequest.
+  -- Substitute vim.empty_dict() for empty/nil params so the wire goes out as `{}`.
+  local effective_params = params
+  if effective_params == nil or next(effective_params) == nil then
+    effective_params = vim.empty_dict()
+  end
   local envelope = vim.fn.json_encode({
     jsonrpc = "2.0",
     id = id,
     method = method,
-    params = params or vim.empty_dict(),
+    params = effective_params,
   }) .. "\n"
   self._pending[id] = cb
   local sent = vim.fn.chansend(self.chan_id, envelope)

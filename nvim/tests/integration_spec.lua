@@ -60,15 +60,9 @@ describe("end-to-end daemon roundtrip", function()
     package.loaded["local_library.client"] = nil
     package.loaded["local_library.config"] = nil
 
-    -- Verify socket exists before trying to connect
-    if vim.fn.getftype(socket_path) ~= "socket" then
-      pending("daemon socket not created; integration may be flaky in test environment")
-      return
-    end
-
     require("local_library").setup({
       socket_path = socket_path,
-      request_timeout_ms = 15000,
+      request_timeout_ms = 5000,
     })
 
     local async = require("plenary.async")
@@ -76,13 +70,7 @@ describe("end-to-end daemon roundtrip", function()
     async.run(function()
       err, result = require("local_library").client():ping()
     end)
-    vim.wait(20000, function() return err ~= nil or result ~= nil end)
-
-    -- If we get a timeout in the test environment, pend rather than fail
-    if err and err.code == -2 then
-      pending("daemon socket connection timeout; integration may be flaky in test environment")
-      return
-    end
+    vim.wait(8000, function() return err ~= nil or result ~= nil end)
 
     assert.is_nil(err, err and (err.message or tostring(err)) or nil)
     assert.is_true(result.ok)

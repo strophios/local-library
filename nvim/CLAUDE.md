@@ -68,8 +68,9 @@ and Telescope picker. Phases 6–7 add reliability and polish.
 
 - `vim.fn.sockconnect` on Unix takes `mode = "pipe"` despite the name.
 - Channels are integer IDs; 0 means "not connected" or "dead." Always
-  check `vim.fn.chaninfo(id)` before sending if the channel is reused
-  across operations.
+  check `vim.api.nvim_get_chan_info(id)` before sending if the channel is
+  reused across operations. Note: `vim.fn.chaninfo` and `vim.fn.getchaninfo`
+  both error with E117 on Neovim 0.12.x; only the API form is reliable.
 - plenary.async functions must be called inside `async.run()` /
   `async.void()` — calling them from a top-level sync context throws
   "must be called from within a coroutine".

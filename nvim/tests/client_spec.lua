@@ -22,7 +22,7 @@ describe("local_library.client", function()
     end)
     chansend_stub = stub(vim.fn, "chansend").returns(1)
     chanclose_stub = stub(vim.fn, "chanclose").returns(1)
-    stub(vim.fn, "chaninfo").returns({ id = 42 })
+    stub(vim.api, "nvim_get_chan_info").returns({ id = 42 })
     client = reload("local_library.client").new({
       socket_path = "/tmp/test.sock",
       request_timeout_ms = 1000,
@@ -33,7 +33,7 @@ describe("local_library.client", function()
     sockconnect_stub:revert()
     chansend_stub:revert()
     chanclose_stub:revert()
-    vim.fn.chaninfo:revert()
+    vim.api.nvim_get_chan_info:revert()
     package.loaded["local_library.client"] = nil
   end)
 
@@ -74,6 +74,15 @@ describe("local_library.client", function()
     assert.equals(1, decoded.id)
     assert.equals("ping", decoded.method)
     assert.is_truthy(sent:sub(-1) == "\n")
+    -- Critical: empty params must serialize as JSON object {}, not array [].
+    -- The daemon's protocol layer rejects by-position params with InvalidRequest.
+    -- vim.fn.json_encode serializes empty Lua tables as [] by default, so the
+    -- request_async path must coerce empty params to vim.empty_dict() before encode.
+    -- Use Lua patterns to tolerate whitespace differences across Neovim versions.
+    assert.is_truthy(sent:match('"params"%s*:%s*{'),
+      "envelope must have `params` as a JSON object, got: " .. sent)
+    assert.is_nil(sent:match('"params"%s*:%s*%['),
+      "envelope must NOT have `params` as a JSON array (by-position), got: " .. sent)
   end)
 
   it("request_sync returns (err, nil) on JSON-RPC error envelope", function()
