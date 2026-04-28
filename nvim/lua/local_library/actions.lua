@@ -92,8 +92,7 @@ function M._handle_bibliography_then(ctx, result, cb)
     local client = require("local_library").client()
     local err, doc = client:request_sync("get_document", { identifier = "@" .. result.citekey })
     if err then
-      vim.notify("local-library: get_document failed: " .. (err.message or "?"),
-        vim.log.levels.ERROR)
+      require("local_library.notify").from_error(err)
       cb(false)
       return
     end

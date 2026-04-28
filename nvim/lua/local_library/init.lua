@@ -85,6 +85,13 @@ function M.cite()
   end
   local range = selection.get_visual_range()
 
+  local refs_path = require("local_library.bibliography").resolve_refs_path(0)
+  local boost_citekeys = {}
+  if refs_path and vim.fn.filereadable(refs_path) == 1 then
+    local ok, keys = pcall(require("local_library.bibliography").list_citekeys, refs_path)
+    if ok then boost_citekeys = keys end
+  end
+
   local async = require("plenary.async")
   async.run(function()
     local cli = M.client()
@@ -92,10 +99,10 @@ function M.cite()
       query = query,
       limit = M.config().search.limit,
       rerank = M.config().search.rerank,
+      boost_citekeys = boost_citekeys,
     })
     if err then
-      vim.notify("local-library: search failed: " .. (err.message or "?"),
-        vim.log.levels.ERROR)
+      require("local_library.notify").from_error(err)
       return
     end
     if not response or #(response.results or {}) == 0 then
@@ -103,7 +110,6 @@ function M.cite()
       return
     end
 
-    local refs_path = require("local_library.bibliography").resolve_refs_path(0)
     vim.schedule(function()
       require("telescope").extensions.local_library.cite({
         results = response.results,
