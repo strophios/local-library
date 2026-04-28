@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-04-24
+Last verified: 2026-04-27
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -109,6 +109,8 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 - **Batch import from Zotero**: `zotero import` command with library/collection filtering, dry-run mode, progress tracking, and continue-on-error (defaults to personal library)
 - **Reextract command**: `reextract` CLI command re-runs text extraction on existing documents (useful after extraction pipeline improvements)
 - **Extraction quality framework**: Synthetic document benchmark in `tests/extraction/synthetic/` measures extraction fidelity across 4 noise tiers (T0 clean embedded, T1 clean OCR, T2 moderate scan, T3 degraded) with CER/WER metrics and structural validators. Config-driven noise pipeline with 7 artifact types and per-page deterministic seeds. 6 annotated source documents. Opt-in via `--run-extraction-quality` pytest flag.
+- **Long-running daemon**: `src/local_library/daemon/` wraps the Library orchestrator behind a Unix-domain-socket JSON-RPC 2.0 server. Single-worker executor preserves sqlite-vec single-thread access. Methods: ping, search, get_document. CLI: `local-library daemon {start|stop|status|restart|run}`. Forward-compat shim for launchd socket activation.
+- **Neovim plugin (local-library.nvim)**: `nvim/` contains the Lua plugin. Visual-select a claim → `<leader>c` → Telescope picker → insert citekey + auto-append CSL-JSON to project bibliography. Per-method timeouts, reconnect-with-backoff, error-code-aware notifications. `:LocalLibraryDaemon` process management; `:checkhealth local_library` diagnostics.
 
 **Immediate next step:** Eval set re-annotation at corpus scale. The initial full-corpus baseline run shows apparent regression that is largely an annotation artifact (the flood of new documents produces many correct-but-unannotated results that score as wrong). Real quality targets and conceptual-query improvements are gated on re-annotating existing queries against the full corpus, adding new queries, and adding chunk-level annotations. See `roadmap.md` and `docs/feature-areas/rag-pipeline-improvements/README.md`.
 
