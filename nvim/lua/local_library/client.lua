@@ -21,11 +21,15 @@ local Client = {}
 Client.__index = Client
 
 --- Construct a new client (does not connect).
----@param opts {socket_path: string, request_timeout_ms: number?}
+---@param opts {socket_path: string, request_timeout_ms: number?, timeouts: table?}
 function M.new(opts)
   local self = setmetatable({}, Client)
   self.socket_path = assert(opts.socket_path, "socket_path is required")
   self.request_timeout_ms = opts.request_timeout_ms or 5000
+  self.timeouts = opts.timeouts or {
+    default_ms = self.request_timeout_ms,
+    by_method = {},
+  }
   self.chan_id = nil
   self._buffer = ""
   self._next_id = 0
@@ -134,6 +138,11 @@ function Client:_is_alive()
   return next(info) ~= nil
 end
 
+function Client:_timeout_for(method)
+  local by = self.timeouts.by_method or {}
+  return by[method] or self.timeouts.default_ms or self.request_timeout_ms
+end
+
 --- Send a request; invoke `cb(err, result)` when the response arrives.
 function Client:request_async(method, params, cb)
   if not self:_is_alive() then
@@ -161,13 +170,14 @@ function Client:request_async(method, params, cb)
     cb({ code = -1, message = "channel send failed (daemon disconnected?)" }, nil)
     return
   end
+  local timeout_ms = self:_timeout_for(method)
   vim.defer_fn(function()
     if self._pending[id] then
       self._pending[id] = nil
-      cb({ code = -2, message = "request timed out after "
-        .. self.request_timeout_ms .. "ms" }, nil)
+      cb({ code = -2, message = "request '" .. method .. "' timed out after "
+        .. timeout_ms .. "ms" }, nil)
     end
-  end, self.request_timeout_ms)
+  end, timeout_ms)
 end
 
 --- plenary.async wrapper: returns (err, result) inside async.run() context.

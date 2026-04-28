@@ -157,4 +157,29 @@ describe("local_library.client", function()
     vim.wait(100, function() return result ~= nil end)
     assert.is_true(result.ok)
   end)
+
+  it("uses per-method timeout from config", function()
+    package.loaded["local_library.client"] = nil
+    local Client = require("local_library.client")
+    local c = Client.new({
+      socket_path = "/tmp/test.sock",
+      timeouts = {
+        default_ms = 5000,
+        by_method = { ping = 50 },
+      },
+    })
+    local sc = stub(vim.fn, "sockconnect").returns(7)
+    local cs = stub(vim.fn, "chansend").returns(1)
+    stub(vim.fn, "chaninfo").returns({ id = 7 })
+    local async = require("plenary.async")
+    local err
+    async.run(function()
+      err, _ = c:ping()
+    end)
+    vim.wait(500, function() return err ~= nil end)
+    assert.is_table(err)
+    assert.is_truthy(err.message:match("ping"))
+    assert.is_truthy(err.message:match("50ms"))
+    sc:revert(); cs:revert(); vim.fn.chaninfo:revert()
+  end)
 end)

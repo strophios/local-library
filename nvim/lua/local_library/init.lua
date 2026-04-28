@@ -44,6 +44,7 @@ function M.client()
     _client = Client.new({
       socket_path = _config_module.options.socket_path,
       request_timeout_ms = _config_module.options.request_timeout_ms,
+      timeouts = _config_module.options.timeouts,
     })
   end
   return _client

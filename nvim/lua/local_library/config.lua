@@ -24,6 +24,16 @@ M.defaults = {
   },
 }
 
+-- Lazy-loaded per-method timeout defaults (only merged if user doesn't provide timeouts)
+M.default_timeouts = {
+  default_ms = 5000,
+  by_method = {
+    ping = 2000,
+    get_document = 2000,
+    search = 5000,
+  },
+}
+
 local function default_socket_path()
   local xdg = vim.env.XDG_DATA_HOME
   if xdg and xdg ~= "" then
@@ -38,6 +48,20 @@ end
 function M.setup(opts)
   opts = opts or {}
   M.options = vim.tbl_deep_extend("force", {}, M.defaults, opts)
+  -- Apply per-method timeouts. Backward compat: if user provided request_timeout_ms
+  -- but not timeouts, use that value only (no per-method overrides).
+  if not opts.timeouts then
+    if opts.request_timeout_ms then
+      -- User explicitly set request_timeout_ms; use it uniformly
+      M.options.timeouts = {
+        default_ms = opts.request_timeout_ms,
+        by_method = {},
+      }
+    else
+      -- User didn't set either; use full defaults (with per-method overrides)
+      M.options.timeouts = vim.tbl_deep_extend("force", {}, M.default_timeouts)
+    end
+  end
   if not M.options.socket_path then
     M.options.socket_path = default_socket_path()
   end
