@@ -185,3 +185,61 @@ describe("local_library.client", function()
     sc:revert(); cs:revert()
   end)
 end)
+
+describe("local_library.client reconnect", function()
+  local Client
+  local client
+  local captured_on_data
+
+  before_each(function()
+    captured_on_data = nil
+    package.loaded["local_library.client"] = nil
+    Client = require("local_library.client")
+  end)
+
+  it("reconnects when the initial channel is dead", function()
+    local connect_calls = 0
+    local sc = stub(vim.fn, "sockconnect", function(_m, _a, opts)
+      connect_calls = connect_calls + 1
+      captured_on_data = opts.on_data
+      return 42
+    end)
+    local cs = stub(vim.fn, "chansend").returns(1)
+    local chaninfo_calls = 0
+    local ci = stub(vim.api, "nvim_get_chan_info", function()
+      chaninfo_calls = chaninfo_calls + 1
+      if chaninfo_calls == 1 then return {} end
+      return { id = 42 }
+    end)
+
+    client = Client.new({ socket_path = "/tmp/test.sock", request_timeout_ms = 1000 })
+    local async = require("plenary.async")
+    local result
+    async.run(function()
+      _, result = client:ping()
+    end)
+    captured_on_data(42, { '{"jsonrpc":"2.0","id":1,"result":{"ok":true}}', "" })
+    vim.wait(500, function() return result ~= nil end)
+    assert.is_table(result)
+    assert.is_truthy(connect_calls >= 1)
+
+    sc:revert(); cs:revert(); ci:revert()
+  end)
+
+  it("returns DAEMON_UNREACHABLE when reconnect fails 3x", function()
+    local sc = stub(vim.fn, "sockconnect").returns(0)
+    local ci = stub(vim.api, "nvim_get_chan_info").returns({})
+
+    client = Client.new({ socket_path = "/tmp/test.sock", request_timeout_ms = 1000 })
+    local async = require("plenary.async")
+    local err
+    async.run(function()
+      err, _ = client:ping()
+    end)
+    vim.wait(2000, function() return err ~= nil end)
+    assert.is_table(err)
+    assert.equals("DAEMON_UNREACHABLE", err.error_code)
+
+    sc:revert(); ci:revert()
+  end)
+end)

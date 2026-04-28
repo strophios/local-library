@@ -20,6 +20,8 @@ local M = {}
 local Client = {}
 Client.__index = Client
 
+local MAX_RECONNECT_ATTEMPTS = 3
+
 --- Construct a new client (does not connect).
 ---@param opts {socket_path: string, request_timeout_ms: number?, timeouts: table?}
 function M.new(opts)
@@ -143,10 +145,30 @@ function Client:_timeout_for(method)
   return by[method] or self.timeouts.default_ms or self.request_timeout_ms
 end
 
+function Client:_try_reconnect()
+  for attempt = 1, MAX_RECONNECT_ATTEMPTS do
+    local ok = pcall(function() self:connect() end)
+    if ok and self:_is_alive() then
+      return true
+    end
+    -- Exponential backoff: 50ms, 150ms, 450ms.
+    local backoff = 50 * (3 ^ (attempt - 1))
+    vim.wait(backoff)
+  end
+  return false
+end
+
 --- Send a request; invoke `cb(err, result)` when the response arrives.
 function Client:request_async(method, params, cb)
   if not self:_is_alive() then
-    self:connect()
+    if not self:_try_reconnect() then
+      cb({
+        code = -3,
+        message = "daemon not running. Run :LocalLibraryDaemon start",
+        error_code = "DAEMON_UNREACHABLE",
+      }, nil)
+      return
+    end
   end
   self._next_id = self._next_id + 1
   local id = self._next_id
@@ -167,8 +189,19 @@ function Client:request_async(method, params, cb)
   local sent = vim.fn.chansend(self.chan_id, envelope)
   if sent == 0 then
     self._pending[id] = nil
-    cb({ code = -1, message = "channel send failed (daemon disconnected?)" }, nil)
-    return
+    if self:_try_reconnect() then
+      self._pending[id] = cb
+      sent = vim.fn.chansend(self.chan_id, envelope)
+    end
+    if sent == 0 then
+      self._pending[id] = nil
+      cb({
+        code = -1,
+        message = "channel send failed (daemon disconnected and reconnect exhausted)",
+        error_code = "DAEMON_UNREACHABLE",
+      }, nil)
+      return
+    end
   end
   local timeout_ms = self:_timeout_for(method)
   vim.defer_fn(function()
