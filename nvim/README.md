@@ -1,17 +1,30 @@
 # local-library.nvim
 
-Neovim plugin for claim-driven semantic search against the local-library
-corpus. Visual-select a claim → daemon-backed retrieval → Telescope
-picker → insert citekey + auto-append to your bibliography.
+Claim-driven semantic search for Neovim. Visual-select a sentence,
+hit `<leader>c`, browse a Telescope picker of relevant chunks from your
+library, insert a citation, auto-append the bibliography entry. Backed
+by the long-running local-library daemon.
 
-This is **Phase 4** scaffolding. The full citation flow (Telescope picker,
-auto-append, conflict resolution) ships in Phase 5.
+## Why this exists
 
-## Requirements
+Two existing tools serve adjacent needs:
 
-- Neovim 0.10+
-- The local-library daemon (`local-library daemon start`)
-- plenary.nvim on the runtime path (transitive dep via Telescope)
+- **telescope-zotero.nvim** (`<leader>z`) — author/title lookup. You
+  know the work you want to cite.
+- **local-library.nvim** (`<leader>c`) — claim-driven search. You have
+  a sentence and want to find evidence in your corpus.
+
+This plugin is the second one. It assumes you already wrote the claim;
+its job is to surface the supporting passages.
+
+## Quickstart
+
+```vim
+:LocalLibraryDaemon start    " starts the Python daemon
+:checkhealth local_library   " confirms daemon is reachable
+" In a markdown file with `bibliography: refs.json` in frontmatter:
+" Visual-select a sentence, press <leader>c
+```
 
 ## Installation (lazy.nvim, local development)
 
@@ -19,33 +32,51 @@ auto-append, conflict resolution) ships in Phase 5.
 {
   dir = "~/development/local-library/nvim",
   name = "local-library.nvim",
-  dependencies = { "nvim-lua/plenary.nvim" },
+  dependencies = {
+    "nvim-lua/plenary.nvim",
+    "nvim-telescope/telescope.nvim",
+  },
   lazy = false,
   config = function()
-    require("local_library").setup({
-      -- socket_path = "...",  -- override default; see :checkhealth output
-    })
+    require("local_library").setup({})
   end,
 }
 ```
 
-## Quickstart
+## Actions in the picker
 
-```vim
-:LocalLibraryDaemon start    " starts the Python daemon (one-time per session)
-:checkhealth local_library   " confirms daemon is reachable
-:LocalLibraryDaemon status   " pid, socket, uptime, resident memory
-```
+| Key   | Action |
+|-------|--------|
+| `<CR>` | Insert `[@citekey]` at the end of the visual selection. Auto-append CSL-JSON to your bibliography. |
+| `<C-t>` | Same as `<CR>`, plus insert the chunk text as a blockquote on a new line. |
+| `<C-o>` | Open the extracted markdown source at the cited chunk. |
+| `<Esc>` | Cancel. |
 
-## Configuration defaults
+If your buffer has no `bibliography:` frontmatter, the citekey is
+inserted but no bibliography write happens (a WARN notification
+clarifies this).
+
+## Configuration
+
+See `:help local-library-config` for the full list. Common overrides:
 
 ```lua
-{
-  socket_path = nil,  -- nil → resolve from $XDG_DATA_HOME or
-                      --        ~/Library/Application Support/local-library/daemon.sock
-  request_timeout_ms = 5000,
-}
+require("local_library").setup({
+  socket_path = "/custom/path/daemon.sock",
+  search = { limit = 20, rerank = true },
+  keymaps = { visual_cite = "<leader>x" },
+})
 ```
+
+## Bibliography conflict resolution
+
+When you insert a citekey for a doc that already has an entry in your
+bibliography but the metadata differs, a scratch buffer opens with a
+field-level diff:
+
+- `k` — keep your existing entry, insert citekey only
+- `o` — overwrite with the daemon's metadata, insert citekey
+- `q` / `<Esc>` — abort entirely (no citekey, no bib write)
 
 ## Running tests
 
@@ -58,6 +89,30 @@ cd nvim
 
 | Symptom | Action |
 |---------|--------|
-| `:checkhealth` says "daemon not running" | `:LocalLibraryDaemon start` |
-| Hangs on connect | check that `socket_path` matches what the daemon binds (`uv run local-library daemon status` from a shell) |
-| "module 'plenary.async' not found" | install plenary.nvim, or add it to `dependencies` in lazy spec |
+| `:checkhealth` says "no socket file" | `:LocalLibraryDaemon start` |
+| `:checkhealth` says "daemon ping failed" | check `~/Library/Application Support/local-library/logs/daemon.log` |
+| Hangs on connect | confirm `socket_path` matches daemon (`uv run local-library daemon status`) |
+| "DAEMON_UNREACHABLE" notifications | daemon crashed; restart with `:LocalLibraryDaemon start` |
+| `<leader>c` does nothing | default keymap may be disabled; see `:help local-library-keymaps` |
+| `module 'plenary.async' not found` | install plenary.nvim, or add it to lazy.nvim deps |
+
+## Architecture
+
+The plugin is split into:
+
+- **Transport layer** (`client.lua`) — JSON-RPC over Unix socket, with
+  reconnect, per-method timeouts, structured error envelopes.
+- **Data layer** (`bibliography.lua`, `selection.lua`, `actions.lua`)
+  — pure-ish, UI-agnostic. No Telescope imports.
+- **UI layer** (`telescope/_extensions/local_library.lua`,
+  `conflict_ui.lua`) — the only modules that import Telescope or
+  manipulate scratch buffers.
+
+Future UIs (a non-Telescope picker, a free-text input mode) can reuse
+the data layer without touching the daemon. See
+`docs/concepts/daemons.md` chapter 8 for the full architectural
+discussion.
+
+## License
+
+Same as the parent project.

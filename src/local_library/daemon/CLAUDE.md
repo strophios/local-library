@@ -1,6 +1,6 @@
 # Daemon Domain
 
-Last verified: 2026-04-24
+Last verified: 2026-04-27
 
 ## Purpose
 
@@ -14,9 +14,17 @@ This seed is updated per phase; Phase 7 marks it complete.
 
 - **Exposes:** Unix-domain-socket endpoint at `config.get_socket_path()`, serving
   line-delimited JSON-RPC 2.0 (protocol specified in Phase 2).
-- **Guarantees (Phase 1 only):** A single-instance daemon process can be started,
-  stopped, and queried for status via the `local-library daemon <subcommand>` CLI.
-  The socket echoes bytes during Phase 1; JSON-RPC semantics arrive in Phase 2.
+- **Guarantees:** Single-instance daemon with PID file lock + asyncio
+  Unix-socket server speaking line-delimited JSON-RPC 2.0. Methods:
+  `ping`, `search`, `get_document`. Library wrapped on a single-worker
+  ThreadPoolExecutor so sqlite-vec single-thread access is preserved
+  while asyncio handles socket I/O concurrently. Structured per-request
+  logs at INFO/WARNING/ERROR with method, id, status, duration_ms (and
+  error_code on domain errors). Clean shutdown on SIGTERM/SIGINT:
+  server closed → socket unlinked → Library closed → PID file removed
+  → exit 0. CLI lifecycle via `local-library daemon {start|stop|
+  status|restart|run}`. launchd socket-activation forward-compat shim
+  in `socket_activation.inherited_socket()`.
 - **Expects:** The existing `Library` orchestrator (wired in Phase 3).
 
 ## Dependencies
@@ -45,10 +53,14 @@ This seed is updated per phase; Phase 7 marks it complete.
 
 ## Key Files
 
-- `server.py` — asyncio server + main() entry point + signal handling
-- `pid_file.py` — atomic PID write + stale-detection + fcntl lock
-- `socket_activation.py` — launchd FD-inheritance shim (env-var-based stub)
-- (Phase 2+) `protocol.py`, `dispatcher.py`, `errors.py` — JSON-RPC layer
+- `server.py` — main(), asyncio server, signal handling, single-worker
+  Library executor, build_dispatcher
+- `pid_file.py` — atomic PID write + stale detection + fcntl lock
+- `socket_activation.py` — launchd FD-inheritance + manual-bind fallback
+- `protocol.py` — JSON-RPC parse + envelope builders (Functional Core)
+- `errors.py` — exception → JSON-RPC error envelope translator
+- `dispatcher.py` — method registry + async dispatch + structured logging
+- `methods.py` — search + get_document handlers + serialization
 
 ## Gotchas
 
@@ -56,3 +68,6 @@ This seed is updated per phase; Phase 7 marks it complete.
   when the server closes; shutdown code must do it explicitly.
 - Never use `os.umask` in daemon code (changes global process state); set
   socket file perms via `os.chmod(path, 0o600)` post-bind instead.
+- All Library calls must go through `run_on_library_thread(executor, ...)`.
+  Never invoke `_library.<anything>()` directly from the asyncio loop —
+  it will violate sqlite3's `check_same_thread` and may crash sqlite-vec.

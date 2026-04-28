@@ -1,6 +1,6 @@
 # Neovim Plugin Domain
 
-Last verified: 2026-04-24
+Last verified: 2026-04-27
 
 ## Purpose
 
@@ -15,10 +15,14 @@ and Telescope picker. Phases 6–7 add reliability and polish.
 - **Exposes:** `:LocalLibraryDaemon {start|stop|status|restart}` user
   commands; `require('local_library').setup({...})` for configuration;
   `:checkhealth local_library` diagnostics.
-- **Guarantees (Phase 4 only):** The plugin loads under lazy.nvim, can
-  ping the daemon over the configured socket path, surfaces daemon
-  status via `:checkhealth`, and shells out to the Python CLI for
-  `:LocalLibraryDaemon` lifecycle commands.
+- **Guarantees:** End-to-end claim-driven citation flow. Visual-select
+  → `<leader>c` → Telescope picker → insert citekey + auto-append
+  bibliography (or open extracted source). Reconnects on dead-channel
+  with bounded backoff; per-method timeouts; structured error
+  notifications via `notify.from_error`. `:checkhealth local_library`
+  surfaces plugin + daemon state. The plugin always passes
+  `boost_citekeys` (silent-inert hook); `doc_id` non-null surfaces
+  "scoping not yet available" (loud-error hook).
 - **Expects:** Neovim 0.10+; plenary.nvim available on the runtime path
   (transitive dep via Telescope, used directly here for async + tests).
   The daemon (Phase 1+) running, optionally — most commands degrade
@@ -59,10 +63,17 @@ and Telescope picker. Phases 6–7 add reliability and polish.
 ## Key Files
 
 - `lua/local_library/config.lua` — defaults + `setup` merge
-- `lua/local_library/client.lua` — JSON-RPC client over UDS
-- `lua/local_library/init.lua` — public surface
-- `lua/local_library/health.lua` — `:checkhealth`
-- `plugin/local_library.lua` — auto-loaded user commands
+- `lua/local_library/client.lua` — JSON-RPC client, reconnect, timeouts
+- `lua/local_library/init.lua` — public API + `cite()` orchestrator
+- `lua/local_library/health.lua` — `:checkhealth` hook
+- `lua/local_library/selection.lua` — visual-mode capture
+- `lua/local_library/bibliography.lua` — frontmatter parse + CSL-JSON I/O + diff
+- `lua/local_library/conflict_ui.lua` — scratch-buffer diff resolution
+- `lua/local_library/actions.lua` — insert/insert+text/open
+- `lua/local_library/notify.lua` — `error_code` → user-facing notification
+- `lua/telescope/_extensions/local_library.lua` — Telescope picker (only telescope.* import)
+- `plugin/local_library.lua` — auto-loaded user commands + keymap
+- `doc/local_library.txt` — vimdoc (`:help local-library`)
 
 ## Gotchas
 
