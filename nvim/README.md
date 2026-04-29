@@ -26,11 +26,39 @@ its job is to surface the supporting passages.
 " Visual-select a sentence, press <leader>c
 ```
 
-## Installation (lazy.nvim, local development)
+## Installation (lazy.nvim, from github)
 
 ```lua
 {
-  dir = "~/development/local-library/nvim",
+  "strophios/local-library",
+  dependencies = {
+    "nvim-lua/plenary.nvim",
+    "nvim-telescope/telescope.nvim",
+  },
+  lazy = false,
+  config = function()
+    require("local_library").setup({})
+  end,
+}
+```
+
+The plugin code lives in the `nvim/` subdirectory of the repository, but
+top-level symlinks (`lua → nvim/lua`, `plugin → nvim/plugin`,
+`doc → nvim/doc`) make it installable by any plugin manager that follows
+the standard runtimepath conventions. No `subdir` workaround needed.
+
+You'll also need the local-library Python package and its daemon — see
+the parent project's README for installation. The Neovim plugin needs
+`local-library-daemon` (or `uv run local-library-daemon`) discoverable on
+PATH so `:LocalLibraryDaemon start` can spawn it.
+
+### Local development (working on the plugin itself)
+
+If you're hacking on the plugin code directly, point at your checkout:
+
+```lua
+{
+  dir = "~/development/local-library",  -- repo root, not nvim/
   name = "local-library.nvim",
   dependencies = {
     "nvim-lua/plenary.nvim",
