@@ -49,6 +49,43 @@ describe("local_library.conflict_ui", function()
     assert.equals("keep", resolution)
   end)
 
+  it("resolve handles table-valued fields without 'newlines' error", function()
+    -- Regression: CSL-JSON author lists are tables. vim.inspect renders nested
+    -- tables across multiple lines, which nvim_buf_set_lines rejects with
+    -- "'replacement string' item contains newlines". The formatter must split
+    -- inspect output on \n before pushing into the line list.
+    local diff = {
+      changed_fields = {
+        author = {
+          existing = { { family = "Smith", given = "Jane" } },
+          incoming = { { family = "Doe", given = "John" } },
+        },
+      },
+    }
+    local resolution
+    local ok, err = pcall(function()
+      conflict_ui.resolve(diff, function(r) resolution = r end)
+    end)
+    assert.is_true(ok, "resolve must not error on table-valued diff fields: " .. tostring(err))
+
+    local found = false
+    for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+      if vim.bo[bufnr].filetype == "diff" then
+        found = true
+        local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+        local joined = table.concat(lines, "\n")
+        assert.is_truthy(joined:match("Smith"), "expected existing author 'Smith' in diff output")
+        assert.is_truthy(joined:match("Doe"), "expected incoming author 'Doe' in diff output")
+        vim.api.nvim_buf_call(bufnr, function()
+          vim.api.nvim_feedkeys("q", "x", false)
+        end)
+        break
+      end
+    end
+    assert.is_true(found, "expected a diff buffer to be created")
+    vim.wait(100, function() return resolution ~= nil end)
+  end)
+
   it("'o' invokes callback with 'overwrite'", function()
     local diff = { changed_fields = { title = { existing = "A", incoming = "B" } } }
     local resolution

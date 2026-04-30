@@ -15,6 +15,10 @@ describe("local_library.actions", function()
     stub(vim.api, "nvim_buf_set_text", function(_buf, sl, sc, el, ec, lines)
       recorded = { sl = sl, sc = sc, el = el, ec = ec, lines = lines }
     end)
+    -- 20-byte line so end_col=10 clamps to itself (no truncation expected here).
+    stub(vim.api, "nvim_buf_get_lines", function(_buf, _s, _e, _strict)
+      return { "this is a long line." }
+    end)
 
     actions.insert_citekey(ctx, result, function() end)
     assert.same({ "[@Smith2023]" }, recorded.lines)
@@ -22,6 +26,7 @@ describe("local_library.actions", function()
     assert.equals(10, recorded.sc)
 
     vim.api.nvim_buf_set_text:revert()
+    vim.api.nvim_buf_get_lines:revert()
   end)
 
   it("insert_citekey skips bib write when refs_path is nil", function()
@@ -39,6 +44,47 @@ describe("local_library.actions", function()
     assert.is_true(found)
     vim.notify:revert()
     vim.api.nvim_buf_set_text:revert()
+  end)
+
+  it("insert_citekey clamps end_col to line byte-length (v$ / V-mode v:maxcol)", function()
+    -- Regression: getpos("'>") returns v:maxcol (~2^31-1) for both V-mode
+    -- and v$ in characterwise visual mode. Without clamping, nvim_buf_set_text
+    -- raises "Invalid 'start_col': out of range" and the throw poisons the
+    -- transport buffer for the next request.
+    local result = { citekey = "Smith2023" }
+    local ctx = { end_line = 1, end_col = 2147483647, refs_path = nil, bufnr = 7 }
+    local recorded
+    stub(vim.api, "nvim_buf_set_text", function(_buf, sl, sc, el, ec, lines)
+      recorded = { sl = sl, sc = sc, el = el, ec = ec, lines = lines }
+    end)
+    stub(vim.api, "nvim_buf_get_lines", function(_buf, _s, _e, _strict)
+      return { "hello world" }  -- 11 bytes
+    end)
+    actions.insert_citekey(ctx, result, function() end)
+    assert.equals(11, recorded.sc)
+    assert.equals(11, recorded.ec)
+    assert.same({ "[@Smith2023]" }, recorded.lines)
+    vim.api.nvim_buf_set_text:revert()
+    vim.api.nvim_buf_get_lines:revert()
+  end)
+
+  it("insert_citekey_with_text clamps end_col to line byte-length", function()
+    local result = { citekey = "Smith2023", chunk_text = "quote" }
+    local ctx = { end_line = 3, end_col = 2147483647, refs_path = nil, bufnr = 7 }
+    local set_text_recorded
+    stub(vim.api, "nvim_buf_set_text", function(_buf, sl, sc, el, ec, lines)
+      set_text_recorded = { sl = sl, sc = sc, el = el, ec = ec, lines = lines }
+    end)
+    stub(vim.api, "nvim_buf_set_lines", function() end)
+    stub(vim.api, "nvim_buf_get_lines", function(_buf, _s, _e, _strict)
+      return { "hello" }  -- 5 bytes
+    end)
+    actions.insert_citekey_with_text(ctx, result, function() end)
+    assert.equals(5, set_text_recorded.sc)
+    assert.equals(5, set_text_recorded.ec)
+    vim.api.nvim_buf_set_text:revert()
+    vim.api.nvim_buf_set_lines:revert()
+    vim.api.nvim_buf_get_lines:revert()
   end)
 
   it("insert_citekey_with_text inserts citekey + blockquote on new line", function()

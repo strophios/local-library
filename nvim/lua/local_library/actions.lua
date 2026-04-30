@@ -7,6 +7,28 @@ local conflict_ui = require("local_library.conflict_ui")
 
 local M = {}
 
+--- Clamp a 1-indexed visual end_col to the byte length of the target line.
+---
+--- `getpos("'>")` returns `v:maxcol` (~2^31-1) for V-mode and for v$ in
+--- characterwise mode. Passing that value to `nvim_buf_set_text` raises
+--- "Invalid 'start_col': out of range". Reading the line and clamping to
+--- its byte length gives a valid 0-indexed insertion point at end-of-line.
+---@param bufnr integer
+---@param end_line integer  1-indexed line number
+---@param end_col integer   1-indexed column from getpos()
+---@return integer  0-indexed byte column safe for nvim_buf_set_text
+local function clamp_end_col(bufnr, end_line, end_col)
+  -- strict=false: degrade to "" if the line is out of range (e.g., buffer was
+  -- modified between selection capture and insert). Better to insert at column
+  -- 0 of a missing line than to throw and poison the transport buffer.
+  local line = vim.api.nvim_buf_get_lines(bufnr, end_line - 1, end_line, false)[1] or ""
+  local line_bytes = #line
+  if end_col > line_bytes then
+    return line_bytes
+  end
+  return end_col
+end
+
 --- Insert a citekey of the form `[@citekey]` at the end of the visual selection.
 ---@param ctx {end_line: integer, end_col: integer, refs_path: string|nil, bufnr: integer?}
 ---@param result {citekey: string, doc_id: string?}
@@ -16,10 +38,11 @@ function M.insert_citekey(ctx, result, cb)
   local citekey_text = "[@" .. result.citekey .. "]"
 
   local function do_insert()
+    local col = clamp_end_col(bufnr, ctx.end_line, ctx.end_col)
     vim.api.nvim_buf_set_text(
       bufnr,
-      ctx.end_line - 1, ctx.end_col,
-      ctx.end_line - 1, ctx.end_col,
+      ctx.end_line - 1, col,
+      ctx.end_line - 1, col,
       { citekey_text }
     )
   end
@@ -36,10 +59,11 @@ function M.insert_citekey_with_text(ctx, result, cb)
   local citekey_text = "[@" .. result.citekey .. "]"
 
   local function do_insert()
+    local col = clamp_end_col(bufnr, ctx.end_line, ctx.end_col)
     vim.api.nvim_buf_set_text(
       bufnr,
-      ctx.end_line - 1, ctx.end_col,
-      ctx.end_line - 1, ctx.end_col,
+      ctx.end_line - 1, col,
+      ctx.end_line - 1, col,
       { citekey_text }
     )
     local lines = {}

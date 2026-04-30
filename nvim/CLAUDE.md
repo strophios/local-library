@@ -1,6 +1,6 @@
 # Neovim Plugin Domain
 
-Last verified: 2026-04-27
+Last verified: 2026-04-30
 
 ## Purpose
 
@@ -59,6 +59,15 @@ and Telescope picker. Phases 6–7 add reliability and polish.
   stay in `lua/telescope/_extensions/`.
 - Public API surface for Phase 4 is `require('local_library').{setup,
   config, client, run_daemon_cli}`. Phase 5 adds `cite()` and friends.
+- `client._on_data` is exception-safe: the buffer state advances
+  before any dispatch, and each dispatch is `pcall`-trapped. A throw
+  from a registered callback is surfaced via `vim.notify` (WARN) and
+  does not corrupt the line buffer or skip subsequent dispatches in
+  the same callback batch.
+- `actions.insert_citekey` / `insert_citekey_with_text` clamp the
+  visual `end_col` to the byte length of the target line. This
+  handles both V-mode and `v$` in characterwise mode, where
+  `getpos("'>")` returns `v:maxcol` (~2³¹−1).
 
 ## Key Files
 

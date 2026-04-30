@@ -48,31 +48,41 @@ function Client:_on_data(_chan_id, data, _event)
     return
   end
 
-  -- The first element appends to the existing buffer (continuation of any
-  -- partial line from a prior callback).
-  self._buffer = self._buffer .. data[1]
-
+  -- Exception safety: collect the lines to dispatch and advance _buffer
+  -- to its post-consumption state BEFORE invoking any dispatch callback.
+  -- A throw inside a dispatch callback must not leave _buffer holding the
+  -- just-consumed line — otherwise the next inbound chunk gets concatenated
+  -- onto stale content and fails to JSON-decode, surfacing as a "malformed
+  -- daemon response" warning while the next request silently times out.
+  local to_dispatch = {}
   if #data > 1 then
-    -- We have more than one element. The first element completes a line
-    -- (because there's a second element, meaning the byte stream had a
-    -- newline after the first element). Dispatch the completed line.
-    if self._buffer ~= "" then
-      self:_dispatch(self._buffer)
+    -- The first element completes the partial line in the buffer.
+    local first = self._buffer .. data[1]
+    if first ~= "" then
+      table.insert(to_dispatch, first)
     end
-    self._buffer = ""
-
-    -- Middle elements (if any) are also complete lines.
+    -- Middle elements are complete standalone lines.
     for i = 2, #data - 1 do
       if data[i] ~= "" then
-        self:_dispatch(data[i])
+        table.insert(to_dispatch, data[i])
       end
     end
-
-    -- Last element either completes a final line (if the previous element
-    -- was newline-terminated) or starts a new partial line. Per convention,
-    -- a trailing empty string means newline-terminated; a non-empty trailing
-    -- string starts a partial line that will be completed in the next callback.
+    -- Last element either completes the final line (if it's "") or starts
+    -- a new partial line. Either way it becomes the new buffer.
     self._buffer = data[#data]
+  else
+    -- Single non-empty element: continuation of a partial line; accumulate.
+    self._buffer = self._buffer .. data[1]
+  end
+
+  for _, line in ipairs(to_dispatch) do
+    local ok, err = pcall(self._dispatch, self, line)
+    if not ok then
+      vim.notify(
+        "local-library: dispatch callback raised: " .. tostring(err),
+        vim.log.levels.WARN
+      )
+    end
   end
 end
 

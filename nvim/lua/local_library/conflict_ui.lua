@@ -9,6 +9,25 @@
 
 local M = {}
 
+--- Append a "<prefix><value>" rendering to `lines`, splitting on newlines.
+---
+--- vim.inspect produces multi-line output for nested tables (e.g., CSL-JSON
+--- author lists). nvim_buf_set_lines rejects any element containing \n, so
+--- we explicitly split and prefix only the first line; continuation lines
+--- get a two-space indent so the diff stays readable.
+local function _push_diff_value(lines, prefix, value)
+  local rendered = vim.inspect(value)
+  local first = true
+  for line in (rendered .. "\n"):gmatch("(.-)\n") do
+    if first then
+      table.insert(lines, prefix .. line)
+      first = false
+    else
+      table.insert(lines, "  " .. line)
+    end
+  end
+end
+
 local function _format_diff_lines(diff)
   local lines = {
     "# Bibliography conflict",
@@ -25,8 +44,8 @@ local function _format_diff_lines(diff)
   }
   for field, change in pairs(diff.changed_fields) do
     table.insert(lines, "@@ field: " .. field .. " @@")
-    table.insert(lines, "- " .. vim.inspect(change.existing))
-    table.insert(lines, "+ " .. vim.inspect(change.incoming))
+    _push_diff_value(lines, "- ", change.existing)
+    _push_diff_value(lines, "+ ", change.incoming)
     table.insert(lines, "")
   end
   return lines

@@ -158,6 +158,60 @@ describe("local_library.client", function()
     assert.is_true(result.ok)
   end)
 
+  it("recovers buffer state when a dispatch callback throws", function()
+    -- Regression: a callback that throws inside _dispatch must not leave
+    -- _buffer holding the just-dispatched response. If it does, the next
+    -- inbound response gets concatenated onto the stale content and the
+    -- combined line fails to JSON-decode — the next request appears to
+    -- timeout because its targeted callback never fires.
+    client:connect()
+    local first_invoked = 0
+    client:request_async("first", {}, function(_err, _result)
+      first_invoked = first_invoked + 1
+      error("boom")
+    end)
+    -- Suppress notify noise from the expected post-throw warning.
+    stub(vim, "notify")
+    -- First response: dispatch invokes the throwing callback. The transport
+    -- layer must not propagate the error or corrupt _buffer.
+    pcall(captured_on_data, 42,
+      { '{"jsonrpc":"2.0","id":1,"result":{"ok":true}}', "" })
+    assert.equals(1, first_invoked)
+
+    local second_result
+    client:request_async("second", {}, function(_err, result)
+      second_result = result
+    end)
+    captured_on_data(42,
+      { '{"jsonrpc":"2.0","id":2,"result":{"ok":"second"}}', "" })
+    vim.wait(100, function() return second_result ~= nil end)
+
+    assert.is_table(second_result)
+    assert.equals("second", second_result.ok)
+    vim.notify:revert()
+  end)
+
+  it("notifies when a dispatch callback throws", function()
+    client:connect()
+    local notify_calls = {}
+    stub(vim, "notify", function(msg, level)
+      table.insert(notify_calls, { msg = msg, level = level })
+    end)
+    client:request_async("first", {}, function(_err, _result)
+      error("dispatch boom")
+    end)
+    captured_on_data(42, { '{"jsonrpc":"2.0","id":1,"result":{"ok":true}}', "" })
+
+    local saw_warning = false
+    for _, c in ipairs(notify_calls) do
+      if c.msg:match("dispatch boom") then
+        saw_warning = true
+      end
+    end
+    assert.is_true(saw_warning, "expected vim.notify to surface the dispatch error")
+    vim.notify:revert()
+  end)
+
   it("uses per-method timeout from config", function()
     package.loaded["local_library.client"] = nil
     local Client = require("local_library.client")
