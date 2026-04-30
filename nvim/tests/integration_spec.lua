@@ -34,6 +34,10 @@ describe("end-to-end daemon roundtrip", function()
       env = vim.tbl_extend("force", vim.fn.environ(), {
         XDG_DATA_HOME = data_dir,
         LOCAL_LIBRARY_DATA_DIR = data_dir .. "/local-library",
+        -- Skip model warmup: this test only pings, doesn't search; loading
+        -- ~250 MB of embedder + reranker would exceed the test's timeout
+        -- and force SIGTERM to wait until warmup completed.
+        LOCAL_LIBRARY_DAEMON_SKIP_WARMUP = "1",
       }),
       detach = true,
       on_exit = function() end,

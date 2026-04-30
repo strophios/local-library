@@ -2,6 +2,7 @@
 
 import asyncio
 import threading
+from unittest.mock import MagicMock, patch
 
 from local_library.daemon import server
 
@@ -66,3 +67,45 @@ def test_run_on_library_thread_serializes_calls() -> None:
 
 def test_library_singleton_initially_none() -> None:
     assert server._library is None
+
+
+def test_construct_library_skips_warmup_when_env_set(monkeypatch) -> None:
+    """LOCAL_LIBRARY_DAEMON_SKIP_WARMUP=1 disables warmup at startup.
+
+    Used by integration tests that spawn ephemeral daemons and would
+    otherwise pay (and time out on) the model-load cost.
+    """
+    monkeypatch.setenv("LOCAL_LIBRARY_DAEMON_SKIP_WARMUP", "1")
+    with patch("local_library.core.library.Library") as mock_library_cls:
+        mock_lib = MagicMock()
+        mock_library_cls.return_value = mock_lib
+
+        result = server._construct_library()
+
+        mock_library_cls.assert_called_once_with(embed_on_add=False)
+        mock_lib.__enter__.assert_called_once()
+        # Warmup must NOT run when the env var is set.
+        mock_lib.warmup.assert_not_called()
+        assert result is mock_lib
+
+
+def test_construct_library_warms_up_models() -> None:
+    """The startup helper must call warmup() so the first request is warm.
+
+    Plugin clients see sub-5s timeouts on `search`; the cold load of
+    nomic + cross-encoder models exceeds that. Warming during daemon
+    startup moves the cost off the request path.
+    """
+    with patch("local_library.core.library.Library") as mock_library_cls:
+        mock_lib = MagicMock()
+        mock_library_cls.return_value = mock_lib
+
+        result = server._construct_library()
+
+        # Library constructed with embed_on_add=False (the daemon does not
+        # ingest documents).
+        mock_library_cls.assert_called_once_with(embed_on_add=False)
+        # Lifecycle and warmup invoked in order.
+        mock_lib.__enter__.assert_called_once()
+        mock_lib.warmup.assert_called_once()
+        assert result is mock_lib

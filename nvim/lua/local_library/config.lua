@@ -24,13 +24,19 @@ M.defaults = {
   },
 }
 
--- Lazy-loaded per-method timeout defaults (only merged if user doesn't provide timeouts)
+-- Lazy-loaded per-method timeout defaults (only merged if user doesn't provide timeouts).
+--
+-- `search`'s timeout is generous (60s) because the daemon may pay the cold-load
+-- penalty for nomic-embed + cross-encoder (~5-30s combined) on a freshly-started
+-- daemon — even though `daemon start` warms models eagerly now, a plugin client
+-- that reconnects to a daemon someone else just started should still complete
+-- its first search rather than time out and surface a confusing error.
 M.default_timeouts = {
   default_ms = 5000,
   by_method = {
     ping = 2000,
     get_document = 2000,
-    search = 5000,
+    search = 60000,
   },
 }
 

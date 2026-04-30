@@ -1148,6 +1148,72 @@ class TestGetRetrieverReranking:
                 mock_get.assert_called_once_with(mode="hybrid", rerank=False)
 
 
+class TestLibraryWarmup:
+    """Tests for Library.warmup() — eager model loading for daemon startup."""
+
+    @pytest.fixture()
+    def lib(self, tmp_path: Path) -> Generator[Library, None, None]:
+        with Library(
+            db_path=tmp_path / "test.db",
+            storage_dir=tmp_path / "storage",
+            extracted_dir=tmp_path / "extracted",
+        ) as lib:
+            yield lib
+
+    def test_warmup_loads_embedder_and_reranker(self, lib: Library) -> None:
+        """warmup() instantiates embedder + reranker and forces _load_model on both.
+
+        The daemon calls warmup() during startup so the first search request
+        does not pay the cold-load penalty (~5-30s for nomic + cross-encoder).
+        """
+        with (
+            patch("local_library.embeddings.nomic.NomicEmbedder") as mock_embedder_cls,
+            patch("local_library.embeddings.reranking.CrossEncoderReranker") as mock_reranker_cls,
+        ):
+            mock_embedder = MagicMock()
+            mock_reranker = MagicMock()
+            mock_embedder_cls.return_value = mock_embedder
+            mock_reranker_cls.return_value = mock_reranker
+
+            lib.warmup()
+
+            # Embedder constructed and model loaded.
+            assert lib._embedder is mock_embedder
+            mock_embedder._load_model.assert_called_once()
+            # Reranker constructed and model loaded.
+            assert lib._reranker is mock_reranker
+            mock_reranker._load_model.assert_called_once()
+
+    def test_warmup_reuses_existing_embedder(self, lib: Library) -> None:
+        """warmup() does not replace an already-instantiated embedder."""
+        existing = MagicMock()
+        lib._embedder = existing
+        with patch("local_library.embeddings.reranking.CrossEncoderReranker") as mock_reranker_cls:
+            mock_reranker_cls.return_value = MagicMock()
+            lib.warmup()
+            assert lib._embedder is existing
+            existing._load_model.assert_called_once()
+
+    def test_warmup_is_idempotent(self, lib: Library) -> None:
+        """Calling warmup() twice does not double-load (model load is itself
+        guarded; warmup must not reset state)."""
+        with (
+            patch("local_library.embeddings.nomic.NomicEmbedder") as mock_embedder_cls,
+            patch("local_library.embeddings.reranking.CrossEncoderReranker") as mock_reranker_cls,
+        ):
+            mock_embedder = MagicMock()
+            mock_reranker = MagicMock()
+            mock_embedder_cls.return_value = mock_embedder
+            mock_reranker_cls.return_value = mock_reranker
+
+            lib.warmup()
+            lib.warmup()
+
+            # Class instantiated only once across both calls.
+            mock_embedder_cls.assert_called_once()
+            mock_reranker_cls.assert_called_once()
+
+
 class TestLibraryProgressCallback:
     """Tests for Library progress callback forwarding."""
 

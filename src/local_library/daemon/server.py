@@ -44,6 +44,13 @@ _LOGGER = logging.getLogger("local_library.daemon")
 _library: Library | None = None
 _library_executor: ThreadPoolExecutor | None = None
 
+# Track active client connections so shutdown can force-close them. Without
+# this, `Server.wait_closed()` blocks indefinitely on long-lived clients (e.g.,
+# the Neovim plugin's persistent JSON-RPC channel) — `Server.close()` refuses
+# new connections but leaves existing ones intact, which means SIGTERM gets
+# silently parked until SIGKILL. See test_shutdown_completes_with_held_client_connection.
+_active_writers: set[asyncio.StreamWriter] = set()
+
 
 def library_version() -> str:
     """Return the installed local-library distribution version."""
@@ -132,7 +139,12 @@ async def protocol_handler(
     Continues until the client half-closes (EOF) or an unrecoverable transport
     error occurs. Malformed messages produce an error envelope and the loop
     continues — a single bad message does not terminate the connection.
+
+    The writer is tracked in `_active_writers` for the duration of the
+    connection so that shutdown can force-close clients that don't disconnect
+    on their own.
     """
+    _active_writers.add(writer)
     try:
         while True:
             raw = await reader.readline()
@@ -166,6 +178,7 @@ async def protocol_handler(
                 writer.write(response_line.encode("utf-8"))
                 await writer.drain()
     finally:
+        _active_writers.discard(writer)
         try:
             writer.close()
             await writer.wait_closed()
@@ -183,6 +196,17 @@ async def _serve(listening: socket.socket, stop_event: asyncio.Event) -> None:
     async with server_obj:
         await stop_event.wait()
         server_obj.close()
+        # Force-close any active client connections. server_obj.close() refuses
+        # new connections but does not affect existing ones; without this,
+        # wait_closed() would block indefinitely on long-lived clients (e.g.,
+        # the Neovim plugin's persistent channel) and SIGTERM would be parked.
+        # Snapshot the set first since protocol_handler discards from it as
+        # writers close, which would mutate during iteration.
+        for writer in list(_active_writers):
+            try:
+                writer.close()
+            except Exception:  # noqa: BLE001 — best-effort shutdown
+                pass
         await server_obj.wait_closed()
 
 
@@ -217,6 +241,32 @@ def _make_library_executor() -> ThreadPoolExecutor:
     directly. See docs/concepts/daemons.md §5 for the full rationale.
     """
     return ThreadPoolExecutor(max_workers=1, thread_name_prefix="library")
+
+
+def _construct_library() -> Library:
+    """Build, enter, and warm up the Library on the executor thread.
+
+    Construction matches the codebase's idiomatic Library lifecycle (every
+    other Library user — MCP, CLI, integration tests — uses
+    `with Library(...) as lib:`); the matching __exit__ is fired in main()'s
+    finally block by calling close() on the executor.
+
+    `warmup()` eagerly loads the embedder + cross-encoder so the daemon's
+    "ready" log is honest: the first plugin search request finds a warm
+    system rather than paying ~5-30s of cold-load latency that exceeds the
+    plugin's per-method timeout.
+
+    Setting the `LOCAL_LIBRARY_DAEMON_SKIP_WARMUP` env var to a non-empty
+    value disables warmup. Used by integration tests that spawn ephemeral
+    daemons and would otherwise pay (and time out on) the model-load cost.
+    """
+    from local_library.core.library import Library as _Library
+
+    lib = _Library(embed_on_add=False)
+    lib.__enter__()
+    if not os.environ.get("LOCAL_LIBRARY_DAEMON_SKIP_WARMUP"):
+        lib.warmup()
+    return lib
 
 
 async def run_on_library_thread(
@@ -262,20 +312,10 @@ def main() -> int:
         stop_event = asyncio.Event()
         _install_signal_handlers(loop, stop_event)
 
-        from local_library.core.library import Library
-
-        # Construct AND enter the Library on the executor thread. Entering
-        # via __enter__ matches the codebase's idiomatic Library lifecycle
-        # (every other Library user — MCP, CLI, integration tests — uses
-        # `with Library(...) as lib:`); the matching __exit__ is fired in
-        # the finally block below by calling close() on the executor.
-        def _construct_and_enter() -> Library:
-            lib = Library(embed_on_add=False)
-            lib.__enter__()
-            return lib
-
+        # Construct, enter, AND warm up the Library on the executor thread.
+        # See _construct_library for rationale on the warmup step.
         _library = loop.run_until_complete(
-            run_on_library_thread(_library_executor, _construct_and_enter)
+            run_on_library_thread(_library_executor, _construct_library)
         )
         _LOGGER.info("daemon ready at %s", config.get_socket_path())
         loop.run_until_complete(_serve(listening, stop_event))

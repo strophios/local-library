@@ -57,4 +57,20 @@ describe("local_library.config", function()
     assert.is_truthy(config.options.socket_path)
     assert.equals(99, config.options.request_timeout_ms)
   end)
+
+  it("default search timeout accommodates daemon model warmup", function()
+    -- Defense in depth: even though the daemon now warms models during
+    -- `daemon start`, a fresh daemon that the plugin reconnects to
+    -- mid-session may still pay the cold-load penalty before processing
+    -- the first request. The default per-method timeout for `search`
+    -- must accommodate that worst case (~30s for nomic + cross-encoder).
+    config.setup({})
+    local search_timeout = config.options.timeouts.by_method.search
+    assert.is_number(search_timeout)
+    assert.is_truthy(
+      search_timeout >= 30000,
+      "default search timeout " .. tostring(search_timeout)
+        .. "ms is too low for cold-load fallback (need >= 30000ms)"
+    )
+  end)
 end)

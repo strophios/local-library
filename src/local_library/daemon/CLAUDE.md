@@ -1,6 +1,6 @@
 # Daemon Domain
 
-Last verified: 2026-04-27
+Last verified: 2026-04-30
 
 ## Purpose
 
@@ -43,18 +43,34 @@ This seed is updated per phase; Phase 7 marks it complete.
 - **CLI-managed process lifecycle for MVP.** launchd socket-activation is
   scaffolded (env-var-based FD inheritance hook in Phase 1) but not wired.
 - **Python 3.10 compatibility.** Socket cleanup is manual (no `cleanup_socket=True`).
+- **Eager model warmup at startup.** `_construct_library` calls `Library.warmup()`
+  on the executor thread before the daemon logs "ready" or accepts traffic. This
+  moves the embedder + cross-encoder cold-load cost (~5-30s) off the request path
+  so the plugin's first search finds a warm system. Override via
+  `LOCAL_LIBRARY_DAEMON_SKIP_WARMUP=1` for tests that exercise transport only.
+- **Force-close clients on shutdown.** `_active_writers` tracks in-flight
+  connections; SIGTERM/SIGINT closes each one before awaiting `Server.wait_closed()`.
+  Without this, long-lived plugin clients keep `wait_closed()` parked and the
+  daemon ignores SIGTERM until the client disconnects (or SIGKILL).
 
 ## Invariants
 
 - PID file is exclusive-locked for the lifetime of the process; if the lock
   cannot be acquired at startup, a live peer is assumed and startup refuses.
-- On clean shutdown (SIGTERM/SIGINT): server closed → socket file unlinked →
-  PID file unlocked and removed → process exits 0.
+- On clean shutdown (SIGTERM/SIGINT): server closed → active client connections
+  force-closed → server `wait_closed()` completes → Library closed → socket file
+  unlinked → PID file unlocked and removed → process exits 0.
+- `Library.warmup()` is invoked synchronously during startup (skippable via the
+  `LOCAL_LIBRARY_DAEMON_SKIP_WARMUP` env var). Note: while warmup runs, signal
+  handlers fire on the loop thread but the loop is parked awaiting the executor
+  task, so SIGTERM is honored only after warmup completes. Tests that need fast
+  shutdown should set the skip env var.
 
 ## Key Files
 
 - `server.py` — main(), asyncio server, signal handling, single-worker
-  Library executor, build_dispatcher
+  Library executor, build_dispatcher, `_construct_library` (with warmup),
+  `_active_writers` set + force-close-on-shutdown
 - `pid_file.py` — atomic PID write + stale detection + fcntl lock
 - `socket_activation.py` — launchd FD-inheritance + manual-bind fallback
 - `protocol.py` — JSON-RPC parse + envelope builders (Functional Core)

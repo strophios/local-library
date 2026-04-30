@@ -13,6 +13,10 @@ describe("reliability tier 1", function()
       env = vim.tbl_extend("force", vim.fn.environ(), {
         XDG_DATA_HOME = tmp_dir,
         LOCAL_LIBRARY_DATA_DIR = tmp_dir .. "/local-library",
+        -- Skip model warmup: tier-1 reliability tests only exercise transport
+        -- (kill/restart/reconnect), not search. Loading the embedder +
+        -- reranker would exceed the kill/ping timeout windows.
+        LOCAL_LIBRARY_DAEMON_SKIP_WARMUP = "1",
       }),
       detach = true,
     })

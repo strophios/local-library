@@ -1,6 +1,6 @@
 # Core Domain
 
-Last verified: 2026-04-28
+Last verified: 2026-04-30
 
 ## Purpose
 
@@ -40,6 +40,7 @@ Owns the document lifecycle: what a document IS (models), how it's persisted (st
   - RAGInterface lazily initialized on first query() or query_stream() call
   - Library.get_chunk_count(doc_id: UUID) returns 0 if sqlite-vec unavailable or document has no chunks
   - Library.get_chunks(doc_id: UUID, start, end) returns empty list if sqlite-vec unavailable or document has no chunks; supports optional index range slicing
+  - Library.warmup() eagerly loads embedder + cross-encoder models so the next search avoids the cold-load penalty. Idempotent. Used by the long-running daemon at startup.
   - Library.list(status, year, year_missing, author_contains, title_contains, citekey_prefix) returns documents matching all provided filters (AND semantics). `year` and `year_missing` are mutually exclusive; passing both raises ValueError. Substring filters (`author_contains`, `title_contains`) are case-insensitive with LIKE metacharacter escaping. `citekey_prefix` is case-insensitive prefix match.
 - **Expects**: Sources handled by at least one registered acquirer; files handled by at least one extractor
 

@@ -1239,6 +1239,32 @@ class Library:
 
         return self._rag_interface
 
+    def warmup(self) -> None:
+        """Eagerly load embedder and cross-encoder models.
+
+        Forces both models to be resident in memory so the next search
+        request does not pay the cold-load penalty (~5-30s combined for
+        nomic-embed-text-v1.5 + cross-encoder/ms-marco-MiniLM-L-12-v2).
+
+        Idempotent: subsequent calls reuse cached instances and the
+        models' internal _load_model() is itself guarded against
+        re-loading. Independent of sqlite-vec availability — the
+        models load even when vector storage is unavailable.
+
+        Used by the long-running daemon during startup so that the
+        first plugin request finds a warm system.
+        """
+        from local_library.embeddings.nomic import NomicEmbedder
+
+        if self._embedder is None:
+            self._embedder = NomicEmbedder(batch_size=self._embedding_batch_size)
+        # Explicit load (rather than relying on lazy_load=False at construction)
+        # so the call site is uniform regardless of whether the embedder was
+        # constructed here or pre-existed from get_retriever(). _load_model
+        # is idempotent.
+        self._embedder._load_model()
+        self._get_reranker()._load_model()
+
     def _get_reranker(self) -> CrossEncoderReranker:
         """Get or create CrossEncoderReranker instance.
 

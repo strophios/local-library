@@ -31,6 +31,12 @@ def daemon_env(short_tmp_path: Path) -> dict[str, str]:
     env["XDG_DATA_HOME"] = str(short_tmp_path / "data")
     env["LOCAL_LIBRARY_DATA_DIR"] = str(short_tmp_path / "data" / "local-library")
     env["PYTHONUNBUFFERED"] = "1"
+    # Skip model warmup. Lifecycle tests only exercise transport + signal
+    # handling, not search; loading ~250 MB of embedder + reranker would
+    # gate SIGTERM responsiveness on warmup completion (asyncio signal
+    # handlers fire on the loop thread but the loop is parked awaiting
+    # the executor task during _construct_library).
+    env["LOCAL_LIBRARY_DAEMON_SKIP_WARMUP"] = "1"
     return env
 
 
@@ -104,6 +110,65 @@ def test_daemon_responds_to_ping_and_shuts_down(
         assert not socket_path.exists(), "daemon did not unlink socket on shutdown"
         assert not pid_path.exists(), "daemon did not remove PID file on shutdown"
     finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=5)
+
+
+def test_shutdown_completes_with_held_client_connection(
+    daemon_env: dict[str, str], short_tmp_path: Path
+) -> None:
+    """Daemon must shut down on SIGTERM even when a client holds an open socket.
+
+    Regression: the Neovim plugin maintains a long-lived JSON-RPC channel
+    for the lifetime of nvim. Without forced client close on shutdown,
+    `Server.wait_closed()` blocks on the active connection and the daemon
+    never exits. Pre-fix, SIGTERM was effectively ignored — only SIGKILL
+    worked, which is why `LocalLibraryDaemon stop` failed in the plugin.
+    """
+    data_dir = _data_dir(daemon_env)
+    assert str(data_dir).startswith(str(short_tmp_path))
+    socket_path = data_dir / "daemon.sock"
+
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "local_library.daemon.server"],
+        env=daemon_env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+    )
+    held: socket.socket | None = None
+    try:
+        _wait_for_socket(socket_path)
+
+        # Open and HOLD a connection. Issue a ping first so the connection is
+        # actually fully established server-side (accept() ran, the
+        # protocol_handler coroutine started). Then keep the socket open
+        # while we send SIGTERM.
+        held = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        held.connect(str(socket_path))
+        held.sendall(b'{"jsonrpc":"2.0","id":1,"method":"ping"}\n')
+        # Drain the response so we know the server is engaged.
+        data = b""
+        held.settimeout(60.0)  # generous: covers warmup
+        while not data.endswith(b"\n"):
+            chunk = held.recv(4096)
+            if not chunk:
+                break
+            data += chunk
+
+        # Now SIGTERM with the connection still open.
+        proc.send_signal(signal.SIGTERM)
+        # 5s budget: well below the CLI's 10s `daemon stop` window. If the
+        # daemon takes longer, the user-facing CLI reports a stop failure.
+        proc.wait(timeout=5)
+        assert proc.returncode == 0
+        assert not socket_path.exists(), "daemon did not unlink socket on shutdown"
+    finally:
+        if held is not None:
+            try:
+                held.close()
+            except OSError:
+                pass
         if proc.poll() is None:
             proc.kill()
             proc.wait(timeout=5)
