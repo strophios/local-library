@@ -92,6 +92,18 @@ function M.cite()
     if ok then boost_citekeys = keys end
   end
 
+  -- Visible feedback that the request is in flight. Cold daemons can take
+  -- 10+ seconds to return their first search; without this the editor
+  -- looks frozen between <leader>c and the picker appearing.
+  local preview = query:gsub("[\r\n]+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+  if #preview > 40 then
+    preview = preview:sub(1, 40) .. "…"
+  end
+  vim.notify(
+    "local-library: searching for \"" .. preview .. "\"…",
+    vim.log.levels.INFO
+  )
+
   local async = require("plenary.async")
   async.run(function()
     local cli = M.client()
