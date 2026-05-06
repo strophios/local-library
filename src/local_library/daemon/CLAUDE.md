@@ -1,6 +1,6 @@
 # Daemon Domain
 
-Last verified: 2026-04-30
+Last verified: 2026-05-06
 
 ## Purpose
 
@@ -84,6 +84,7 @@ This seed is updated per phase; Phase 7 marks it complete.
   when the server closes; shutdown code must do it explicitly.
 - Never use `os.umask` in daemon code (changes global process state); set
   socket file perms via `os.chmod(path, 0o600)` post-bind instead.
+- `daemon start` immediately followed by `daemon stop` may hit the CLI's 10s stop timeout — SIGTERM is queued during warmup but only honored once the executor task returns. Acceptable: a warmup-window stop is rare in normal use, and the daemon does eventually exit cleanly. Set `LOCAL_LIBRARY_DAEMON_SKIP_WARMUP=1` if you need fast turnaround during development.
 - All Library calls must go through `run_on_library_thread(executor, ...)`.
   Never invoke `_library.<anything>()` directly from the asyncio loop —
   it will violate sqlite3's `check_same_thread` and may crash sqlite-vec.

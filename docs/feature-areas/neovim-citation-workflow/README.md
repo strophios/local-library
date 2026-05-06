@@ -1,6 +1,6 @@
 # Neovim Citation Workflow
 
-Last updated: 2026-04-16
+Last updated: 2026-05-06
 
 ## Vision
 
@@ -77,6 +77,15 @@ A Lua plugin communicating with the daemon. The core interaction:
 - Status line integration (daemon status, library stats)
 - Floating window for direct `search` or `ask` queries (type a query instead of selecting text)
 - Document-level search (scope results to a specific document or set of documents)
+- **Placeholder-picker search feedback** — open the Telescope picker immediately
+  on `<leader>c` with a "Searching…" placeholder entry, then refresh in place
+  via `picker:refresh(new_finder)` once results arrive. Improvement over the
+  current single `vim.notify` (commit `e15d841`): keeps feedback colocated
+  with the eventual UI rather than flashing in the cmdline. Open design
+  questions: how to plumb the picker handle back to the async continuation,
+  cancellation sentinel for `<Esc>` during load, and whether to close on
+  empty-result vs. show a "no results" placeholder. Not blocking; revisit
+  once we have real-use signal on whether the notify is sufficient.
 
 ## Previously considered
 
