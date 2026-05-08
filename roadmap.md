@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-04-16
+Last updated: 2026-04-27
 
 This document provides a high-level overview of the project's feature areas and current focus. For detailed planning within each area, see the linked feature area documents. For the development approach, see `build_philosophy.md`.
 
@@ -17,10 +17,12 @@ Two infrastructure tracks recently wrapped:
 1. UI harmonization — consistent extraction status reporting across CLI commands
 2. Extraction metadata persistence — schema v4 migration for duration/device/fallback tracking in the DB (the pipeline now produces this metadata, but it isn't persisted yet)
 
+**Recently shipped:**
+- ✓ **Neovim Citation Workflow** — daemon (Python/asyncio JSON-RPC over UDS) + Lua plugin with Telescope picker. Visual-select claim → daemon-backed semantic search → citation insertion + bibliography auto-append. Three structural hooks for future features (loud-error / silent-inert / architectural). See `docs/feature-areas/neovim-citation-workflow/README.md` and `docs/concepts/daemons.md` for full rationale.
+
 **Feature development (parallel tracks):**
 - Research skills layered on the MCP server (low effort, high leverage; see Claude Code Integration README)
 - Content Ingestion (`add <url>`; later EPUB and external metadata API enrichment)
-- Neovim Citation Workflow (daemon → plugin)
 
 **Evaluation framework:**
 - Corpus-scale baseline was run, but the results show an apparent quality regression that is largely an **annotation artifact**: the flood of new documents surfaces many correct-but-unannotated results that score as wrong under the existing rubric.
@@ -35,7 +37,7 @@ Development beyond Phase 1 is organized into five feature areas. Each area has i
 
 | Area | Status | Priority | Path |
 |---|---|---|---|
-| [Neovim Citation Workflow](docs/feature-areas/neovim-citation-workflow/README.md) | Exploring | Headline | `docs/feature-areas/neovim-citation-workflow/` |
+| [Neovim Citation Workflow](docs/feature-areas/neovim-citation-workflow/README.md) | Stable | Headline | `docs/feature-areas/neovim-citation-workflow/` |
 | [Claude Code Integration](docs/feature-areas/claude-code-integration/README.md) | Stable (MCP core); Exploring (research skills) | High | `docs/feature-areas/claude-code-integration/` |
 | [Content Ingestion](docs/feature-areas/content-ingestion/README.md) | Exploring | High (good value/effort) | `docs/feature-areas/content-ingestion/` |
 | [Note Management](docs/feature-areas/note-management/README.md) | Exploring | Medium | `docs/feature-areas/note-management/` |

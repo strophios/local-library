@@ -1,6 +1,6 @@
 # CLI Domain
 
-Last verified: 2026-04-16
+Last verified: 2026-04-28
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 
 ## Contracts
 
-- **Exposes**: CLI commands (add, ask, list, show, delete, open, update, review, reextract, embed, search), zotero command group (import, collections), identifier resolution utilities
+- **Exposes**: CLI commands (add, ask, list, show, delete, open, update, review, reextract, embed, search), daemon command group (start, stop, status, restart, run), zotero command group (import, collections), identifier resolution utilities
 - **Guarantees**:
   - All commands accepting document IDs support UUID (full or partial) and @citekey syntax
   - Failed citekey lookups provide fuzzy match suggestions (Levenshtein distance + prefix matching)
@@ -39,7 +39,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 
 ## Dependencies
 
-- **Uses**: `core.Library`, `core.models` (Document, DocumentStatus, MetadataSource, RAGResponse), `core.errors` (LookupError, EmbeddingError, FTSQueryError, LLMError, RAGError), `core.storage` (get_connection, get_unique_citekey), `core.vec_extension` (is_vec_available), `ingestion.metadata` (MetadataHandler), `embeddings.base` (SearchResult)
+- **Uses**: `core.Library`, `core.models` (Document, DocumentStatus, MetadataSource, RAGResponse), `core.errors` (LookupError, EmbeddingError, FTSQueryError, LLMError, RAGError), `core.storage` (get_connection, get_unique_citekey), `core.vec_extension` (is_vec_available), `ingestion.metadata` (MetadataHandler), `embeddings.base` (SearchResult), `daemon.pid_file`, `daemon.server` (for daemon subcommand group)
 - **Used by**: Entry point (`local-library` command)
 - **Boundary**: CLI MUST NOT be imported by core or ingestion
 
@@ -71,6 +71,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 - **Ask command error handling**: Four error types caught (LookupError, EmbeddingError, RAGError, LLMError); JSON mode outputs error with code, non-JSON prints styled error
 - **Reranking opt-out pattern**: Both search and ask use `--no-rerank` (negated boolean) because reranking is on by default. Forwarded as `rerank=not no_rerank` to Library methods
 - **Reextract command**: Re-runs extraction pipeline (Marker + cleanup) on existing documents without modifying metadata. Marks embeddings STALE so `embed --pending` picks them up. Uses `embed_on_add=False` to avoid auto-embedding during re-extraction.
+- **Daemon subcommand group**: `daemon` subcommand groups process lifecycle operations; `start` spawns detached, `stop` sends SIGTERM, `status` reports pid/uptime/resident, `restart` is stop-then-start, `run` is foreground entry point. Resolves running PID via pid_file.read_pid() + is_process_alive() check. Uses psutil.Process() for status queries.
 
 ## Invariants
 
@@ -94,6 +95,7 @@ Command-line interface for the local-library system. Provides user-facing comman
 - `embed.py` - Embed command with --pending, --all, --force, --dry-run options
 - `reextract.py` - Reextract command with single-doc and --all modes, progress tracking, continue-on-error
 - `search.py` - Search command with --limit, --mode, --doc, --json, --no-rerank options
+- `daemon.py` - Daemon command group with start/stop/status/restart/run subcommands
 - `zotero.py` - Zotero command group with `import` (batch import with progress, progress callback), `collections` (list collections), `_make_console_progress_callback()` factory
 
 ## Gotchas
