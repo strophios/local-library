@@ -1,7 +1,7 @@
 # Phase 5 install + permissions audit
 
-**Date:** <YYYY-MM-DD>
-**Operator:** <user-name>
+**Date:** <2026-04-30>
+**Operator:** <strophios>
 
 This audit is performed manually by the user (operator) from a fresh shell, NOT inside the orchestrator's Claude Code session. The orchestrator's session has the plugin's MCP tools already loaded from session start; auditing install + permissions correctly requires a session that loads the plugin from a clean state.
 
@@ -18,21 +18,21 @@ Pretend you are an external user discovering the plugin for the first time. Run 
 
 Record observations:
 
-- [ ] `uv sync` completed without error
-- [ ] `/plugin marketplace add` reported the marketplace as added (no schema validation errors)
-- [ ] `/plugin install local-library@local-library` reported the plugin as installed
-- [ ] Six skills are listed when Claude Code surfaces available skills:
-  - [ ] `using-local-library-mcp`
-  - [ ] `handling-extraction-quality`
-  - [ ] `grounding-against-library`
-  - [ ] `drafting-with-grounded-sources`
-  - [ ] `implementation-check-against-papers`
-  - [ ] `verifying-claims-against-library`
-- [ ] Four MCP tools are reachable:
-  - [ ] `mcp__local-library__search_library`
-  - [ ] `mcp__local-library__show_document`
-  - [ ] `mcp__local-library__list_documents`
-  - [ ] `mcp__local-library__get_document_text`
+- [x] `uv sync` completed without error
+- [x] `/plugin marketplace add` reported the marketplace as added (no schema validation errors)
+- [x] `/plugin install local-library@local-library` reported the plugin as installed
+- [x] Six skills are listed when Claude Code surfaces available skills:
+  - [x] `using-local-library-mcp`
+  - [x] `handling-extraction-quality`
+  - [x] `grounding-against-library`
+  - [x] `drafting-with-grounded-sources`
+  - [x] `implementation-check-against-papers`
+  - [x] `verifying-claims-against-library`
+- [x] Four MCP tools are reachable:
+  - [x] `mcp__local-library__search_library`
+  - [x] `mcp__local-library__show_document`
+  - [x] `mcp__local-library__list_documents`
+  - [x] `mcp__local-library__get_document_text`
 
 ## Permissions audit
 
@@ -42,44 +42,44 @@ In the same session, exercise each skill with a small representative prompt. Wat
 
 Prompt: "What does @<real-citekey-from-your-library> argue?"
 
-- [ ] No per-call approval prompts on `mcp__local-library__show_document`
-- [ ] No per-call approval prompts on `mcp__local-library__get_document_text`
-- [ ] Skill fires automatically without manual selection
-- [ ] Notes: <free text>
+- [x] No per-call approval prompts on `mcp__local-library__show_document`
+- [x] No per-call approval prompts on `mcp__local-library__get_document_text`
+- [x] Skill fires automatically without manual selection
+- [x] Notes: Approval was required on first use for both skills, but not on subsequent uses. 
 
 ### 2. Garbled-extraction fallback (orientation: handling-extraction-quality)
 
 Prompt: "Open @<mathy-citekey-from-your-library> and explain the main equation."
 
-- [ ] No per-call approval prompts on `mcp__local-library__show_document`
-- [ ] No per-call approval prompts on `mcp__local-library__get_document_text`
-- [ ] No per-call approval prompts on `Read` (when invoked on the PDF)
-- [ ] Skill correctly evaluates markdown for garbling cues; escalates to PDF only when cues fire
-- [ ] Notes: <free text>
+- [x] No per-call approval prompts on `mcp__local-library__show_document`
+- [x] No per-call approval prompts on `mcp__local-library__get_document_text`
+- [x] No per-call approval prompts on `Read` (when invoked on the PDF)
+- [x] Skill correctly evaluates markdown for garbling cues; escalates to PDF only when cues fire
+- [x] Notes: Again, all tools required approval on first use (so the `Read` and `mcp__local-library__search_library` tools in this case). 
 
 ### 3. Atomic grounding via kernel (grounding-against-library)
 
 Prompt: "Verify the claim that @<real-citekey> says <specific assertion>."
 
-- [ ] No per-call approval prompts during retrieve / widen / synthesize
-- [ ] Kernel produces per-source table with quoted excerpts and chunk indices
-- [ ] Notes: <free text>
+- [x] No per-call approval prompts during retrieve / widen / synthesize
+- [x] Kernel produces per-source table with quoted excerpts and chunk indices
+- [x] Notes: Perfect, no notes. 
 
 ### 4. Drafting (drafting-with-grounded-sources)
 
 Prompt: "Draft a paragraph defending the claim that <X> using @<A> and @<B>."
 
-- [ ] No per-call approval prompts during decomposition / kernel invocations / appendix construction
-- [ ] Output has inline `@citekeys` + grounding-summary appendix at the end
-- [ ] Notes: <free text>
+- [x] No per-call approval prompts during decomposition / kernel invocations / appendix construction
+- [x] Output has inline `@citekeys` + grounding-summary appendix at the end
+- [x] Notes: Perfect, only note is that we might consider instructions to format the in-draft citations as "\[@citekey, p. chunk number\]" to match pandoc-citeproc syntax by pretending that the chunk number is a page number. But we may actually want to keep the friction of having to hand adjust any references (i.e., reformat and either delete the chunk number or replace with page number) so that we don't ever accidentally just leave the chunk number as page number. 
 
 ### 5. Implementation-check (implementation-check-against-papers)
 
 Prompt: "Compare <some-small-file>.py against the method described in @<relevant-citekey>."
 
-- [ ] No per-call approval prompts during code-Read / kernel invocations / cross-invocation of handling-extraction-quality (if math involved)
-- [ ] Output is an assertion table with status (match/mismatch/partial/not-found) and quoted evidence
-- [ ] Notes: <free text>
+- [x] No per-call approval prompts during code-Read / kernel invocations / cross-invocation of handling-extraction-quality (if math involved)
+- [x] Output is an assertion table with status (match/mismatch/partial/not-found) and quoted evidence
+- [x] Notes: Perfect, no notes. 
 
 ### 6. Verify-claims (verifying-claims-against-library)
 
@@ -88,10 +88,10 @@ Prompt: "Verify these claims against my library:
 2. <claim 2> — per @<Y>
 3. <claim 3 — fabricated> — per @<Z>"
 
-- [ ] No per-call approval prompts during multi-claim grounding
-- [ ] Output is a claim table with quoted support, status per row, and a summary line
-- [ ] Fabricated claim correctly tagged not-found (or mismatch with contradicting evidence)
-- [ ] Notes: <free text>
+- [x] No per-call approval prompts during multi-claim grounding
+- [x] Output is a claim table with quoted support, status per row, and a summary line
+- [x] Fabricated claim correctly tagged not-found (or mismatch with contradicting evidence)
+- [x] Notes: Prefect, quite strict (which is what we want as opposed to being more loose and permissive), and handled a "oh, actually, what if we look at that claim with @new-source too?" gracefully. 
 
 ## Skill body audit
 
@@ -104,20 +104,20 @@ for skill in skills/*/; do
 done
 ```
 
-- [ ] No skill body inlines a tool invocation that isn't declared in its `allowed-tools` (Bash/Edit/Write/Glob/Grep are common culprits)
+- [x] No skill body inlines a tool invocation that isn't declared in its `allowed-tools` (Bash/Edit/Write/Glob/Grep are common culprits)
 - If any appear: either add the tool to that skill's `allowed-tools` frontmatter or rewrite the skill body to use a different tool
 
 ## Findings
 
-- **Per-call approvals observed**: <count, with per-skill notes>
-- **Skills missing from list**: <none / list>
-- **Tools missing from list**: <none / list>
-- **Schema validation errors at marketplace-add or install**: <none / details>
-- **Any unexpected behavior**: <free text>
+- **Per-call approvals observed**: 0
+- **Skills missing from list**: none
+- **Tools missing from list**: none
+- **Schema validation errors at marketplace-add or install**: none
+- **Any unexpected behavior**: As noted in various skill notes above, each MCP tool required approval on first use, but not thereafter. 
 
 ## Assessment
 
-PASS / PARTIAL / FAIL — one-sentence justification.
+PASS - all tests passed with no unexpected behavior. The requirement for one-time MCP tool approval is totally fine, so far as I am concerned. 
 
 If FAIL or PARTIAL:
 
