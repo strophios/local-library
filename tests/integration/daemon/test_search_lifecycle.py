@@ -84,6 +84,14 @@ def daemon_with_corpus(short_tmp_path: Path, sample_pdf: Path):
     env["XDG_DATA_HOME"] = data_home
     env["LOCAL_LIBRARY_DATA_DIR"] = data_dir
     env["PYTHONUNBUFFERED"] = "1"
+    # Skip model warmup. The tests using this fixture exercise RPC
+    # semantics (results, error envelopes, concurrency), not search
+    # latency. Warmup parks the asyncio loop on the executor task for
+    # ~10s before _serve runs, so requests queue in the kernel accept
+    # backlog while the fixture's socket-bound poll already considers
+    # the daemon "ready" — which corrupts any timing-based assertion
+    # (notably test_ping_remains_responsive_during_search).
+    env["LOCAL_LIBRARY_DAEMON_SKIP_WARMUP"] = "1"
 
     # Pre-populate the library
     setup = subprocess.run(
