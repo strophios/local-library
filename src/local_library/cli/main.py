@@ -6,6 +6,7 @@ import typer
 
 from local_library.cli import add as add_cmd
 from local_library.cli import ask as ask_cmd
+from local_library.cli import daemon as daemon_cmd
 from local_library.cli import delete as delete_cmd
 from local_library.cli import embed as embed_cmd
 from local_library.cli import list as list_cmd
@@ -37,6 +38,7 @@ app.command(name="reextract")(reextract_cmd.reextract)
 app.command(name="search")(search_cmd.search)
 app.command(name="ask")(ask_cmd.ask)
 app.add_typer(zotero_cmd.app, name="zotero")
+app.add_typer(daemon_cmd.app, name="daemon")
 
 
 def _configure_logging() -> None:

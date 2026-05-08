@@ -1,0 +1,157 @@
+-- pattern: Imperative Shell — orchestrates module lifecycle and exposes
+-- the public API surface for the plugin.
+
+local M = {}
+
+local _config_module = require("local_library.config")
+local _client = nil
+local _setup_done = false
+
+--- Configure the plugin. Idempotent.
+---@param opts table|nil
+function M.setup(opts)
+  _config_module.setup(opts)
+  _setup_done = true
+  -- Direct keymap registration. The autocmd in plugin/local_library.lua
+  -- is a fallback for users who call setup() inside lazy.nvim's `config`
+  -- block (autocmd registered before setup runs). Calling vim.keymap.set
+  -- twice with identical args is a no-op.
+  local opts_resolved = _config_module.options
+  if opts_resolved.keymaps and opts_resolved.keymaps.enabled then
+    vim.keymap.set("x", opts_resolved.keymaps.visual_cite, ":LocalLibraryCite<CR>",
+      { silent = true, desc = "local-library: cite from selection" })
+  end
+  vim.api.nvim_exec_autocmds("User", { pattern = "LocalLibraryConfigured" })
+end
+
+local function _ensure_setup()
+  if not _setup_done then
+    M.setup({})
+  end
+end
+
+--- Return the resolved config table.
+function M.config()
+  _ensure_setup()
+  return _config_module.options
+end
+
+--- Return the singleton client (lazily constructed; not yet connected).
+function M.client()
+  _ensure_setup()
+  if _client == nil then
+    local Client = require("local_library.client")
+    _client = Client.new({
+      socket_path = _config_module.options.socket_path,
+      request_timeout_ms = _config_module.options.request_timeout_ms,
+      timeouts = _config_module.options.timeouts,
+    })
+  end
+  return _client
+end
+
+--- Drop the cached client (closing its channel best-effort).
+---
+--- Used by run_daemon_cli on lifecycle subcommands so the next request
+--- doesn't reuse a chan_id pointing to the previous daemon's now-closed
+--- socket. Narrower than `_reset()` — preserves config so the user's
+--- setup({...}) options survive across daemon restarts.
+function M._reset_client()
+  if _client then
+    pcall(_client.close, _client)
+  end
+  _client = nil
+end
+
+--- Reset state (used by tests). Wipes both the client and setup config.
+function M._reset()
+  M._reset_client()
+  _setup_done = false
+end
+
+-- Subcommands that change daemon process state (vs. read-only `status`).
+-- After any of these, the cached client may point at a stale or replaced
+-- socket and must be dropped.
+local _LIFECYCLE_SUBCOMMANDS = { stop = true, start = true, restart = true }
+
+--- Run the `local-library daemon <subcommand>` Python CLI.
+function M.run_daemon_cli(subcommand)
+  local cmd = { "uv", "run", "local-library", "daemon", subcommand }
+  local out = vim.fn.system(cmd)
+  local code = vim.v.shell_error
+  if code == 0 then
+    if _LIFECYCLE_SUBCOMMANDS[subcommand] then
+      M._reset_client()
+    end
+    vim.notify("local-library: " .. (out:gsub("%s+$", "")), vim.log.levels.INFO)
+  else
+    vim.notify(
+      "local-library daemon " .. subcommand .. " failed:\n" .. out,
+      vim.log.levels.ERROR
+    )
+  end
+  return code
+end
+
+--- Visual-mode entry point: capture selection, run search, open Telescope picker.
+function M.cite()
+  local selection = require("local_library.selection")
+  local query = selection.get_visual()
+  if not query or query == "" then
+    vim.notify("local-library: no visual selection", vim.log.levels.WARN)
+    return
+  end
+  local range = selection.get_visual_range()
+
+  local refs_path = require("local_library.bibliography").resolve_refs_path(0)
+  local boost_citekeys = {}
+  if refs_path and vim.fn.filereadable(refs_path) == 1 then
+    local ok, keys = pcall(require("local_library.bibliography").list_citekeys, refs_path)
+    if ok then boost_citekeys = keys end
+  end
+
+  -- Visible feedback that the request is in flight. Cold daemons can take
+  -- 10+ seconds to return their first search; without this the editor
+  -- looks frozen between <leader>c and the picker appearing.
+  local preview = query:gsub("[\r\n]+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+  if #preview > 40 then
+    preview = preview:sub(1, 40) .. "…"
+  end
+  vim.notify(
+    "local-library: searching for \"" .. preview .. "\"…",
+    vim.log.levels.INFO
+  )
+
+  local async = require("plenary.async")
+  async.run(function()
+    local cli = M.client()
+    local err, response = cli:request_sync("search", {
+      query = query,
+      limit = M.config().search.limit,
+      rerank = M.config().search.rerank,
+      boost_citekeys = boost_citekeys,
+    })
+    if err then
+      require("local_library.notify").from_error(err)
+      return
+    end
+    if not response or #(response.results or {}) == 0 then
+      vim.notify("local-library: no results for selection", vim.log.levels.INFO)
+      return
+    end
+
+    vim.schedule(function()
+      require("telescope").extensions.local_library.cite({
+        results = response.results,
+        ctx = {
+          end_line = range.end_line,
+          end_col = range.end_col,
+          refs_path = refs_path,
+          bufnr = vim.api.nvim_get_current_buf(),
+        },
+      })
+    end)
+  end)
+end
+
+return M

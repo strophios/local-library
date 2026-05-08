@@ -54,6 +54,8 @@ The design produces three artifacts:
 2. A Neovim Lua plugin at `nvim/` in the local-library repo — separable data layer (RPC client, bibliography file I/O, pure actions) and UI layer (initial implementation is a Telescope extension). Hybrid UI/data split is committed; brainstorming verified separation cost is near-zero (the split just means "don't mix RPC calls into Telescope entry-makers").
 3. A standalone concepts document at `docs/concepts/daemons.md` — eight chapters written in lockstep with implementation phases, exemplifying daemon / IPC / RPC / concurrency concepts through this project's specific decisions.
 
+*Conceptual background: see [docs/concepts/daemons.md](../concepts/daemons.md) chapters 1–2 (what a daemon is; service management).*
+
 ### Daemon architecture
 
 ```
@@ -96,6 +98,8 @@ The design produces three artifacts:
 │ └─────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+*Conceptual background: concepts §5 (asyncio + single-thread DB constraints).*
 
 **Process model**: CLI-managed for MVP. Entry points: `uv run local-library daemon start | stop | status | restart | run`. PID file at `config.get_daemon_pid_path()`, socket at `config.get_socket_path()`, logs at `config.get_daemon_log_dir()`. Startup accepts a pre-bound socket FD via the `LaunchDaemonSockets` environment variable (forward-compat shim for future launchd socket-activation upgrade, ~15 lines of code).
 
@@ -185,6 +189,8 @@ get_document({ identifier: string }) → {    // UUID or "@citekey"
 }
 ```
 
+*Conceptual background: concepts §3 (framing) and §4 (RPC envelopes); case study in §8.*
+
 ### Plugin architecture
 
 **Module layout**:
@@ -219,6 +225,8 @@ nvim/
 - `actions.lua`: pure-ish orchestration. `insert_citekey`, `insert_citekey_with_text`, `open_source` — each takes `(ctx, result)` and performs the buffer modification, calling into `bibliography.lua` and `conflict_ui.lua` as needed.
 - `telescope/_extensions/local_library.lua`: UI adapter. Maps `search` results → Telescope entries; previewer renders `chunk_text` + section heading + score; binds `<CR>` / `<C-t>` / `<C-o>` to the action functions. Only this module imports `telescope`.
 - `init.lua`: public surface. `setup(opts)`, `:LocalLibraryCite`, `:LocalLibraryDaemon {start|stop|status|restart}`.
+
+*Conceptual background: concepts §4 (envelope shape); the UI/data split is the architectural hook discussed in §8.*
 
 ### Core interaction flow (happy path)
 
@@ -269,6 +277,8 @@ The design scaffolds three future-facing features using three distinct hook mech
 2. **Bib-aware preferential ranking** (silent-inert hook). `search.boost_citekeys` is accepted and currently ignored. The plugin routinely passes the current project's bibliography citekeys in every search. Silently ignoring gives wrong *ordering* — degrades gracefully. Implementation can roll out on the daemon side with zero plugin-release coordination.
 3. **Direct input mode** (architectural hook — no RPC change). The existing `search` method already accepts any query string. The plugin's hybrid split means a future `input_ui.lua` module can feed the same pipeline without touching Telescope or the daemon. This is the payoff of the hybrid split itself.
 
+*Conceptual background: concepts §8 case study 4 documents the vocabulary in detail.*
+
 The three mechanisms correspond to different post-MVP coupling profiles (tight two-side / plugin-leads-backend / plugin-only) and constitute a deliberate vocabulary of future-proofing patterns — captured as a case study in concepts chapter 8.
 
 ### Edge cases
@@ -281,6 +291,8 @@ The three mechanisms correspond to different post-MVP coupling profiles (tight t
 | `extracted_markdown_path` missing on disk | Action 3 errors with a clear message; actions 1 & 2 unaffected |
 | Bibliography file named in frontmatter but doesn't exist | `bibliography.ensure_entry` creates it as a single-entry array |
 | Conflict on auto-append | Scratch buffer with diff; `k` / `o` / `q` resolve (abort leaves source buffer unmodified) |
+
+*Conceptual background: concepts §6 (cross-process error handling) and §7 (reliability tier 1).*
 
 ## Existing Patterns
 
@@ -312,6 +324,8 @@ From the user's existing stack (`~/.config/nvim-rebuild/`):
 - **No python-daemon / PEP 3143 double-fork pattern**: modern consensus treats manual daemonization as cargo-cult for user-level services when a supervisor is available. CLI-managed MVP uses a foreground process the user starts; future launchd upgrade uses launchd's own supervision. No double-fork code is written.
 - **No pynvim as server**: pynvim is designed as a Neovim *client* library. Using it as an RPC server introduces event-loop composition issues. The daemon uses `python-lsp-jsonrpc` (production-tested via pylsp) or `jsonrpcserver` directly over asyncio.
 - **No msgpack-rpc**: considered and rejected during brainstorming. Python server-side support is rough (less mature libraries, event-loop friction) and the binary wire format is opaque to standard debugging tools. JSON-RPC's debuggability and Python library maturity outweighed msgpack's marginal serialization efficiency at our payload sizes. Full rationale captured in the concepts document (chapter 4).
+
+*Conceptual background: concepts §8 case studies 2 (msgpack-rpc rejection) and 3 (double-fork rejection).*
 
 ### Patterns introduced
 

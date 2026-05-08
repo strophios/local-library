@@ -197,3 +197,9 @@ class TestZoteroErrorCodes:
         assert error.code == ErrorCode.ZOTERO_DIR_NOT_FOUND
         assert error.details == {"path": "/nonexistent"}
         assert str(error) == "[ZOTERO_DIR_NOT_FOUND] zotero directory not found"
+
+
+def test_not_implemented_error_code_exists() -> None:
+    from local_library.core.errors import ErrorCode
+
+    assert ErrorCode.NOT_IMPLEMENTED.value == "NOT_IMPLEMENTED"
