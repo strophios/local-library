@@ -31,6 +31,72 @@ describe("local_library.init", function()
     assert.equals(c1, c2)
   end)
 
+  it("run_daemon_cli('stop') drops the cached client so the next call reconnects", function()
+    -- Regression: stop+start (or any lifecycle subcommand) must invalidate
+    -- the singleton client. Otherwise the next request reuses the chan_id
+    -- that points at the previous daemon's now-closed socket; depending on
+    -- how quickly Neovim updates channel state after the remote closes,
+    -- request_async may either send into the void (response never arrives →
+    -- timeout) or correctly reconnect. Don't depend on the race.
+    local stub = require("luassert.stub")
+    local lib = reload("local_library")
+    lib.setup({})
+
+    -- Stub the transport so client() instantiation doesn't actually
+    -- touch the socket; we only care about object identity here.
+    stub(vim.fn, "sockconnect").returns(42)
+    stub(vim.api, "nvim_get_chan_info").returns({ id = 42 })
+    stub(vim.fn, "chanclose").returns(1)
+
+    local c1 = lib.client()
+    assert.is_truthy(c1)
+
+    -- Force vim.v.shell_error = 0 by running a real fast successful command,
+    -- then stub vim.fn.system to return empty output. The stub does not
+    -- update vim.v.shell_error, so the prior 0 persists.
+    vim.fn.system("true")
+    assert.equals(0, vim.v.shell_error)
+    stub(vim.fn, "system", function() return "" end)
+    stub(vim, "notify")
+
+    lib.run_daemon_cli("stop")
+
+    local c2 = lib.client()
+    assert.is_not.equals(c1, c2)
+
+    vim.fn.sockconnect:revert()
+    vim.api.nvim_get_chan_info:revert()
+    vim.fn.chanclose:revert()
+    vim.fn.system:revert()
+    vim.notify:revert()
+  end)
+
+  it("run_daemon_cli('status') preserves the cached client", function()
+    -- Status is a query, not a state change. Resetting the client on
+    -- status would churn connections for no reason.
+    local stub = require("luassert.stub")
+    local lib = reload("local_library")
+    lib.setup({})
+
+    stub(vim.fn, "sockconnect").returns(42)
+    stub(vim.api, "nvim_get_chan_info").returns({ id = 42 })
+
+    local c1 = lib.client()
+    vim.fn.system("true")
+    stub(vim.fn, "system", function() return "" end)
+    stub(vim, "notify")
+
+    lib.run_daemon_cli("status")
+
+    local c2 = lib.client()
+    assert.equals(c1, c2)
+
+    vim.fn.sockconnect:revert()
+    vim.api.nvim_get_chan_info:revert()
+    vim.fn.system:revert()
+    vim.notify:revert()
+  end)
+
   it("cite() notifies that the search is in progress", function()
     -- UX: between <leader>c and the picker appearing, the user should see
     -- some evidence that the request is happening. Without this, a cold or

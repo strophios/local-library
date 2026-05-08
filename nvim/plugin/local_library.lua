@@ -14,9 +14,9 @@ vim.api.nvim_create_user_command("LocalLibraryDaemon", function(opts)
     )
     return
   end
-  if sub == "restart" then
-    require("local_library")._reset()
-  end
+  -- run_daemon_cli drops the cached client on lifecycle subcommands
+  -- (stop/start/restart) after the subprocess succeeds, so the next
+  -- request opens a fresh socket. No pre-call reset needed here.
   require("local_library").run_daemon_cli(sub)
 end, {
   nargs = "?",

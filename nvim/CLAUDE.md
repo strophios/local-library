@@ -1,6 +1,6 @@
 # Neovim Plugin Domain
 
-Last verified: 2026-04-30
+Last verified: 2026-05-08
 
 ## Purpose
 
@@ -68,6 +68,13 @@ and Telescope picker. Phases 6–7 add reliability and polish.
   visual `end_col` to the byte length of the target line. This
   handles both V-mode and `v$` in characterwise mode, where
   `getpos("'>")` returns `v:maxcol` (~2³¹−1).
+- `run_daemon_cli` drops the cached client (`_reset_client`) on
+  success of any lifecycle subcommand (stop / start / restart) but
+  not on `status`. Without this, the singleton client survives daemon
+  restarts holding a chan_id that points at the previous daemon's
+  closed socket, and subsequent requests can wedge waiting for a
+  response that will never arrive. `_reset_client` is narrower than
+  `_reset` — it preserves `setup({...})` options across the reset.
 
 ## Key Files
 

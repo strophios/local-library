@@ -50,14 +50,29 @@ function M.client()
   return _client
 end
 
---- Reset state (used by tests and `:LocalLibraryDaemon restart`).
-function M._reset()
+--- Drop the cached client (closing its channel best-effort).
+---
+--- Used by run_daemon_cli on lifecycle subcommands so the next request
+--- doesn't reuse a chan_id pointing to the previous daemon's now-closed
+--- socket. Narrower than `_reset()` — preserves config so the user's
+--- setup({...}) options survive across daemon restarts.
+function M._reset_client()
   if _client then
     pcall(_client.close, _client)
   end
   _client = nil
+end
+
+--- Reset state (used by tests). Wipes both the client and setup config.
+function M._reset()
+  M._reset_client()
   _setup_done = false
 end
+
+-- Subcommands that change daemon process state (vs. read-only `status`).
+-- After any of these, the cached client may point at a stale or replaced
+-- socket and must be dropped.
+local _LIFECYCLE_SUBCOMMANDS = { stop = true, start = true, restart = true }
 
 --- Run the `local-library daemon <subcommand>` Python CLI.
 function M.run_daemon_cli(subcommand)
@@ -65,6 +80,9 @@ function M.run_daemon_cli(subcommand)
   local out = vim.fn.system(cmd)
   local code = vim.v.shell_error
   if code == 0 then
+    if _LIFECYCLE_SUBCOMMANDS[subcommand] then
+      M._reset_client()
+    end
     vim.notify("local-library: " .. (out:gsub("%s+$", "")), vim.log.levels.INFO)
   else
     vim.notify(
