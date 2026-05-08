@@ -1,6 +1,6 @@
 # Neovim Citation Workflow
 
-Last updated: 2026-05-06
+Last updated: 2026-05-08
 
 ## Vision
 
@@ -63,6 +63,70 @@ A Lua plugin communicating with the daemon. The core interaction:
 - **Bibliography-aware search**: Pass a `.bib` file and preferentially search those documents, or use titles/abstracts from the bibliography as additional query context
 - **Tag-aware search**: Use document tags (when auto-tagging exists) to weight or filter results
 - **Confidence-based result filtering**: Earlier thinking sketched threshold tiers (strict ~0.65, default ~0.45, broad ~0.30) for citation suggestion. The specific numbers are tentative and may not survive once we measure against real use. Worth keeping as a starting point if/when we need to expose "more/fewer results" knobs to the user.
+
+### Daemon Startup Restructure: Parallel Serve + Warmup
+
+The daemon currently runs startup serially: bind socket → run warmup on the
+executor (loop parked on `run_until_complete`) → start `_serve`. That serial
+shape produces four related warts that we've patched around rather than
+fixed:
+
+1. **SIGTERM-during-warmup is parked.** Signal handlers fire on the loop
+   thread, but the loop is awaiting the executor task during warmup, so
+   `daemon stop` issued in the warmup window hits the CLI's 10s timeout.
+   Documented as a gotcha in `src/local_library/daemon/CLAUDE.md`.
+2. **Ping is unavailable during init.** The asyncio server isn't accepting
+   connections yet, so external monitoring tools and future consumers
+   (MCP-style health checks, `daemon status --probe`, etc.) can't
+   distinguish "process up but warming" from "process up and serving"
+   via the daemon's own protocol.
+3. **Connection queueing is opaque.** Connections arriving during warmup
+   sit in the kernel accept backlog with no daemon-level visibility. The
+   client experiences this as a long latency rather than an explicit
+   "warming up" state — fine for the current plugin's 60s timeout, but
+   problematic for any client that wants to fail-fast or render state.
+4. **Test escape-hatch sprawl.** `LOCAL_LIBRARY_DAEMON_SKIP_WARMUP=1` is
+   currently set in four test files (two Lua, two Python) because the
+   warmup wait corrupts any timing-based assertion. Easy to forget;
+   future tests will hit the same surprising failure.
+
+**Resolution shape:** restructure to run `_serve` and warmup concurrently,
+gated by an `asyncio.Event`:
+
+```python
+warmup_done = asyncio.Event()
+server_task = asyncio.create_task(_serve(listening, stop_event, warmup_done))
+warmup_task = asyncio.create_task(_run_warmup(warmup_done))
+```
+
+Then:
+- `ping` responds immediately (real concurrency from t=0).
+- `search` / `get_document` handlers `await warmup_done.wait()` before
+  proceeding. Requests during warmup naturally wait without queueing in
+  the kernel.
+- Signal handlers fire on the now-running loop, so SIGTERM works during
+  warmup.
+- Test fixtures poll ping until success — actual readiness, no env-var
+  escape hatch needed.
+
+**Open design questions** to settle before implementing:
+- What should `search` do for requests arriving during warmup — wait on
+  the event (current proposal), or fail fast with a `WARMING_UP` error
+  code so clients can render explicit state?
+- What should `daemon start` (CLI) do — return at bind (current behavior)
+  or block until warmup is done? Probably wants a `--wait-ready` flag.
+- Should ping report a warmup-state field (`ready: bool`, `warmed: bool`)
+  so external probes can distinguish liveness from readiness without
+  separate methods?
+- How should warmup *failure* surface to in-flight clients? Currently a
+  warmup crash kills the daemon at startup. With async serving, we'd
+  need to decide: still crash, or surface `WARMUP_FAILED` and continue
+  serving non-search methods?
+
+This isn't urgent — current behavior is correct, just suboptimal. Worth
+revisiting if/when we add additional daemon clients (MCP v2, HTTP API)
+that benefit from real readiness signaling, or if the test escape-hatch
+sprawl gets worse.
 
 ### Triage-Based Verification Modes
 - "What in my library might not support this claim?" — surface potentially contradicting sources
