@@ -123,7 +123,11 @@
       "Bash(do for:*)",
       "Bash(/Users/strophios/development/local-library/.worktrees/extraction-resilience-and-metadata-pipeline/.venv/bin/python -m pytest tests/unit/test_pdf_extractor.py::TestPreCheckTimeoutComputation::test_text_pdf_short_uses_minimum -v)",
       "Bash(timeout 3 /Users/strophios/development/local-library/.worktrees/mcp-server/.venv/bin/local-library-mcp)",
-      "Bash(/Users/strophios/development/local-library/.worktrees/mcp-server/.venv/bin/local-library-mcp)"
+      "Bash(/Users/strophios/development/local-library/.worktrees/mcp-server/.venv/bin/local-library-mcp)",
+      "mcp__plugin_local-library_local-library__show_document",
+      "mcp__plugin_local-library_local-library__search_library",
+      "mcp__plugin_local-library_local-library__get_document_text",
+      "mcp__plugin_local-library_local-library__list_documents"
     ]
   },
   "outputStyle": "Explanatory"

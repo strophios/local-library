@@ -1,0 +1,22 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "local-library",
+  "version": "0.1.0",
+  "owner": {
+    "name": "local-library contributors"
+  },
+  "metadata": {
+    "description": "Local-library Claude Code plugin — skills for fluent use of the local-library MCP server in research, drafting, and verification workflows.",
+    "homepage": "https://github.com/strophios/local-library"
+  },
+  "plugins": [
+    {
+      "name": "local-library",
+      "version": "0.1.0",
+      "description": "Skills for fluently using the local-library MCP server: two orientation skills (citekey/library-first reach, extraction-quality safety hatch), one grounding kernel, three procedural composition skills (drafting, implementation-check, verify-claims).",
+      "source": "./",
+      "category": "research",
+      "keywords": ["rag", "citations", "research", "local-library", "mcp", "grounding"]
+    }
+  ]
+}

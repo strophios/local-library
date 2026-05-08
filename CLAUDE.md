@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Last verified: 2026-04-27
+Last verified: 2026-05-08
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -116,7 +116,7 @@ Milestones M1 (record storage), M2 (PDF extraction), M3a (metadata validation), 
 
 **Beyond Phase 1:** Development is organized into six feature areas, each with its own progression. **`roadmap.md` is the central overview** — check it for current focus, progress tracking, and cross-cutting dependencies. Feature area READMEs in `docs/feature-areas/` have detailed planning per area:
 - **Neovim Citation Workflow** (headline) — library daemon, Neovim plugin for visual-mode citation search
-- **Claude Code Integration** — MCP server built (4 read-only tools); research skills layered on top are next
+- **Claude Code Integration** — MCP server built (4 read-only tools) plus a Claude Code plugin (`.claude-plugin/`, `skills/`) bundling six SKILL.md files (two orientation, one grounding kernel, three procedural composition) and the MCP server config. Plugin install: `/plugin marketplace add <repo>` then `/plugin install local-library`. See `README.md` for usage and `tests/skills/` for RED/GREEN/Tier-3 verification artifacts.
 - **Content Ingestion** — `add <url>` with trafilatura; later EPUB and external API metadata enrichment
 - **Note Management** — auto-generated markdown stubs with YAML frontmatter
 - **Automated Content Analysis** — auto-tagging, clustering, triage-based verification
@@ -322,6 +322,35 @@ src/local_library/
 ```
 
 See `src/local_library/core/CLAUDE.md`, `src/local_library/llm/CLAUDE.md`, `src/local_library/rag/CLAUDE.md`, `src/local_library/ingestion/CLAUDE.md`, `src/local_library/embeddings/CLAUDE.md`, `src/local_library/mcp/CLAUDE.md`, and `src/local_library/cli/CLAUDE.md` for domain contracts.
+
+### Claude Code Plugin Assets
+
+The repo also ships as a Claude Code plugin (in-repo, no separate package):
+
+```
+.claude-plugin/
+├── plugin.json         # Plugin manifest (name, version, keywords)
+└── marketplace.json    # Self-advertising marketplace entry (source: "./")
+.mcp.json               # MCP server config (uses ${CLAUDE_PLUGIN_ROOT} for --directory)
+skills/
+├── using-local-library-mcp/SKILL.md          # Orientation (always-apply): citekey/library cue → MCP tools
+├── handling-extraction-quality/SKILL.md      # Orientation (always-apply): garbled markdown → Read PDF fallback
+├── grounding-against-library/                # Kernel: atomic per-assertion retrieve → quote → synthesize → report
+│   ├── SKILL.md
+│   └── references/tool-selection.md          # When to use search_library vs show_document vs get_document_text
+├── drafting-with-grounded-sources/SKILL.md   # Procedural: prose with grounding-summary appendix
+├── implementation-check-against-papers/SKILL.md  # Procedural: code-vs-paper assertion table
+└── verifying-claims-against-library/SKILL.md # Procedural: claim-by-claim status table with quoted support
+tests/skills/
+├── baselines/                                # Phase 1 RED baselines (skill-off failure modes)
+├── phase2/, phase3/, phase4/                 # GREEN / Tier-3 verifications per skill
+├── phase5/install-and-permissions-audit.md   # Install + permissions audit
+└── phase6/                                   # Smoke transcripts + DoD audit
+```
+
+Plugin contracts:
+- The plugin reuses the existing `local-library-mcp` entry point via `${CLAUDE_PLUGIN_ROOT}` so the MCP server runs from the installed plugin's working tree.
+- No Python source changes were required; the plugin is purely SKILL.md + JSON config + tests. Skills compose via a three-layer architecture (orientation → kernel → procedural) documented in `README.md` § "Claude Code Plugin".
 
 ## Background Documentation
 

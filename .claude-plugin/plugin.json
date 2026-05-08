@@ -1,0 +1,6 @@
+{
+  "name": "local-library",
+  "version": "0.1.0",
+  "description": "Skills for fluently using the local-library MCP server in research and drafting workflows",
+  "keywords": ["rag", "citations", "research", "local-library", "mcp"]
+}
