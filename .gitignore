@@ -1,6 +1,9 @@
 # Worktrees
 .worktrees/
 
+# This repo is public, so we don't track scratchpad.md (for the moment anyways)
+scratchpad.md
+
 # Python
 __pycache__/
 *.py[cod]
