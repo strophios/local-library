@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-04-27
+Last updated: 2026-05-09
 
 This document provides a high-level overview of the project's feature areas and current focus. For detailed planning within each area, see the linked feature area documents. For the development approach, see `build_philosophy.md`.
 
@@ -18,10 +18,10 @@ Two infrastructure tracks recently wrapped:
 2. Extraction metadata persistence — schema v4 migration for duration/device/fallback tracking in the DB (the pipeline now produces this metadata, but it isn't persisted yet)
 
 **Recently shipped:**
+- ✓ **Local-library Claude Code plugin** (merged `66ac046`) — six skills + MCP config bundled in-repo as a Claude Code plugin. Three-layer architecture: two orientation skills (citekey/library-cue → MCP tools; garbled-extraction → PDF fallback), one atomic grounding kernel (per-assertion retrieve → quote → synthesize → report), three procedural composition skills (drafting-with-grounded-sources, implementation-check-against-papers, verifying-claims-against-library). Installs via `/plugin marketplace add <repo>` then `/plugin install local-library@local-library`. See `docs/feature-areas/claude-code-integration/README.md` and `tests/skills/` for RED/GREEN/Tier-3/smoke verification artifacts.
 - ✓ **Neovim Citation Workflow** — daemon (Python/asyncio JSON-RPC over UDS) + Lua plugin with Telescope picker. Visual-select claim → daemon-backed semantic search → citation insertion + bibliography auto-append. Three structural hooks for future features (loud-error / silent-inert / architectural). See `docs/feature-areas/neovim-citation-workflow/README.md` and `docs/concepts/daemons.md` for full rationale.
 
 **Feature development (parallel tracks):**
-- Research skills layered on the MCP server (low effort, high leverage; see Claude Code Integration README)
 - Content Ingestion (`add <url>`; later EPUB and external metadata API enrichment)
 
 **Evaluation framework:**
@@ -38,7 +38,7 @@ Development beyond Phase 1 is organized into five feature areas. Each area has i
 | Area | Status | Priority | Path |
 |---|---|---|---|
 | [Neovim Citation Workflow](docs/feature-areas/neovim-citation-workflow/README.md) | Stable | Headline | `docs/feature-areas/neovim-citation-workflow/` |
-| [Claude Code Integration](docs/feature-areas/claude-code-integration/README.md) | Stable (MCP core); Exploring (research skills) | High | `docs/feature-areas/claude-code-integration/` |
+| [Claude Code Integration](docs/feature-areas/claude-code-integration/README.md) | Stable | High | `docs/feature-areas/claude-code-integration/` |
 | [Content Ingestion](docs/feature-areas/content-ingestion/README.md) | Exploring | High (good value/effort) | `docs/feature-areas/content-ingestion/` |
 | [Note Management](docs/feature-areas/note-management/README.md) | Exploring | Medium | `docs/feature-areas/note-management/` |
 | [Automated Content Analysis](docs/feature-areas/automated-content-analysis/README.md) | Exploring | Lower (needs prerequisites) | `docs/feature-areas/automated-content-analysis/` |
