@@ -1,87 +1,99 @@
 # Welcome to your Local Library!
 
-A personal knowledge management system designed to handle the full lifecycle of digital documents: ingest from multiple sources (PDF today, web content and other formats in progress), extract and validate content, manage bibliographic metadata, auto-tag relative to everything else in the library, generate linked notes, and make the full collection queryable via RAG. Self-sufficient, with read-only interoperability with [Zotero](https://www.zotero.org).
+A personal knowledge management system for the full lifecycle of digital documents: ingest from multiple sources (PDF today, web and other formats in progress), extract and validate content, manage bibliographic metadata, embed and search the corpus, and ask natural-language questions answered by RAG over your library.
 
-The core pipeline (PDF ingestion through RAG query) is implemented and functional. Development is organized around five feature areas being built out incrementally toward the full vision (see [Coming Next](#coming-next)).
+You drive it three ways, all on the same shared core:
+
+- a **CLI** for ingest, search, and ad-hoc queries
+- a **Claude Code plugin** that exposes the library as MCP tools and ships skills for grounded writing and verification
+- a **Neovim plugin** (with a long-running daemon) for claim-driven citation search inside the editor
+
+Self-sufficient, with read-only interoperability with [Zotero](https://www.zotero.org). The core pipeline (PDF ingestion through RAG query) is implemented and functional; development continues across several parallel feature areas (see [Coming Next](#coming-next)).
 
 ## What It Does
 
-- **Ingest PDFs** from the local filesystem or **batch-import from Zotero** with collection filtering
-- **Extract text** via [Marker](https://github.com/VikParuchuri/marker) with quality validation, markdown cleanup (HTML coercion, dehyphenation, paragraph reflow), and OCR support
+- **Ingest PDFs** from local files or **batch-import from Zotero** with collection filtering
+- **Extract text** via [Marker](https://github.com/VikParuchuri/marker) with quality validation, markdown cleanup (HTML coercion, dehyphenation, paragraph reflow), and OCR support; falls back to pdftext when Marker fails
 - **Extract and validate metadata** against CSL-JSON schema; generate BetterBibTeX-style citekeys; heuristic extraction from PDF text with confidence scoring; optional LLM fallback for low-confidence fields
 - **Compute vector embeddings** using nomic-embed-text-v1.5 (768-dim, local inference via sentence-transformers) with section-aware markdown chunking
 - **Search** via hybrid retrieval (vector similarity + BM25 via FTS5, fused with reciprocal rank fusion), with optional cross-encoder reranking (ms-marco-MiniLM-L-12-v2)
 - **Ask natural-language questions** and get RAG-generated answers with source citations, streaming output, and configurable LLM backend (via LiteLLM)
-- **Manage documents** through a full CLI: add, list, show, delete, open, update, review, reextract, embed, search, ask
 
-## Coming Next
+The whole pipeline is also accessible from outside the CLI — see [Interfaces](#interfaces) for how to drive it from Claude Code or Neovim.
 
-Development is organized into six feature areas, each with documented plans in `docs/feature-areas/`:
+## Interfaces
 
-- **Content Ingestion** - `add <url>` for web articles, later EPUB and other formats, plus external metadata API enrichment
-- **Claude Code Integration** - MCP server (built) exposing library operations as Claude Code tools; research skills layered on top
-- **Neovim Citation Workflow** - library daemon + Neovim plugin for visual-mode citation search from within your editor
-- **Note Management** - auto-generated markdown stubs with YAML frontmatter linked to library records
-- **Automated Content Analysis** - ML-based auto-tagging, clustering, and triage-based verification across the full corpus
-- **RAG Pipeline Improvements** - evaluation harness, retrieval quality tuning, query decomposition
+The system has a shared core (the document pipeline, storage, embedding, retrieval, and RAG) with three user-facing interfaces sitting on top of it.
 
-See `roadmap.md` for current progress and sequencing.
+### CLI
 
+A full Typer/Rich command-line tool for ingesting documents, importing from Zotero, searching, asking questions, and managing the library. Most ad-hoc work happens here — adding documents, running searches, exploring the corpus, batch operations.
 
-## Architecture
+→ See [Quick Start](#quick-start) and [Usage](#usage) below.
 
-The system is built around two orthogonal organizing principles:
+### Claude Code
 
-**Pipeline** (vertical): the path a document takes from ingestion to queryable knowledge.
+A bundled Claude Code plugin makes the library a first-class part of Claude Code sessions. It ships an **MCP server** (four read-only tools: search, show, list, get text) plus **six skills** covering library orientation, extraction-quality fallback, and three procedural composition skills (drafting with grounded sources, verifying claims against the library, checking implementations against papers). With the plugin installed, dropping a `@citekey` in a Claude Code conversation automatically prompts a library lookup; grounded writing and citation verification become the path of least resistance.
 
-```
-Ingest → Extract text → Validate metadata → Store → Embed → Retrieve → Generate answer
-```
+The MCP server is also usable on its own (without the plugin) by registering it in `.mcp.json` directly — useful if you want the tools without the skill scaffolding.
 
-**Layers** (horizontal): architectural concerns that cut across the pipeline.
+→ See [`skills/README.md`](skills/README.md) for install, the full skill set, and test-drive scenarios.
 
-| Layer | Responsibility | Key components |
-|-------|---------------|----------------|
-| Storage | SQLite (schema v3), content-addressable files, sqlite-vec, FTS5 | `core/storage.py`, `core/models.py` |
-| Ingestion | PDF extraction (Marker), metadata handling, Zotero import | `ingestion/` |
-| Embeddings + Retrieval | Chunking, nomic-embed-text, vector/FTS/hybrid search, cross-encoder reranking | `embeddings/` |
-| LLM + RAG | LiteLLM provider abstraction, context assembly, prompt construction, answer generation | `llm/`, `rag/` |
-| Interface | CLI (Typer + Rich) | `cli/` |
+### Neovim
 
-Development follows a **pipeline-first, layer-complete** approach: build along the pipeline for rapid feedback on the end-to-end experience; implement each architectural layer completely when touched. See `build_philosophy.md` for the full rationale.
+A Lua plugin (`local-library.nvim`) plus a long-running Python daemon for claim-driven citation search from inside the editor. Visual-select a sentence, press `<leader>c`, and a Telescope picker shows ranked chunks from the library; pick one to insert a citekey at cursor and auto-append the bibliography entry. Designed for academic writing where you have a claim in mind and need to find supporting sources.
 
-## Tech Stack
+The daemon (Unix domain socket, JSON-RPC) keeps embedding and reranking models warm, so picker latency is sub-second after the first query. The daemon is shared infrastructure — future clients (HTTP API, MCP server v2) can reuse it without changing the protocol surface.
 
-- **Language:** Python 3.10+
-- **Storage:** SQLite + [sqlite-vec](https://github.com/asg017/sqlite-vec) (vector storage) + FTS5 (full-text search)
-- **PDF extraction:** [Marker](https://github.com/VikParuchuri/marker) (with OCR via Surya)
-- **Embeddings:** nomic-embed-text-v1.5 via [sentence-transformers](https://www.sbert.net/) (local inference, no API calls)
-- **Reranking:** cross-encoder/ms-marco-MiniLM-L-12-v2 via sentence-transformers
-- **LLM interface:** [LiteLLM](https://github.com/BerriAI/litellm) (provider-agnostic; works with Claude, GPT, local models)
-- **CLI:** [Typer](https://typer.tiangolo.com/) + [Rich](https://rich.readthedocs.io/)
-- **Metadata:** CSL-JSON schema validation, BetterBibTeX-style citekeys
-- **Package management:** [uv](https://github.com/astral-sh/uv)
+→ See [`nvim/README.md`](nvim/README.md) for install, configuration, and keymap reference.
 
 ## Quick Start
 
+### CLI
+
 ```bash
-# Clone and install
 git clone https://github.com/strophios/local-library.git
 cd local-library
 uv sync
 source .venv/bin/activate
 
-# Add a document
 local-library add path/to/paper.pdf
-
-# Search your library
 local-library search "retrieval augmented generation"
-
-# Ask a question
 local-library ask "What are the main approaches to document chunking?"
 ```
 
+### Claude Code plugin
+
+After cloning and `uv sync` as above, in a Claude Code session anywhere on your machine:
+
+```
+/plugin marketplace add /absolute/path/to/local-library
+/plugin install local-library@local-library
+```
+
+Then ask Claude something like *"What does @Smith2023 argue about X?"* — the plugin's orientation skill reaches for the library before answering.
+
+→ Full install and scenarios in [`skills/README.md`](skills/README.md).
+
+### Neovim plugin
+
+After cloning and `uv sync` as above, add to your Neovim config (lazy.nvim shown):
+
+```lua
+{
+  "strophios/local-library",
+  dependencies = { "nvim-lua/plenary.nvim", "nvim-telescope/telescope.nvim" },
+  config = function() require("local_library").setup({}) end,
+}
+```
+
+Then `:LocalLibraryDaemon start`, visual-select a claim in a markdown file with `bibliography: refs.json` in the frontmatter, and press `<leader>c`.
+
+→ Full install and configuration in [`nvim/README.md`](nvim/README.md).
+
 ## Usage
+
+The CLI is the primary surface for managing the library. The Claude Code plugin and Neovim plugin have their own usage docs (linked above).
 
 ```bash
 # Document management
@@ -91,60 +103,149 @@ local-library list                    # List all documents
 local-library show @citekey           # Show document details
 local-library delete @citekey         # Remove a document
 local-library open @citekey           # Open the original file
+local-library review @citekey         # Editor-based review for low-confidence extractions
+local-library reextract @citekey      # Re-run text extraction (after pipeline improvements)
 
-# Zotero integration
+# Zotero integration (read-only)
 local-library zotero import                          # Import from personal library
 local-library zotero import --collection "My Papers" # Import specific collection
 local-library zotero import --dry-run                # Preview without importing
+local-library zotero collections                     # List collections
+local-library zotero libraries                       # List libraries
 
 # Search and retrieval
-local-library search "query"          # Hybrid search (vector + FTS, reranked)
-local-library search "query" --mode vector   # Vector-only search
-local-library search "query" --mode fts      # Full-text search only
-local-library search "query" --no-rerank     # Skip cross-encoder reranking
+local-library search "query"                  # Hybrid search (vector + FTS, reranked)
+local-library search "query" --mode vector    # Vector-only search
+local-library search "query" --mode fts       # Full-text search only
+local-library search "query" --no-rerank      # Skip cross-encoder reranking
+local-library search "query" --doc @citekey   # Scope to a specific document
 
 # RAG queries
 local-library ask "question"          # Streaming answer with source citations
 local-library ask "question" --model anthropic/claude-sonnet-4-20250514
 local-library ask "question" --json   # Machine-readable output
+
+# Library daemon (used by the Neovim plugin; can run standalone)
+local-library daemon start
+local-library daemon status
+local-library daemon stop
 ```
 
-## Project Structure
+All commands accepting document IDs accept either a UUID (full or partial) or `@citekey`.
+
+## How it works
+
+This section is for readers who want to understand *why* the system is shaped the way it is, not just how to install it. If you're integrating, extending, or evaluating fit, this is the relevant content.
+
+### Pipeline and layers
+
+The system is built around two orthogonal organizing principles.
+
+**Pipeline** (vertical) — the path a document takes from ingestion to queryable knowledge:
 
 ```
-src/local_library/
-├── cli/            # CLI commands (Typer + Rich)
-│   ├── main.py     # App entrypoint and command registration
-│   ├── add.py      # Document ingestion
-│   ├── search.py   # Search interface
-│   ├── ask.py      # RAG query interface
-│   ├── zotero.py   # Zotero import commands
-│   └── ...         # list, show, delete, embed, review, etc.
-├── core/           # Data model, storage, error hierarchy
-│   ├── library.py  # Library facade (main API surface)
-│   ├── storage.py  # SQLite operations + schema management
-│   ├── models.py   # Domain models (Document, Chunk, SearchResult, etc.)
-│   └── errors.py   # Typed error hierarchy with ErrorCode enum
-├── embeddings/     # Embedding pipeline + retrieval
-│   ├── nomic.py    # nomic-embed-text embedding provider
-│   ├── chunking.py # Section-aware markdown chunking
-│   ├── retrieval.py# Vector, FTS, hybrid, and reranked retrievers
-│   ├── reranking.py# Cross-encoder reranking
-│   └── storage.py  # sqlite-vec operations
-├── ingestion/      # Document acquisition + extraction
-├── llm/            # LLM abstraction (LiteLLM backend)
-├── rag/            # RAG pipeline (context assembly, generation)
-└── config.py       # Configuration management
+Ingest → Extract text → Validate metadata → Store → Embed → Retrieve → Generate answer
 ```
+
+**Layers** (horizontal) — architectural concerns that cut across the pipeline:
+
+| Layer | Responsibility | Key components |
+|-------|---------------|----------------|
+| Storage | SQLite (schema v4), content-addressable files, sqlite-vec, FTS5 | `core/storage.py`, `core/models.py` |
+| Ingestion | PDF extraction (Marker + pdftext fallback), metadata handling, Zotero import | `ingestion/` |
+| Embeddings + Retrieval | Chunking, nomic-embed-text, vector/FTS/hybrid search, cross-encoder reranking | `embeddings/` |
+| LLM + RAG | LiteLLM provider abstraction, context assembly, prompt construction, answer generation | `llm/`, `rag/` |
+| Interface | CLI (Typer + Rich), MCP server (FastMCP, stdio), library daemon (asyncio, UDS, JSON-RPC), Neovim plugin (Lua) | `cli/`, `mcp/`, `daemon/`, `nvim/` |
+
+Development follows a **pipeline-first, layer-complete** approach: build along the pipeline for rapid feedback on the end-to-end experience; implement each architectural layer completely when touched. See [`build_philosophy.md`](build_philosophy.md) for the full rationale.
+
+### Shared core, multiple interfaces
+
+The core pipeline doesn't know about its consumers. The CLI, the MCP server, and the daemon are all clients of the same `Library` API in `src/local_library/core/library.py`. This isn't accidental — building the MCP server first validated the Library API surface against a real consumer before the daemon committed to a protocol; the daemon's protocol is the path through which the MCP server will eventually swap from in-process `Library()` to a socket client (without changing tool contracts).
+
+Why three interfaces rather than one universal one? Each addresses a distinct workflow, with different latency tolerances and interaction patterns:
+
+- **CLI** — ingest, batch operations, exploration, ad-hoc queries. Latency-tolerant; spins up cold.
+- **Claude Code plugin** — research and writing happen inside a Claude session; the library should be a first-class tool there, with skills handling grounded retrieval, drafting, and verification rather than ad-hoc shell commands.
+- **Neovim plugin** — citation insertion needs sub-second latency, so it's backed by a long-running daemon that keeps embedding and reranking models warm in memory.
+
+The split also reflects path dependency. The CLI came first because a command-line surface is the simplest harness for the Library API; validating the API against a real consumer before committing to more complex interfaces was cheaper than the other order. There's no fundamental reason batch ingest *has* to live on the CLI rather than as a Claude Code tool — it just sensibly does, since routing batch operations through an LLM session would be friction without payoff. Each interface ended up where it did because of where the work actually happens.
+
+The boundary between "shared core" and "interface" is also less fixed than the layer table suggests. The daemon currently sits on the Neovim side of the line — nothing else uses it yet — but if the MCP server later swaps to a daemon client (the planned v2 path), the daemon effectively migrates inward toward shared infrastructure. New functionality can be built either by extending an interface or by extending the shared core, and sometimes the latter subsumes things the interfaces previously handled separately. Useful to keep in mind when reasoning about where new code belongs.
+
+### Self-sufficient with Zotero interoperability
+
+The system functions completely independently of Zotero, but reads from a Zotero database when one is present (citekeys via Zotero 8's native field, CSL-JSON metadata via Better BibTeX export). Zotero is treated as a peer/data source, not as a substrate the system extends.
+
+This is *not* a Zotero plugin. ML features (embeddings, RAG, auto-tagging, reranking) require Python infrastructure that can't run in Zotero's JavaScript plugin environment. Once external Python infrastructure is necessary, it makes sense for that system to own all the functionality beyond Zotero's strengths (web ingestion, text extraction, embeddings, auto-tagging, markdown notes). Zotero remains valuable in its own lane — academic PDF management via its browser connector and citation metadata — and we read from it rather than competing with it.
+
+Writes to Zotero, when implemented, will go through the Zotero local API on port 23119, never directly to its SQLite (which would risk corruption or sync conflicts).
+
+### Tech stack
+
+- **Languages:** Python 3.10+, Lua (for the Neovim plugin)
+- **Storage:** SQLite + [sqlite-vec](https://github.com/asg017/sqlite-vec) (vector storage) + FTS5 (full-text search)
+- **PDF extraction:** [Marker](https://github.com/VikParuchuri/marker) (with OCR via Surya), pdftext fallback
+- **Embeddings:** nomic-embed-text-v1.5 via [sentence-transformers](https://www.sbert.net/) (local inference, no API calls)
+- **Reranking:** cross-encoder/ms-marco-MiniLM-L-12-v2 via sentence-transformers
+- **LLM interface:** [LiteLLM](https://github.com/BerriAI/litellm) (provider-agnostic; works with Claude, GPT, local models)
+- **CLI:** [Typer](https://typer.tiangolo.com/) + [Rich](https://rich.readthedocs.io/)
+- **MCP server:** [FastMCP](https://modelcontextprotocol.io/) (mcp SDK, stdio transport)
+- **Library daemon:** asyncio, JSON-RPC 2.0 over Unix domain socket
+- **Neovim plugin:** Lua, Telescope, plenary.async
+- **Metadata:** CSL-JSON schema validation, BetterBibTeX-style citekeys
+- **Package management:** [uv](https://github.com/astral-sh/uv)
+
+### Project structure
+
+```
+local-library/
+├── src/local_library/    # Python package: core pipeline + CLI + MCP server + daemon
+│   ├── core/             # Library API, storage, models, error hierarchy
+│   ├── ingestion/        # PDF extraction, metadata, Zotero import
+│   ├── embeddings/       # Chunking, embedding, retrieval, reranking
+│   ├── llm/              # LiteLLM abstraction
+│   ├── rag/              # Context assembly, generation
+│   ├── cli/              # Typer/Rich CLI commands
+│   ├── mcp/              # FastMCP server (stdio)
+│   └── daemon/           # Long-running daemon (UDS, JSON-RPC)
+├── nvim/                 # Neovim plugin (Lua); has its own README and CLAUDE.md
+│   ├── lua/              # Plugin code
+│   ├── plugin/           # Auto-loaded user commands
+│   └── doc/              # Vimdoc
+├── skills/               # Claude Code plugin skills (six SKILL.md files); has its own README
+├── .claude-plugin/       # Plugin manifest + marketplace entry
+├── .mcp.json             # MCP server config (uses ${CLAUDE_PLUGIN_ROOT})
+├── docs/                 # Design plans, implementation plans, RAG research, feature-area planning
+└── tests/                # Unit, integration, eval, extraction-quality, skill verification
+```
+
+Top-level symlinks (`lua → nvim/lua`, `plugin → nvim/plugin`, `doc → nvim/doc`) make the Neovim plugin installable by any plugin manager that follows standard runtimepath conventions, without a `subdir` workaround.
+
+The repo intentionally bundles three distributable units (Python package, Claude Code plugin, Neovim plugin). They share the underlying corpus and Library API, and shipping them together keeps versions aligned. If they ever outgrow the single repo, the boundaries are clean — `nvim/` and `skills/` already function as self-contained interface trees.
+
+## Coming Next
+
+Development continues across several parallel feature areas, each documented in `docs/feature-areas/`:
+
+- **Content Ingestion** — `add <url>` for web articles via trafilatura; later EPUB and other formats, plus external metadata API enrichment (CrossRef, OpenAlex)
+- **Note Management** — auto-generated markdown stubs with YAML frontmatter linked to library records
+- **Automated Content Analysis** — ML-based auto-tagging, clustering, and triage-based verification across the full corpus
+- **RAG Pipeline Improvements** — evaluation harness expansion, retrieval quality tuning, query decomposition (currently focused on eval re-annotation at corpus scale)
+
+See [`roadmap.md`](roadmap.md) for current focus, sequencing, and dependencies.
 
 ## Development
 
-This project was designed and built collaboratively with [Claude Code](https://docs.anthropic.com/en/docs/claude-code). I made all architectural and design decisions — the data model, pipeline architecture, retrieval strategy, Zotero interoperability approach, and build methodology. Claude Code served as the primary implementation collaborator, with me reviewing, testing, and directing the development through ~490 commits.
+This project was designed and built collaboratively with [Claude Code](https://docs.anthropic.com/en/docs/claude-code). I made all architectural and design decisions — the data model, pipeline architecture, retrieval strategy, Zotero interoperability approach, build methodology, and interface design. Claude Code served as the primary implementation collaborator, with me reviewing, testing, and directing the work.
 
-The development process is documented in detail:
-- `build_philosophy.md` — the pipeline-first, layer-complete development methodology
-- `roadmap.md` — current status and planned feature areas
-- `CLAUDE.md` files at project and subpackage level — detailed technical context
+The development process is documented:
+
+- [`build_philosophy.md`](build_philosophy.md) — the pipeline-first, layer-complete development methodology
+- [`roadmap.md`](roadmap.md) — current status and feature-area sequencing
+- [`docs/development-history.md`](docs/development-history.md) — milestone narrative and project history
+- `CLAUDE.md` files at project and subpackage level — technical context for working in the codebase
+- `docs/design-plans/` and `docs/implementation-plans/` — point-in-time design and execution records
 
 ### Running Tests
 
@@ -156,111 +257,3 @@ uv run pytest --run-extraction-quality           # Include extraction quality be
 ## License
 
 MIT
-
-
----
-
-## Claude Code Plugin
-
-This repo also ships as a Claude Code plugin: six skills bundled with the MCP server config Claude Code needs to talk to your local library. With the plugin installed, a citekey dropped in conversation prompts a library lookup automatically, and grounded writing/checking is the path of least resistance.
-
-### What the plugin provides
-
-- Two **orientation** skills (always-apply): teach Claude to notice library-adjacent cues and reach for `mcp__local-library__*` tools fluently; teach Claude to fall back to the original PDF when extracted markdown is garbled.
-- One **shared grounding kernel**: atomic per-assertion retrieve → quote → synthesize → report cycle the procedural skills compose on.
-- Three **procedural composition** skills: drafting with grounded sources (prose + audit appendix), implementation-check against papers (assertion table comparing code to method descriptions), verifying claims against the library (claim-by-claim status with quoted support).
-
-The plugin works from any project where you have Claude Code running — the library doesn't have to be the project you're working on.
-
-### Who this is for
-
-Anyone using the local-library MCP server who wants Claude Code to:
-- Treat citekeys as library handles, not topic labels
-- Quote evidence by default, not paraphrase from training
-- Tag claims with explicit support / contradict / partial / not-found rather than rubber-stamp them
-- Read the PDF when extracted markdown can't be trusted (math, figures, tables)
-
-### Plugin install
-
-From a fresh checkout:
-
-    git clone <this-repo>
-    cd local-library
-    uv sync
-
-Then in a Claude Code session anywhere on your machine:
-
-    /plugin marketplace add /absolute/path/to/local-library
-    /plugin install local-library
-
-The plugin's `.mcp.json` brings the MCP server with it (no separate registration), and the six skills auto-discover via Claude Code's plugin loader.
-
-### Architectural overview
-
-The plugin uses a three-layer architecture that separates concerns cleanly: orientation skills (always-apply) notice library-adjacent cues and reach for MCP tools fluently; a grounding kernel handles the atomic retrieve-quote-synthesize cycle per assertion; procedural composition skills decompose problems and orchestrate the kernel across multiple claims.
-
-Why this split? Plugins can't ship a user-global CLAUDE.md, so orientation skills must be always-apply to catch citekeys and extraction problems automatically. The kernel is deliberately atomic—a single claim, one retrieve pass, evidence quoted and synthesized—because composing skills handle the decomposition. Without this split, the kernel would bias toward "one chunk answers the whole question," which short-changes multi-source synthesis and forces users to rephrase broad questions as narrow ones.
-
-The plugin bundles with the repository for practical reasons: it travels with your library instance, is shareable (you can publish the repo and others add it from GitHub), and works from any project on your machine without global registration overhead.
-
-Safety is built in. When the extraction-quality skill detects garbled math or broken figures in extracted markdown, it cross-invokes itself with a fallback: use the native Read tool on the PDF path provided by show_document. This keeps you grounded in the source when the text layer is unreliable.
-
-End-to-end flow: A citekey appears in conversation, the orientation skill triggers show_document and quotes the abstract. You ask a question that decomposes into multiple claims. The procedural skill enumerates them. The kernel runs per-claim—retrieve relevant chunks, quote evidence, synthesize—and each result flows to the output formatter. The final result (prose with appendix, assertion table, claim table) is assembled per skill format.
-
-### Skills at a glance
-
-| Skill | Layer | What it does |
-|---|---|---|
-| `using-local-library-mcp` | Orientation | Reach for `mcp__local-library__*` tools when citekeys or library cues appear |
-| `handling-extraction-quality` | Orientation | Fall back to `Read` on the PDF when extracted markdown is garbled |
-| `grounding-against-library` | Kernel | Per-assertion retrieve → quote → synthesize → report; multi-source |
-| `drafting-with-grounded-sources` | Procedural | Decompose into propositions; ground each via the kernel; produce prose + appendix |
-| `implementation-check-against-papers` | Procedural | Decompose code into claims; ground against paper(s); produce assertion table |
-| `verifying-claims-against-library` | Procedural | Enumerate citation-bearing claims; per-claim grounding; produce claim table |
-
-### Test-drive scenarios
-
-After installing, try these:
-
-1. **Orientation triggers on bare citekey:**
-   > "What does @<your-citekey> argue about <topic>?"
-   Expected: Claude calls `show_document` (or `search_library`) before responding; quotes evidence rather than summarizing from training.
-
-2. **Safety hatch triggers on garbled extraction:**
-   > "Open @<your-mathy-citekey> and explain the main equation."
-   Expected: Claude reads the PDF directly via `Read` if extracted markdown is garbled; cites page number.
-
-3. **Kernel returns control on a broad request:**
-   > "Tell me how the literature in my library handles <topic>."
-   Expected: Claude declines to answer and proposes a decomposition.
-
-4. **Drafting with appendix:**
-   > "Write a short note on <topic> drawing from @<A> and @<B>."
-   Expected: prose with inline citekeys + grounding-summary appendix at end.
-
-5. **Verifying claims:**
-   > "Check whether my library supports these:
-   > 1. <claim> — per @<X>
-   > 2. <claim> — per @<Y>"
-   Expected: claim table with quoted support, statuses, summary line.
-
-### Disabling / overriding plugin skills
-
-To disable individual skills without uninstalling the plugin:
-- Edit `~/.claude/settings.json` and add the skill name to the `disabledSkills` list (or use the `/plugin` UI).
-- To narrow tool authorization for a single skill, edit the `allowed-tools` block in that skill's `SKILL.md` after installation (note: this edits the installed copy, not the source repo).
-
-To uninstall:
-
-    /plugin uninstall local-library
-    /plugin marketplace remove local-library
-
-### Where the plugin's pieces live
-
-- Skills: `skills/<skill-name>/SKILL.md`
-- Plugin manifest: `.claude-plugin/plugin.json`
-- Marketplace advertisement: `.claude-plugin/marketplace.json`
-- MCP server config: `.mcp.json` (uses `${CLAUDE_PLUGIN_ROOT}`)
-- Design doc: `docs/design-plans/2026-04-24-local-library-claude-code-plugin.md`
-- Implementation plan: `docs/implementation-plans/2026-04-24-local-library-claude-code-plugin/`
-- RED baselines, GREEN/Tier-3 transcripts, smoke tests: `tests/skills/`

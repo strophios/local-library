@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: 2026-05-09
+Last updated: 2026-05-10
 
 This document provides a high-level overview of the project's feature areas and current focus. For detailed planning within each area, see the linked feature area documents. For the development approach, see `build_philosophy.md`.
 
@@ -8,18 +8,16 @@ This document provides a high-level overview of the project's feature areas and 
 
 The Phase 1 PDF pipeline (M1-M7) is complete. **Full Zotero corpus imported**: 1,216 documents ready (99.3%), 9 failed (extraction timeout). Retrieval and RAG confirmed functional at scale.
 
-Two infrastructure tracks recently wrapped:
+**Recently shipped** (most recent first):
 
+- ✓ **Local-library Claude Code plugin** (merged `66ac046`) — six skills + MCP config bundled in-repo as a Claude Code plugin. Three-layer architecture: two orientation skills (citekey/library-cue → MCP tools; garbled-extraction → PDF fallback), one atomic grounding kernel (per-assertion retrieve → quote → synthesize → report), three procedural composition skills (drafting-with-grounded-sources, implementation-check-against-papers, verifying-claims-against-library). Installs via `/plugin marketplace add <repo>` then `/plugin install local-library@local-library`. See `docs/feature-areas/claude-code-integration/README.md`, `skills/README.md`, and `tests/skills/` for RED/GREEN/Tier-3/smoke verification artifacts.
+- ✓ **Neovim Citation Workflow** — daemon (Python/asyncio JSON-RPC over UDS) + Lua plugin with Telescope picker. Visual-select claim → daemon-backed semantic search → citation insertion + bibliography auto-append. Three structural hooks for future features (loud-error / silent-inert / architectural). See `docs/feature-areas/neovim-citation-workflow/README.md`, `nvim/README.md`, and `docs/concepts/daemons.md` for full rationale.
+- ✓ **MCP server for Claude Code** (merged `1e0fefb`) — four read-only tools (search_library, show_document, list_documents, get_document_text) over stdio transport. Markdown-only returns, no `ask_library` (Claude synthesizes answers from retrieved chunks directly). Available standalone or bundled with the Claude Code plugin above. See `docs/feature-areas/claude-code-integration/README.md`.
 - ✓ **Extraction resilience and metadata pipeline** (merged `db2cb6b`) — pdftext fallback when Marker fails, dynamic timeout scaling based on pre-check, progress callback protocol, `MetadataSource` provenance tracking, preliminary metadata persistence before extraction, conditional filename-to-text metadata upgrade with citekey stability checks. See `docs/design-plans/2026-04-15-extraction-resilience-and-metadata-pipeline.md`.
-- ✓ **MCP server for Claude Code** (merged `1e0fefb`) — four read-only tools (search_library, show_document, list_documents, get_document_text) over stdio transport. Markdown-only returns, no `ask_library` (Claude synthesizes answers from retrieved chunks directly). See `docs/feature-areas/claude-code-integration/README.md`.
 
 **Still on the polish list:**
 1. UI harmonization — consistent extraction status reporting across CLI commands
-2. Extraction metadata persistence — schema v4 migration for duration/device/fallback tracking in the DB (the pipeline now produces this metadata, but it isn't persisted yet)
-
-**Recently shipped:**
-- ✓ **Local-library Claude Code plugin** (merged `66ac046`) — six skills + MCP config bundled in-repo as a Claude Code plugin. Three-layer architecture: two orientation skills (citekey/library-cue → MCP tools; garbled-extraction → PDF fallback), one atomic grounding kernel (per-assertion retrieve → quote → synthesize → report), three procedural composition skills (drafting-with-grounded-sources, implementation-check-against-papers, verifying-claims-against-library). Installs via `/plugin marketplace add <repo>` then `/plugin install local-library@local-library`. See `docs/feature-areas/claude-code-integration/README.md` and `tests/skills/` for RED/GREEN/Tier-3/smoke verification artifacts.
-- ✓ **Neovim Citation Workflow** — daemon (Python/asyncio JSON-RPC over UDS) + Lua plugin with Telescope picker. Visual-select claim → daemon-backed semantic search → citation insertion + bibliography auto-append. Three structural hooks for future features (loud-error / silent-inert / architectural). See `docs/feature-areas/neovim-citation-workflow/README.md` and `docs/concepts/daemons.md` for full rationale.
+2. Extraction metadata persistence — schema migration for duration/device/fallback tracking in the DB (the pipeline now produces this metadata, but it isn't persisted yet)
 
 **Feature development (parallel tracks):**
 - Content Ingestion (`add <url>`; later EPUB and external metadata API enrichment)
@@ -33,7 +31,7 @@ Two infrastructure tracks recently wrapped:
 
 ## Feature Areas
 
-Development beyond Phase 1 is organized into five feature areas. Each area has its own progression from initial exploration through detailed design to implementation. Work is prioritized by current value and what's unblocked, not by a global sequence.
+Development beyond Phase 1 is organized into six feature areas. Each area has its own progression from initial exploration through detailed design to implementation. Work is prioritized by current value and what's unblocked, not by a global sequence.
 
 | Area | Status | Priority | Path |
 |---|---|---|---|
@@ -50,19 +48,22 @@ Development beyond Phase 1 is organized into five feature areas. Each area has i
 - **Designing**: Requirements clear enough to produce design specs
 - **Building**: Active implementation underway
 - **Stable**: Core functionality delivered; maintenance and incremental improvement
+- **Partially active**: Core functionality stable, with specific improvement workstreams actively in progress within the area
 
 ---
 
 ## Cross-Cutting Dependencies
 
 ```
-                    MCP server (validates API surface, in-process Library)
+                MCP server v1 (built first, in-process Library;
+                               validated the API surface for the daemon)
                         │
                         ▼
-Neovim Citation Workflow: daemon (extracts shared operations into service)
+              Library daemon (built; UDS + JSON-RPC)
                             │           │
                             ▼           ▼
-                     Neovim plugin   MCP server v2 (swaps to daemon client)
+                     Neovim plugin   MCP server v2 (planned: swap to daemon client)
+                     (built)
 
 Content Ingestion ──────────────── (independent; web, EPUB, API metadata enrichment)
 
@@ -73,8 +74,8 @@ Automated Content Analysis: auto-tagging needs manual tags as seed data
 ```
 
 Key dependencies:
-- The **MCP server** is now the first external client of the Library API. It validated the read operation surface (search, show, list, text access) that the daemon will later expose over a socket. Notable design outcome: no `ask_library` tool — Claude synthesizes answers directly from retrieved chunks, avoiding nested LLM calls. Worth preserving in daemon design.
-- The **library daemon** is shared infrastructure for latency-sensitive clients (Neovim). The MCP server's API shape and error conventions are direct inputs.
+- The **MCP server (v1)** was the first external client of the Library API. It validated the read operation surface (search, show, list, text access) that the daemon now exposes over a socket. Notable design outcome: no `ask_library` tool — Claude synthesizes answers directly from retrieved chunks, avoiding nested LLM calls. Worth preserving in daemon design and any future v2 work.
+- The **library daemon** is shared infrastructure for latency-sensitive clients (currently the Neovim plugin; planned substrate for MCP server v2). The MCP server's API shape and error conventions were direct inputs to the daemon's protocol.
 - **Content Ingestion** and **Note Management** are independent tracks that can progress in parallel.
 
 ---
@@ -104,8 +105,8 @@ Certain developments would move items up the priority list:
 | Hit 250K vector scale ceiling | Migrate to LanceDB (see `docs/RAG_background/vector_storage_report.md`) |
 | Metadata quality issues emerge at scale | External API enrichment (CrossRef, GROBID, OpenAlex) in Content Ingestion |
 | Need to query web content routinely | Web content ingestion |
-| Neovim workflow integration becomes blocking | Library daemon → Full Neovim plugin |
 | Want to share library with others | HTTP API, authentication |
 | RAG answer quality issues | Expand evaluation framework beyond retrieval to end-to-end answer quality |
 | Scanned doc extraction quality poor | Selective olmOCR |
 | Automated verification (not just triage) needed | Invest in NLI validation + fine-tuning |
+| MCP server v2 needs daemon-backed shared model lifecycle | Swap MCP server from in-process `Library()` to socket client of the existing daemon |
